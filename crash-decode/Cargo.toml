@@ -1,0 +1,21 @@
+[package]
+authors = ["Matthew Collins"]
+name = "crash_decode"
+version = "0.1.0"
+edition = "2018"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+rustc-demangle = "0.1.16"
+
+[dependencies.symbolic]
+# version = "6.1.4"
+# path = "/home/matt/rust-projects/symbolic"
+git = "https://github.com/getsentry/symbolic/"
+rev = "e9d35bbf58b6a080bf4debdddf09c06dc94d872c"
+features = [
+    "debuginfo"
+]
+
+[target.'cfg(windows)'.dependencies]
+winapi = "0.3.8"

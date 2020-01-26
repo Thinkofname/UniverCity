@@ -1,0 +1,21 @@
+[package]
+authors = ["Matthew Collins"]
+name = "lua"
+version = "0.1.0"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+serde = "1.0.102"
+failure = "0.1.6"
+
+[dependencies.lua-sys]
+path = "./lua-sys"
+
+[dependencies.univercity_util]
+path = "../util"
+
+[build-dependencies]
+cc = "1.0.47"
+
+[dev-dependencies]
+serde_derive = "1.0.102"

@@ -1,0 +1,8 @@
+[package]
+authors = ["Matthew Collins"]
+name = "assets_packer"
+version = "0.2.0"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+byteorder = "1.3.2"

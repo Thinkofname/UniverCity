@@ -1,0 +1,67 @@
+[package]
+authors = ["Matthew Collins"]
+name = "univercity_server"
+version = "1.0.0"
+build = "build.rs"
+edition = "2018"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+chrono = "0.4.9"
+bitflags = "1.2.1"
+byteorder = "1.3.2"
+crc = "1.8.1"
+flate2 = "1.0.13"
+rand = "0.7.2"
+rayon = "1.2.1"
+serde = "1.0.102"
+serde_derive = "1.0.102"
+serde_json = "1.0.41"
+serde-transcode = "1.1.0"
+serde_cbor = "0.10.2"
+slog = "2.5.2"
+memmap = "0.7.0"
+ref_filter_map = "1.0.1"
+combine = "3.8.1"
+
+[dependencies.steamworks]
+version = "0.6.0"
+features = ["serde"]
+optional = true
+
+[dependencies.backtrace]
+optional = true
+version = "0.3.40"
+
+[dependencies.delta_encode]
+git = "https://github.com/thinklibs/delta_encode.git"
+rev = "693c0ae648e52f350118c641e865bfb827671610"
+
+[dependencies.error-chain]
+default-features = false
+features = ["backtrace"]
+version = "0.12.1"
+
+[dependencies.lua]
+path = "../lua"
+
+[dependencies.png]
+optional = true
+version = "0.15.1"
+
+[dependencies.think_ecs]
+path = "../ecs"
+
+[dependencies.univercity_util]
+path = "../util"
+
+[dev-dependencies]
+slog-async = "2.3.0"
+slog-term = "2.4.2"
+
+[features]
+debugutil = [
+    "backtrace",
+    "png",
+]
+steam = ["steamworks"]

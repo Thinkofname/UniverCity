@@ -1,0 +1,25 @@
+[package]
+authors = ["Matthew Collins"]
+name = "univercity_server_dedicated"
+version = "1.0.0"
+license = "GPL-3.0-or-later"
+
+[features]
+default = [ "univercity_server/steam" ]
+
+[dependencies]
+slog = "2.5.2"
+slog-async = "2.3.0"
+slog-json = "2.3.0"
+slog-term = "2.4.2"
+
+[dependencies.error-chain]
+default-features = false
+features = ["backtrace"]
+version = "0.12.1"
+
+[dependencies.univercity_server]
+path = "../server"
+
+[dependencies.univercity_util]
+path = "../util"

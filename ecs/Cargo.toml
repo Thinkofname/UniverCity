@@ -1,0 +1,10 @@
+[package]
+name = "think_ecs"
+version = "0.1.0"
+authors = ["Matthew Collins <me@thinkof.name>"]
+edition = "2018"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+rayon = "1.0.3"
+fnv = "1.0.6"

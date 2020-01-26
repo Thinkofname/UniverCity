@@ -1,0 +1,9 @@
+[package]
+authors = ["Matthew Collins"]
+name = "univercity_audio"
+version = "0.1.0"
+edition = "2018"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+lewton = "0.9.4"
