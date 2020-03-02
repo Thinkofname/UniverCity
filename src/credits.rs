@@ -1,12 +1,11 @@
-
+use super::{GameInstance, GameState};
 use crate::prelude::*;
-use super::{GameState, GameInstance};
 use crate::state;
 use crate::ui;
 use std::collections::HashSet;
 
-use std::fs;
 use serde_json;
+use std::fs;
 
 pub(crate) struct MenuState {
     ui: Option<ui::Node>,
@@ -14,9 +13,7 @@ pub(crate) struct MenuState {
 
 impl MenuState {
     pub(crate) fn new() -> MenuState {
-        MenuState {
-            ui: None,
-        }
+        MenuState { ui: None }
     }
 }
 
@@ -27,16 +24,24 @@ impl state::State for MenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/credits"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/credits"));
 
-        let licenses = fs::File::open("licenses/licenses.json")
-            .expect("Missing license information");
+        let licenses =
+            fs::File::open("licenses/licenses.json").expect("Missing license information");
 
-        let mut deps: Vec<DepInfo> = serde_json::from_reader(licenses)
-            .expect("Failed to parse license information");
+        let mut deps: Vec<DepInfo> =
+            serde_json::from_reader(licenses).expect("Failed to parse license information");
 
         // Special ones not picked up by the script
         deps.push(DepInfo {
@@ -76,10 +81,10 @@ impl state::State for MenuState {
             from: Some("https://github.com/thinklibs/think_bitio".into()),
         });
 
-
         if let Some(content) = query!(node, scroll_panel > content).next() {
             for dep in deps {
-                let licenses = dep.license
+                let licenses = dep
+                    .license
                     .split('/')
                     .flat_map(|v| v.split("OR"))
                     .map(|v| v.trim())
@@ -92,9 +97,9 @@ impl state::State for MenuState {
                     "Apache License 2.0"
                 } else if licenses.contains("BSD-3-Clause") {
                     "BSD 3-Clause License"
-                }  else if licenses.contains("BSD-2-Clause") {
+                } else if licenses.contains("BSD-2-Clause") {
                     "BSD 2-Clause License"
-                }else if licenses.contains("FTL") {
+                } else if licenses.contains("FTL") {
                     "Freetype Project License"
                 } else if licenses.contains("MPL-2.0") {
                     "Mozilla Public License 2.0"
@@ -112,9 +117,11 @@ impl state::State for MenuState {
 
                 let name = dep.name;
                 let version = dep.version;
-                let from = dep.from.unwrap_or_else(|| format!("https://crates.io/crates/{}", name));
+                let from = dep
+                    .from
+                    .unwrap_or_else(|| format!("https://crates.io/crates/{}", name));
 
-                let node = node!{
+                let node = node! {
                     credit_library {
                         content {
                             @text(" version: ")
@@ -124,11 +131,14 @@ impl state::State for MenuState {
                 };
                 let name = ui::Node::new_text(name);
                 name.set_property("library", true);
-                assume!(state.global_logger, query!(node, credit_library > content).next())
-                    .add_child_first(name);
+                assume!(
+                    state.global_logger,
+                    query!(node, credit_library > content).next()
+                )
+                .add_child_first(name);
                 content.add_child(node);
 
-                let node = node!{
+                let node = node! {
                     credit_library_license {
                         content {
                             @text("Under the ")
@@ -137,11 +147,14 @@ impl state::State for MenuState {
                 };
                 let license = ui::Node::new_text(license);
                 license.set_property("license", true);
-                assume!(state.global_logger, query!(node, credit_library_license > content).next())
-                    .add_child(license);
+                assume!(
+                    state.global_logger,
+                    query!(node, credit_library_license > content).next()
+                )
+                .add_child(license);
                 content.add_child(node);
 
-                content.add_child(node!{
+                content.add_child(node! {
                     credit_library_url {
                         content {
                             @text(from)

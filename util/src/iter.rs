@@ -1,12 +1,13 @@
-
 pub trait VecExt<T> {
     fn groups<F>(&self, cmp: F) -> GroupIter<T, F>
-        where F: Fn(&T, &T) -> bool;
+    where
+        F: Fn(&T, &T) -> bool;
 }
 
-impl <T> VecExt<T> for [T] {
+impl<T> VecExt<T> for [T] {
     fn groups<F>(&self, cmp: F) -> GroupIter<T, F>
-        where F: Fn(&T, &T) -> bool
+    where
+        F: Fn(&T, &T) -> bool,
     {
         GroupIter {
             data: self,
@@ -22,8 +23,9 @@ pub struct GroupIter<'a, T: 'a, F> {
     offset: usize,
 }
 
-impl <'a, T: 'a, F> Iterator for GroupIter<'a, T, F>
-        where F: Fn(&T, &T) -> bool
+impl<'a, T: 'a, F> Iterator for GroupIter<'a, T, F>
+where
+    F: Fn(&T, &T) -> bool,
 {
     type Item = &'a [T];
 
@@ -36,7 +38,7 @@ impl <'a, T: 'a, F> Iterator for GroupIter<'a, T, F>
                 }
                 len += 1;
             }
-            let out = &self.data[self.offset .. self.offset + len];
+            let out = &self.data[self.offset..self.offset + len];
             self.offset += len;
             Some(out)
         } else {
@@ -47,10 +49,11 @@ impl <'a, T: 'a, F> Iterator for GroupIter<'a, T, F>
 
 pub trait IterExt: Iterator {
     fn flat_join<U, F>(self, f: F) -> FlatJoin<Self, U, F>
-        where F: FnMut(&Self::Item) -> U,
-              U: IntoIterator,
-              Self: Sized,
-              Self::Item: Clone,
+    where
+        F: FnMut(&Self::Item) -> U,
+        U: IntoIterator,
+        Self: Sized,
+        Self::Item: Clone,
     {
         FlatJoin {
             iter: self,
@@ -61,19 +64,21 @@ pub trait IterExt: Iterator {
 }
 
 pub struct FlatJoin<I, U, F>
-    where U: IntoIterator,
-          I: Iterator
+where
+    U: IntoIterator,
+    I: Iterator,
 {
     iter: I,
     func: F,
     front: Option<(I::Item, U::IntoIter)>,
 }
 
-impl <I, U, F> Iterator for FlatJoin<I, U, F>
-    where F: FnMut(&I::Item) -> U,
-            U: IntoIterator,
-            I: Iterator,
-            I::Item: Clone,
+impl<I, U, F> Iterator for FlatJoin<I, U, F>
+where
+    F: FnMut(&I::Item) -> U,
+    U: IntoIterator,
+    I: Iterator,
+    I::Item: Clone,
 {
     type Item = (I::Item, U::Item);
 
@@ -108,8 +113,4 @@ fn flat_join_test() {
     assert_eq!(data.next(), Some((3, 9)));
 }
 
-impl <I> IterExt for I
-    where I: Iterator
-{
-
-}
+impl<I> IterExt for I where I: Iterator {}

@@ -1,9 +1,9 @@
 //! Helper for working with steam
 
 #[cfg(feature = "steam")]
-use steamworks;
-#[cfg(feature = "steam")]
 use crate::saving::filesystem::*;
+#[cfg(feature = "steam")]
+use steamworks;
 
 /// A portable subset of the steam api that both clients
 /// and servers can use.
@@ -15,7 +15,11 @@ pub trait Steam {
     #[cfg(feature = "steam")]
     fn steam_id(&self) -> steamworks::SteamId;
     #[cfg(feature = "steam")]
-    fn begin_authentication_session(&self, user: steamworks::SteamId, ticket: &[u8]) -> Result<(), steamworks::AuthSessionError>;
+    fn begin_authentication_session(
+        &self,
+        user: steamworks::SteamId,
+        ticket: &[u8],
+    ) -> Result<(), steamworks::AuthSessionError>;
     #[cfg(feature = "steam")]
     fn end_authentication_session(&self, user: steamworks::SteamId);
 }
@@ -24,11 +28,15 @@ pub trait Steam {
 impl Steam for () {}
 
 #[cfg(feature = "steam")]
-impl <Manager> Steam for steamworks::Client<Manager> {
+impl<Manager> Steam for steamworks::Client<Manager> {
     fn steam_id(&self) -> steamworks::SteamId {
         self.user().steam_id()
     }
-    fn begin_authentication_session(&self, user: steamworks::SteamId, ticket: &[u8]) -> Result<(), steamworks::AuthSessionError> {
+    fn begin_authentication_session(
+        &self,
+        user: steamworks::SteamId,
+        ticket: &[u8],
+    ) -> Result<(), steamworks::AuthSessionError> {
         self.user().begin_authentication_session(user, ticket)
     }
     fn end_authentication_session(&self, user: steamworks::SteamId) {
@@ -41,7 +49,11 @@ impl Steam for steamworks::Server {
     fn steam_id(&self) -> steamworks::SteamId {
         steamworks::Server::steam_id(self)
     }
-    fn begin_authentication_session(&self, user: steamworks::SteamId, ticket: &[u8]) -> Result<(), steamworks::AuthSessionError> {
+    fn begin_authentication_session(
+        &self,
+        user: steamworks::SteamId,
+        ticket: &[u8],
+    ) -> Result<(), steamworks::AuthSessionError> {
         steamworks::Server::begin_authentication_session(self, user, ticket)
     }
     fn end_authentication_session(&self, user: steamworks::SteamId) {
@@ -57,18 +69,15 @@ pub struct SteamCloud<Manager> {
 }
 
 #[cfg(feature = "steam")]
-impl <Manager> SteamCloud<Manager> {
+impl<Manager> SteamCloud<Manager> {
     /// Uses the passed storage to access the steam cloud as a filesystem
     pub fn new(rs: steamworks::RemoteStorage<Manager>) -> SteamCloud<Manager> {
-        SteamCloud {
-            rs,
-        }
+        SteamCloud { rs }
     }
 }
 
 #[cfg(feature = "steam")]
-impl <Manager> FileSystem for SteamCloud<Manager> {
-
+impl<Manager> FileSystem for SteamCloud<Manager> {
     type Reader = steamworks::SteamFileReader<Manager>;
     type Writer = steamworks::SteamFileWriter<Manager>;
 
@@ -104,9 +113,6 @@ impl <Manager> FileSystem for SteamCloud<Manager> {
     }
 
     fn files(&self) -> Vec<String> {
-        self.rs.files()
-            .into_iter()
-            .map(|v| v.name)
-            .collect()
+        self.rs.files().into_iter().map(|v| v.name).collect()
     }
 }

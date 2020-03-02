@@ -1,6 +1,5 @@
-
-use cgmath::{BaseFloat, Vector3};
 use super::Ray;
+use cgmath::{BaseFloat, Vector3};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, DeltaEncode)]
 pub struct AABB<F = f32> {
@@ -8,22 +7,19 @@ pub struct AABB<F = f32> {
     pub max: Vector3<F>,
 }
 
-impl <F: BaseFloat> AABB<F> {
+impl<F: BaseFloat> AABB<F> {
     pub fn contains(self, v: Vector3<F>) -> bool {
-        !(
-            v.x < self.min.x ||
-            v.x > self.max.x ||
-            v.y < self.min.y ||
-            v.y > self.max.y ||
-            v.z < self.min.z ||
-            v.z > self.max.z
-        )
+        !(v.x < self.min.x
+            || v.x > self.max.x
+            || v.y < self.min.y
+            || v.y > self.max.y
+            || v.z < self.min.z
+            || v.z > self.max.z)
     }
 
     pub fn intersects_ray(self, ray: Ray<F>) -> bool {
         use cgmath::{Array, ElementWise};
-        let dir_frac = Vector3::from_value(F::one())
-            .div_element_wise(ray.direction);
+        let dir_frac = Vector3::from_value(F::one()).div_element_wise(ray.direction);
 
         let mut tmin = F::neg_infinity();
         let mut tmax = F::infinity();

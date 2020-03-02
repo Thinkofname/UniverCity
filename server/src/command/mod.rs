@@ -1,13 +1,13 @@
 //! A command queue which can be executed by both the server and the client
 
-use crate::prelude::*;
-use crate::player::State;
-use crate::entity::snapshot::Snapshots;
 use crate::common::ScriptData;
+use crate::entity::snapshot::Snapshots;
+use crate::player::State;
+use crate::prelude::*;
 use std::sync::Arc;
 
-use std::fmt;
 use lua;
+use std::fmt;
 
 /// The number of commands that an implementation should keep
 /// in a history queue to allow rolling back.
@@ -35,16 +35,14 @@ impl ::lua::LuaUsable for Command {}
 /// Logs to the console when it fails.
 #[macro_export]
 macro_rules! try_cmd {
-    ($log:expr, $cmd:expr, $body:expr) => (
-        match {$cmd} {
-            Ok(_) => {
-                $body
-            },
+    ($log:expr, $cmd:expr, $body:expr) => {
+        match { $cmd } {
+            Ok(_) => $body,
             Err(err) => {
                 error!($log, "Failed to execute command: {:?}", err);
             }
         }
-    )
+    };
 }
 
 macro_rules! invoke_event {

@@ -1,10 +1,9 @@
-
-use std::sync::Arc;
-use std::ops::*;
-use std::fmt::{self, Formatter, Debug, Display};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
-use std::hash::{Hasher, Hash};
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
+use std::ops::*;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub enum ArcStr<'a> {
@@ -13,7 +12,7 @@ pub enum ArcStr<'a> {
     Owned(Arc<str>),
 }
 
-impl <'a> ArcStr<'a> {
+impl<'a> ArcStr<'a> {
     #[inline]
     pub fn into_owned(self) -> ArcStr<'static> {
         match self {
@@ -33,25 +32,26 @@ impl <'a> ArcStr<'a> {
     }
 }
 
-impl <'a> Serialize for ArcStr<'a> {
+impl<'a> Serialize for ArcStr<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         let a = self.deref();
         a.serialize(serializer)
     }
 }
 
-impl <'a, 'de> Deserialize<'de> for ArcStr<'a> {
+impl<'a, 'de> Deserialize<'de> for ArcStr<'a> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         String::deserialize(deserializer).map(|v| v.into())
     }
 }
 
-impl <'a> PartialEq for ArcStr<'a> {
+impl<'a> PartialEq for ArcStr<'a> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         let a = self.deref();
@@ -60,32 +60,33 @@ impl <'a> PartialEq for ArcStr<'a> {
     }
 }
 
-impl <'a> Eq for ArcStr<'a> {}
+impl<'a> Eq for ArcStr<'a> {}
 
-impl <'a> PartialOrd for ArcStr<'a> {
+impl<'a> PartialOrd for ArcStr<'a> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let a = self.deref();
         let b = other.deref();
         a.partial_cmp(b)
     }
 }
-impl <'a> Ord for ArcStr<'a> {
+impl<'a> Ord for ArcStr<'a> {
     fn cmp(&self, other: &Self) -> Ordering {
         let a = self.deref();
         let b = other.deref();
         a.cmp(b)
     }
 }
-impl <'a> Hash for ArcStr<'a> {
+impl<'a> Hash for ArcStr<'a> {
     fn hash<H>(&self, state: &mut H)
-        where H: Hasher
+    where
+        H: Hasher,
     {
         let a = self.deref();
         a.hash(state)
     }
 }
 
-impl <'a> Debug for ArcStr<'a> {
+impl<'a> Debug for ArcStr<'a> {
     #[inline]
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         match *self {
@@ -96,7 +97,7 @@ impl <'a> Debug for ArcStr<'a> {
     }
 }
 
-impl <'a> Display for ArcStr<'a> {
+impl<'a> Display for ArcStr<'a> {
     #[inline]
     fn fmt(&self, fmt: &mut Formatter<'_>) -> fmt::Result {
         match *self {
@@ -107,7 +108,7 @@ impl <'a> Display for ArcStr<'a> {
     }
 }
 
-impl <'a> From<&'a str> for ArcStr<'a> {
+impl<'a> From<&'a str> for ArcStr<'a> {
     #[inline]
     fn from(v: &'a str) -> ArcStr<'a> {
         ArcStr::Borrowed(v)
@@ -126,7 +127,7 @@ impl From<Arc<str>> for ArcStr<'static> {
     }
 }
 
-impl <'a> Deref for ArcStr<'a> {
+impl<'a> Deref for ArcStr<'a> {
     type Target = str;
     #[inline]
     fn deref(&self) -> &str {

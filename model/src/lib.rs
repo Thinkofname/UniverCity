@@ -1,10 +1,9 @@
-
 extern crate byteorder;
 extern crate cgmath;
 
-use std::io::{Read, Write, Result};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
-use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
+use std::io::{Read, Result, Write};
 
 fn write_string<W: Write>(w: &mut W, s: &str) -> Result<()> {
     w.write_u16::<LittleEndian>(s.len() as u16)?;
@@ -30,7 +29,8 @@ pub struct Model {
 
 impl Model {
     pub fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         write_string(w, &self.texture)?;
 
@@ -66,17 +66,15 @@ impl Model {
     }
 
     pub fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let texture = read_string(r)?;
 
         let sub_len = r.read_u32::<LittleEndian>()? as usize;
         let mut sub_textures = vec![];
-        for _ in 0 .. sub_len {
-            sub_textures.push((
-                r.read_u32::<LittleEndian>()? as usize,
-                read_string(r)?,
-            ));
+        for _ in 0..sub_len {
+            sub_textures.push((r.read_u32::<LittleEndian>()? as usize, read_string(r)?));
         }
 
         let mut transform = [0.0f32; 16];
@@ -86,7 +84,7 @@ impl Model {
 
         let verts_len = r.read_u32::<LittleEndian>()? as usize;
         let mut verts = vec![];
-        for _ in 0 .. verts_len {
+        for _ in 0..verts_len {
             verts.push(Vertex::read_from(r)?);
         }
 
@@ -100,7 +98,7 @@ impl Model {
 
         let faces_len = r.read_u32::<LittleEndian>()? as usize;
         let mut faces = vec![];
-        for _ in 0 .. faces_len {
+        for _ in 0..faces_len {
             faces.push(Face::read_from(r, size)?);
         }
 
@@ -118,7 +116,7 @@ impl Model {
 enum IndexSize {
     U8,
     U16,
-    U32
+    U32,
 }
 
 #[derive(Debug)]
@@ -128,7 +126,8 @@ pub struct Face {
 
 impl Face {
     fn write_to<W>(&self, w: &mut W, idx: IndexSize) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         for i in &self.indices {
             match idx {
@@ -141,11 +140,10 @@ impl Face {
     }
 
     fn read_from<R>(r: &mut R, idx: IndexSize) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
-        let mut face = Face {
-            indices: [0; 3]
-        };
+        let mut face = Face { indices: [0; 3] };
         for i in &mut face.indices {
             *i = match idx {
                 IndexSize::U8 => u32::from(r.read_u8()?),
@@ -172,7 +170,8 @@ pub struct Vertex {
 
 impl Vertex {
     fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         w.write_f32::<LittleEndian>(self.x)?;
         w.write_f32::<LittleEndian>(self.y)?;
@@ -186,7 +185,8 @@ impl Vertex {
     }
 
     fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         Ok(Vertex {
             x: r.read_f32::<LittleEndian>()?,
@@ -216,7 +216,8 @@ pub struct AniModel {
 
 impl AniModel {
     pub fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         write_string(w, &self.texture)?;
 
@@ -254,7 +255,8 @@ impl AniModel {
     }
 
     pub fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let texture = read_string(r)?;
 
@@ -265,7 +267,7 @@ impl AniModel {
 
         let verts_len = r.read_u32::<LittleEndian>()? as usize;
         let mut verts = vec![];
-        for _ in 0 .. verts_len {
+        for _ in 0..verts_len {
             verts.push(AniVertex::read_from(r)?);
         }
 
@@ -279,7 +281,7 @@ impl AniModel {
 
         let faces_len = r.read_u32::<LittleEndian>()? as usize;
         let mut faces = Vec::with_capacity(faces_len);
-        for _ in 0 .. faces_len {
+        for _ in 0..faces_len {
             faces.push(Face::read_from(r, size)?);
         }
 
@@ -287,7 +289,7 @@ impl AniModel {
 
         let bones_len = r.read_u8()? as usize;
         let mut bones = Vec::with_capacity(bones_len);
-        for _ in 0 .. bones_len {
+        for _ in 0..bones_len {
             bones.push(AniBone::read_from(r)?);
         }
 
@@ -311,7 +313,8 @@ pub struct Animation {
 
 impl Animation {
     pub fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         w.write_f64::<LittleEndian>(self.duration)?;
         w.write_u32::<LittleEndian>(self.channels.len() as u32)?;
@@ -329,13 +332,14 @@ impl Animation {
     }
 
     pub fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let duration = r.read_f64::<LittleEndian>()?;
 
         let channels_len = r.read_u32::<LittleEndian>()? as usize;
         let mut channels = HashMap::with_capacity(channels_len);
-        for _ in 0 .. channels_len {
+        for _ in 0..channels_len {
             channels.insert(read_string(r)?, AnimationDetails::read_from(r)?);
         }
 
@@ -358,7 +362,8 @@ pub struct AnimationDetails {
 
 impl AnimationDetails {
     fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         w.write_u32::<LittleEndian>(self.position.len() as u32)?;
         for vert in &self.position {
@@ -389,24 +394,25 @@ impl AnimationDetails {
     }
 
     fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let position_len = r.read_u32::<LittleEndian>()? as usize;
         let mut position = Vec::with_capacity(position_len);
-        for _ in 0 .. position_len {
+        for _ in 0..position_len {
             position.push((
                 r.read_f64::<LittleEndian>()?,
                 cgmath::Vector3::new(
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
-                )
+                ),
             ));
         }
 
         let rotation_len = r.read_u32::<LittleEndian>()? as usize;
         let mut rotation = Vec::with_capacity(rotation_len);
-        for _ in 0 .. rotation_len {
+        for _ in 0..rotation_len {
             rotation.push((
                 r.read_f64::<LittleEndian>()?,
                 cgmath::Quaternion::new(
@@ -414,20 +420,20 @@ impl AnimationDetails {
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
-                )
+                ),
             ));
         }
 
         let scale_len = r.read_u32::<LittleEndian>()? as usize;
         let mut scale = Vec::with_capacity(scale_len);
-        for _ in 0 .. scale_len {
+        for _ in 0..scale_len {
             scale.push((
                 r.read_f64::<LittleEndian>()?,
                 cgmath::Vector3::new(
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
                     r.read_f32::<LittleEndian>()?,
-                )
+                ),
             ));
         }
 
@@ -447,7 +453,8 @@ pub struct AniBone {
 
 impl AniBone {
     fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         write_string(w, &self.name)?;
 
@@ -460,7 +467,8 @@ impl AniBone {
     }
 
     fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let name = read_string(r)?;
 
@@ -485,7 +493,8 @@ pub struct AniNode {
 
 impl AniNode {
     fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         write_string(w, &self.name)?;
 
@@ -503,7 +512,8 @@ impl AniNode {
     }
 
     fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let name = read_string(r)?;
 
@@ -514,7 +524,7 @@ impl AniNode {
 
         let len = r.read_u8()?;
         let mut child_nodes = Vec::with_capacity(len as usize);
-        for _ in 0 .. len {
+        for _ in 0..len {
             child_nodes.push(AniNode::read_from(r)?);
         }
 
@@ -543,7 +553,8 @@ pub struct AniVertex {
 
 impl AniVertex {
     fn write_to<W>(&self, w: &mut W) -> Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         w.write_f32::<LittleEndian>(self.x)?;
         w.write_f32::<LittleEndian>(self.y)?;
@@ -565,7 +576,8 @@ impl AniVertex {
     }
 
     fn read_from<R>(r: &mut R) -> Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         Ok(AniVertex {
             x: r.read_f32::<LittleEndian>()?,
@@ -576,12 +588,7 @@ impl AniVertex {
             nz: r.read_f32::<LittleEndian>()?,
             tx: r.read_f32::<LittleEndian>()?,
             ty: r.read_f32::<LittleEndian>()?,
-            bones: [
-                r.read_u8()?,
-                r.read_u8()?,
-                r.read_u8()?,
-                r.read_u8()?,
-            ],
+            bones: [r.read_u8()?, r.read_u8()?, r.read_u8()?, r.read_u8()?],
             bone_weights: [
                 r.read_f32::<LittleEndian>()?,
                 r.read_f32::<LittleEndian>()?,

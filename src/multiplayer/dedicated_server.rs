@@ -1,4 +1,3 @@
-
 use super::*;
 
 pub(crate) struct MenuState {
@@ -32,10 +31,18 @@ impl state::State for MenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/multiplayer_server"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/multiplayer_server"));
         if let Some(error) = self.error.as_ref() {
             if let Some(error_box) = query!(node, server_connect_error).next() {
                 error_box.set_property("show", true);
@@ -55,7 +62,12 @@ impl state::State for MenuState {
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         evt.handle_event::<MultiPlayer, _>(|MultiPlayer(addr)| {
             use std::net::ToSocketAddrs;
@@ -66,16 +78,23 @@ impl state::State for MenuState {
                         .ok_or_else(|| errors::ErrorKind::AddressResolveError)
                         .map_err(Into::into)
                 } else {
-                    (addr, 23_347).to_socket_addrs()?
+                    (addr, 23_347)
+                        .to_socket_addrs()?
                         .next()
                         .ok_or_else(|| errors::ErrorKind::AddressResolveError)
                         .map_err(Into::into)
                 }
             }
             match parse_addr(&addr) {
-                Ok(addr) => action = state::Action::Switch(Box::new(ConnectingState::<MenuState, network::UdpClientSocket, _>::new(
-                    move |_state| network::UdpClientSocket::connect(addr)
-                ))),
+                Ok(addr) => {
+                    action = state::Action::Switch(Box::new(ConnectingState::<
+                        MenuState,
+                        network::UdpClientSocket,
+                        _,
+                    >::new(
+                        move |_state| network::UdpClientSocket::connect(addr),
+                    )))
+                }
                 Err(err) => {
                     let ui = assume!(state.global_logger, self.ui.clone());
                     if let Some(error_box) = query!(ui, server_connect_error).next() {

@@ -1,5 +1,4 @@
-
-#![recursion_limit="4096"]
+#![recursion_limit = "4096"]
 #![warn(missing_docs)]
 // # Clippy lints
 // Mostly happens in the rendering code. Clippy's
@@ -29,7 +28,6 @@
 
 //! Base of the game's server. Nothing too special
 
-
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
@@ -49,9 +47,9 @@ extern crate backtrace;
 #[macro_use]
 extern crate slog;
 #[cfg(test)]
-extern crate slog_term;
-#[cfg(test)]
 extern crate slog_async;
+#[cfg(test)]
+extern crate slog_term;
 #[macro_use]
 extern crate delta_encode;
 
@@ -64,56 +62,54 @@ pub use serde_transcode;
 #[cfg(feature = "debugutil")]
 extern crate png;
 
-
 #[macro_use]
 pub mod script;
-pub mod level;
 pub mod assets;
 pub mod event;
+pub mod level;
 #[macro_use]
 pub mod network;
 #[macro_use]
 pub mod command;
-pub mod player;
-pub mod entity;
-pub mod common;
-pub mod errors;
-pub mod prelude;
-pub mod notify;
-mod spawning;
-pub mod saving;
-pub mod msg;
-pub mod steam;
-pub mod mission;
 pub mod choice;
+pub mod common;
+pub mod entity;
+pub mod errors;
+pub mod mission;
+pub mod msg;
+pub mod notify;
+pub mod player;
+pub mod prelude;
+pub mod saving;
+mod spawning;
+pub mod steam;
 
 pub use crate::prelude::UResult;
 
 mod script_room;
 
-use std::thread;
-use std::sync::Arc;
-use std::sync::mpsc;
-use std::rc::Rc;
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
 
-use crate::prelude::*;
 use crate::assets::AssetsBuilder;
-use lua::{Ref, Table};
-use crate::entity::snapshot::{
-    Snapshots,
-};
+use crate::entity::snapshot::Snapshots;
+use crate::prelude::*;
 use delta_encode::AlwaysVec;
+use lua::{Ref, Table};
 
 /// The current commit hash for this build
 pub const GAME_HASH: &str = env!("GAME_HASH");
 
 /// Registers the loaders required by the server
 pub fn register_loaders(builder: AssetsBuilder) -> AssetsBuilder {
-    builder.register::<tile::Loader>() // Shares data with ById too
-           .register::<room::Loader>()
-           .register::<object::Loader>()
-           .register::<Loader<ServerComponent>>()
+    builder
+        .register::<tile::Loader>() // Shares data with ById too
+        .register::<room::Loader>()
+        .register::<object::Loader>()
+        .register::<Loader<ServerComponent>>()
 }
 
 /// Server initial configuration
@@ -217,7 +213,11 @@ enum ServerState {
 }
 
 /// Loads rules and optionally setups storage for them
-pub fn init_rule_vars(log: &Logger, entities: Option<&mut Container>, assets: &AssetManager) -> choice::Choices {
+pub fn init_rule_vars(
+    log: &Logger,
+    entities: Option<&mut Container>,
+    assets: &AssetManager,
+) -> choice::Choices {
     use crate::choice::VariableAllocator;
     // Setup dynamic entity variables
     let mut globals = choice::BasicAlloc::new(());
@@ -225,33 +225,47 @@ pub fn init_rule_vars(log: &Logger, entities: Option<&mut Container>, assets: &A
 
     let mut student_alloc = choice::BasicAlloc::new(globals);
     for stat in Stats::STUDENT.stats() {
-        let id = assume!(log, student_alloc.storage_loc(choice::Type::Float, stat.as_string()));
+        let id = assume!(
+            log,
+            student_alloc.storage_loc(choice::Type::Float, stat.as_string())
+        );
         assert_eq!(id, stat.index as u16);
     }
     let student_c = choice::ChoiceSelector::<choice::ScriptChoice>::new(
-        log, assets, &mut student_alloc,
+        log,
+        assets,
+        &mut student_alloc,
         "student",
-        choice::convert_script_choice
+        choice::convert_script_choice,
     );
     let (student_alloc, globals) = student_alloc.remove_global();
 
     let mut professor_alloc = choice::BasicAlloc::new(globals);
     for stat in Stats::PROFESSOR.stats() {
-        let id = assume!(log, professor_alloc.storage_loc(choice::Type::Float, stat.as_string()));
+        let id = assume!(
+            log,
+            professor_alloc.storage_loc(choice::Type::Float, stat.as_string())
+        );
         assert_eq!(id, stat.index as u16);
     }
     let (professor_alloc, globals) = professor_alloc.remove_global();
 
     let mut office_worker_alloc = choice::BasicAlloc::new(globals);
     for stat in Stats::OFFICE_WORKER.stats() {
-        let id = assume!(log, office_worker_alloc.storage_loc(choice::Type::Float, stat.as_string()));
+        let id = assume!(
+            log,
+            office_worker_alloc.storage_loc(choice::Type::Float, stat.as_string())
+        );
         assert_eq!(id, stat.index as u16);
     }
     let (office_worker_alloc, globals) = office_worker_alloc.remove_global();
 
     let mut janitor_alloc = choice::BasicAlloc::new(globals);
     for stat in Stats::JANITOR.stats() {
-        let id = assume!(log, janitor_alloc.storage_loc(choice::Type::Float, stat.as_string()));
+        let id = assume!(
+            log,
+            janitor_alloc.storage_loc(choice::Type::Float, stat.as_string())
+        );
         assert_eq!(id, stat.index as u16);
     }
     let (janitor_alloc, globals) = janitor_alloc.remove_global();
@@ -266,14 +280,12 @@ pub fn init_rule_vars(log: &Logger, entities: Option<&mut Container>, assets: &A
             student_alloc,
             choice::StudentVars,
         ));
-        entities.register_component_self::<choice::ProfessorVars>(choice::EntityVarStorage::create(
-            professor_alloc,
-            choice::ProfessorVars,
-        ));
-        entities.register_component_self::<choice::OfficeWorkerVars>(choice::EntityVarStorage::create(
-            office_worker_alloc,
-            choice::OfficeWorkerVars,
-        ));
+        entities.register_component_self::<choice::ProfessorVars>(
+            choice::EntityVarStorage::create(professor_alloc, choice::ProfessorVars),
+        );
+        entities.register_component_self::<choice::OfficeWorkerVars>(
+            choice::EntityVarStorage::create(office_worker_alloc, choice::OfficeWorkerVars),
+        );
         entities.register_component_self::<choice::JanitorVars>(choice::EntityVarStorage::create(
             janitor_alloc,
             choice::JanitorVars,
@@ -289,14 +301,17 @@ impl ServerState {
         assets: &AssetManager,
         fs: &F,
         players_info: &mut PlayerInfoMap,
-        config: &ServerConfig, players: &[PlayerId]
+        config: &ServerConfig,
+        players: &[PlayerId],
     ) -> ServerState {
-
         let mut entities = Container::new();
         entity::register_components(&mut entities);
 
-        entities.add_component(Container::WORLD, CLogger{log: log.clone()});
-        entities.add_component(Container::WORLD, course::LessonManager::new(log.clone(), assets));
+        entities.add_component(Container::WORLD, CLogger { log: log.clone() });
+        entities.add_component(
+            Container::WORLD,
+            course::LessonManager::new(log.clone(), assets),
+        );
 
         let mut systems = Systems::new();
         entity::register_systems(&mut systems);
@@ -313,16 +328,24 @@ impl ServerState {
         };
         let mut running_choices = script_room::RunningChoices::new(&scripting);
         let mut snapshots = Snapshots::new(log, players);
-        scripting.store_tracked::<snapshot::EntityMap>(snapshot::EntityMap(snapshots.entity_map.clone()));
-        scripting.set(lua::Scope::Global, "idle_storage", running_choices.choice_map.clone());
+        scripting.store_tracked::<snapshot::EntityMap>(snapshot::EntityMap(
+            snapshots.entity_map.clone(),
+        ));
+        scripting.set(
+            lua::Scope::Global,
+            "idle_storage",
+            running_choices.choice_map.clone(),
+        );
 
         {
-            let lua_players = players.iter()
-                .fold(Ref::new_table(&scripting), |tbl, v| {
-                    tbl.insert(tbl.length() + 1, i32::from(v.0));
-                    tbl
-                });
-            assume!(log, scripting.invoke_function::<_, ()>("set_control_players", lua_players));
+            let lua_players = players.iter().fold(Ref::new_table(&scripting), |tbl, v| {
+                tbl.insert(tbl.length() + 1, i32::from(v.0));
+                tbl
+            });
+            assume!(
+                log,
+                scripting.invoke_function::<_, ()>("set_control_players", lua_players)
+            );
         }
 
         let mut day_tick = DayTick {
@@ -331,11 +354,10 @@ impl ServerState {
             time: 0,
         };
 
-        let mut mission = config.mission.as_ref()
-            .map(|v| {
-                let log = log.new(o!("type" => "mission_controller"));
-                mission::MissionController::new(log, scripting.clone(), v.borrow())
-            });
+        let mut mission = config.mission.as_ref().map(|v| {
+            let log = log.new(o!("type" => "mission_controller"));
+            mission::MissionController::new(log, scripting.clone(), v.borrow())
+        });
 
         let level = match saving::load_game(
             fs,
@@ -343,7 +365,8 @@ impl ServerState {
             &config.save_name,
             config.save_type,
             players_info,
-            assets, &mut entities,
+            assets,
+            &mut entities,
             &mut snapshots,
             &scripting,
             &choices,
@@ -356,18 +379,28 @@ impl ServerState {
                 let lvl = Level::new::<ServerEntityCreator, _>(
                     log.new(o!("type" => "level")),
                     &scripting,
-                    assets, &mut entities,
-                    players, config.player_area_size
-                ).expect("Failed to spawn level");
-                mission.as_mut().map(|v| v.init(players_info, &mut entities, None));
+                    assets,
+                    &mut entities,
+                    players,
+                    config.player_area_size,
+                )
+                .expect("Failed to spawn level");
+                mission
+                    .as_mut()
+                    .map(|v| v.init(players_info, &mut entities, None));
                 lvl
-            },
-            Err(err) => {
-                panic!("Failed to load the save file: {:?}", err)
-            },
+            }
+            Err(err) => panic!("Failed to load the save file: {:?}", err),
         };
         // Let choices load
-        script_room::tick_choices(log, &mut entities, &scripting, players_info, &choices, &mut running_choices);
+        script_room::tick_choices(
+            log,
+            &mut entities,
+            &scripting,
+            players_info,
+            &choices,
+            &mut running_choices,
+        );
 
         let extra_commands = Rc::new(RefCell::new(vec![]));
         scripting.store_tracked::<script_room::ExtraCommands>(extra_commands.clone());
@@ -396,17 +429,20 @@ impl ServerState {
     }
 }
 
-impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
+impl<S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
     /// Creates a new server that listens for connects on the passed address
     pub fn new<A>(
-        log: Logger, asset_manager: AssetManager,
+        log: Logger,
+        asset_manager: AssetManager,
         steam: Steam,
         fs: saving::filesystem::BoxedFileSystem,
-        addr: A, mut config: ServerConfig,
+        addr: A,
+        mut config: ServerConfig,
         icon_capture: Option<Box<dyn saving::IconCapture>>,
         command_submitter: Option<mpsc::Receiver<String>>,
     ) -> UResult<(Server<S, Steam>, mpsc::Receiver<()>)>
-        where A: Into<<S as SocketListener>::Address>
+    where
+        A: Into<<S as SocketListener>::Address>,
     {
         let addr = addr.into();
         info!(log, "Starting a server at: {:?}", S::format_address(&addr));
@@ -427,43 +463,43 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
         ) {
             Ok(_) => true,
             Err(UError(ErrorKind::NoSuchSave, _)) => false,
-            Err(err) => {
-                panic!("Failed to load the save file: {:?}", err)
-            },
+            Err(err) => panic!("Failed to load the save file: {:?}", err),
         };
         config.locked_players = locked_players;
 
-        Ok((Server {
-            state: ServerState::Lobby {
-                change_id: 0,
-                state_dirty: false,
+        Ok((
+            Server {
+                state: ServerState::Lobby {
+                    change_id: 0,
+                    state_dirty: false,
+                },
+                log,
+                steam,
+                fs,
+                network,
+                players: Default::default(),
+                players_info,
+
+                asset_manager,
+                next_uid: 1,
+
+                config,
+                shutdown_channel,
+                icon_capture,
+                command_submitter,
+                force_save: false,
             },
-            log,
-            steam,
-            fs,
-            network,
-            players: Default::default(),
-            players_info,
-
-            asset_manager,
-            next_uid: 1,
-
-            config,
-            shutdown_channel,
-            icon_capture,
-            command_submitter,
-            force_save: false,
-        }, shutdown_wait))
+            shutdown_wait,
+        ))
     }
 
     /// Runs the server's ticking logic. Returns when the server is closing
     pub fn run(&mut self) {
-        'server_loop:
-        loop {
+        'server_loop: loop {
             let start = Instant::now();
 
             self.tick();
-            if let ServerState::Playing{
+            if let ServerState::Playing {
                 ref save_name,
                 ref mut entities,
                 ref mut entity_systems,
@@ -479,26 +515,41 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                 ref mut choices,
                 ref mut running_choices,
                 ..
-            } = self.state {
+            } = self.state
+            {
                 script::handle_reloads(&self.log, scripting, &self.asset_manager);
                 if !*paused {
-                    script_room::tick_rooms(&self.log, level, entities, scripting, &mut self.players_info);
+                    script_room::tick_rooms(
+                        &self.log,
+                        level,
+                        entities,
+                        scripting,
+                        &mut self.players_info,
+                    );
                     entity::free_roam::server_tick(
                         &self.log,
-                        entities, scripting,
-                        &mut self.players_info
+                        entities,
+                        scripting,
+                        &mut self.players_info,
                     );
 
                     for player in self.players_info.values_mut() {
                         let network = &mut self.network;
-                        let networked_player = self.players.iter_mut()
+                        let networked_player = self
+                            .players
+                            .iter_mut()
                             .find(|v| v.1.uid == Some(player.uid))
-                            .and_then(|v| network.get_connection(v.0).map(move |c| (
-                                v.1,
-                                c
-                            )));
+                            .and_then(|v| network.get_connection(v.0).map(move |c| (v.1, c)));
 
-                        player.tick(&self.log, networked_player, &self.asset_manager, scripting, level, entities, day_tick);
+                        player.tick(
+                            &self.log,
+                            networked_player,
+                            &self.asset_manager,
+                            scripting,
+                            level,
+                            entities,
+                            day_tick,
+                        );
                     }
 
                     day_tick.current_tick += 1;
@@ -517,23 +568,41 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                             &mut self.fs,
                             save_name,
                             self.config.save_type,
-                            &mut self.players_info, level, entities,
+                            &mut self.players_info,
+                            level,
+                            entities,
                             scripting,
                             choices,
                             running_choices,
                             mission.as_mut(),
-                            day_tick, self.icon_capture.as_ref().map(|v| v.as_ref()),
-                        ).expect("Failed to save the game");
+                            day_tick,
+                            self.icon_capture.as_ref().map(|v| v.as_ref()),
+                        )
+                        .expect("Failed to save the game");
                     }
 
-                    spawning.handle_spawning(&self.asset_manager, &self.players_info, level, entities, scripting);
+                    spawning.handle_spawning(
+                        &self.asset_manager,
+                        &self.players_info,
+                        level,
+                        entities,
+                        scripting,
+                    );
                     {
                         let pi = &mut self.players_info;
                         mission.as_mut().map(|v| v.update(pi, entities));
                     }
 
-                    script_room::tick_choices(&self.log, entities, scripting, &mut self.players_info, choices, running_choices);
-                    entity_systems.run_with_borrows(entities)
+                    script_room::tick_choices(
+                        &self.log,
+                        entities,
+                        scripting,
+                        &mut self.players_info,
+                        choices,
+                        running_choices,
+                    );
+                    entity_systems
+                        .run_with_borrows(entities)
                         .borrow(&*level.tiles.borrow())
                         .borrow(&*level.rooms.borrow())
                         .borrow(&self.asset_manager)
@@ -542,7 +611,14 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                         .borrow_mut(&mut self.players_info)
                         .borrow(day_tick)
                         .run();
-                    Self::sync_state(entities, *day_tick, snapshots, &mut self.network, &self.players, &self.players_info);
+                    Self::sync_state(
+                        entities,
+                        *day_tick,
+                        snapshots,
+                        &mut self.network,
+                        &self.players,
+                        &self.players_info,
+                    );
                 }
             }
 
@@ -565,16 +641,15 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                         "quit" => {
                             info!(self.log, "Server shutdown");
                             break 'server_loop;
-                        },
+                        }
                         "save" => {
                             self.force_save = true;
                             info!(self.log, "Forcing a save");
-                        },
+                        }
                         cmd => warn!(self.log, "Invalid command: {}", cmd),
                     }
                 }
             }
-
 
             let target_frame_time = Duration::from_secs(1) / self.config.tick_rate.get();
             let frame_time = start.elapsed();
@@ -583,27 +658,33 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
             }
         }
 
-
-        if let ServerState::Playing{
-                ref save_name, ref mut level,
-                ref mut entities, ref scripting,
-                ref mut day_tick, ref mut mission,
-                ref choices,
-                ref running_choices,
-                ..
-        } = self.state {
+        if let ServerState::Playing {
+            ref save_name,
+            ref mut level,
+            ref mut entities,
+            ref scripting,
+            ref mut day_tick,
+            ref mut mission,
+            ref choices,
+            ref running_choices,
+            ..
+        } = self.state
+        {
             saving::save_game(
                 &mut self.fs,
                 save_name,
                 self.config.save_type,
-                &mut self.players_info, level, entities,
+                &mut self.players_info,
+                level,
+                entities,
                 scripting,
                 choices,
                 running_choices,
                 mission.as_mut(),
-                day_tick, self.icon_capture.as_ref().map(|v| v.as_ref()),
+                day_tick,
+                self.icon_capture.as_ref().map(|v| v.as_ref()),
             )
-                .expect("Failed to save the game");
+            .expect("Failed to save the game");
         }
         // Don't care about the error here as not all users of the server
         // wait on the channel.
@@ -619,8 +700,7 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
         player_info: &FNVMap<PlayerId, PlayerInfo>,
     ) {
         snapshots.capture(entities, day_tick, player_info.iter());
-    'sync:
-        for connection in network.connections() {
+        'sync: for connection in network.connections() {
             let player = match players.get(&connection.id) {
                 Some(val) => val,
                 None => continue,
@@ -642,8 +722,9 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
         self.network.tick();
         let mut new_commands = Vec::with_capacity(4);
 
-        if let ServerState::Playing{
-            ref mut mission, ref mut level,
+        if let ServerState::Playing {
+            ref mut mission,
+            ref mut level,
             ref scripting,
             ref mut entities,
             ref mut snapshots,
@@ -652,7 +733,8 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
             ref running_choices,
             ref choices,
             ..
-        } = self.state {
+        } = self.state
+        {
             let mut list = vec![];
             let handler = if let Some(mission) = mission.as_mut() {
                 let mut glist = mission.generated_commands.borrow_mut();
@@ -673,19 +755,27 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                         choices,
                     };
 
-                    match cmd.execute(&mut h, server_player, command::CommandParams {
-                        log: &self.log,
-                        level,
-                        engine: scripting,
-                        entities,
-                        snapshots,
-                        mission_handler: handler.as_ref().map(|v| v.borrow()),
-                    }) {
-                        Ok(_) => if cmd.should_sync() { done_cmds.push(cmd) },
+                    match cmd.execute(
+                        &mut h,
+                        server_player,
+                        command::CommandParams {
+                            log: &self.log,
+                            level,
+                            engine: scripting,
+                            entities,
+                            snapshots,
+                            mission_handler: handler.as_ref().map(|v| v.borrow()),
+                        },
+                    ) {
+                        Ok(_) => {
+                            if cmd.should_sync() {
+                                done_cmds.push(cmd)
+                            }
+                        }
                         Err(err) => {
                             error!(self.log, "failed to exec command: {:?}", err);
                             break;
-                        },
+                        }
                     };
                 }
                 new_commands.push((PlayerId(0), done_cmds));
@@ -695,13 +785,17 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
         let log = &self.log;
         for connection in self.network.connections() {
             let id = connection.id.clone();
-            let player = self.players.entry(id.clone()).or_insert_with(|| NetworkedPlayer::new(log, id));
+            let player = self
+                .players
+                .entry(id.clone())
+                .or_insert_with(|| NetworkedPlayer::new(log, id));
             if let Some(info) = player.handle_packets(
                 &mut self.state,
                 &self.asset_manager,
                 &mut self.fs,
                 &self.config,
-                connection, self.next_uid,
+                connection,
+                self.next_uid,
                 &mut self.players_info,
                 &self.steam,
             ) {
@@ -719,7 +813,9 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                 player.local_state = PlayerState::Closed;
                 player.remote_state = PlayerState::Closed;
             }
-            if player.local_state == PlayerState::Closed || player.remote_state == PlayerState::Closed {
+            if player.local_state == PlayerState::Closed
+                || player.remote_state == PlayerState::Closed
+            {
                 connection.close();
             }
             if let Some(uid) = player.uid {
@@ -749,7 +845,7 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                             player::PlayerKey::Steam(id) => {
                                 info!(log, "Player disconnected"; "steam_id" => ?id);
                                 steam.end_authentication_session(id)
-                            },
+                            }
                             #[cfg(not(feature = "steam"))]
                             player::PlayerKey::Username(ref name) => {
                                 info!(log, "Player disconnected"; "username" => name)
@@ -769,28 +865,26 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                     // Players can freely drop in the lobby.
                     // The game however we keep their spot.
                     match *state {
-                        ServerState::Lobby{change_id, ..} => {
+                        ServerState::Lobby { change_id, .. } => {
                             if let Some(uid) = player.uid {
                                 players_info.remove(&uid);
                                 *state = ServerState::Lobby {
                                     change_id,
-                                    state_dirty: true
+                                    state_dirty: true,
                                 };
                             }
                         }
-                        ServerState::BeginGame => {},
-                        ServerState::Playing{
-                            ..
-                        } => {
+                        ServerState::BeginGame => {}
+                        ServerState::Playing { .. } => {
                             // If they were building something, revert that
                             if let Some(uid) = player.uid {
                                 let info = assume!(log, players_info.get_mut(&uid));
                                 match info.state {
-                                    player::State::EditEntity{ .. } => {
+                                    player::State::EditEntity { .. } => {
                                         // TODO: Can't cancel staff placement yet
                                         info.state = player::State::None;
                                     }
-                                    _ => {},
+                                    _ => {}
                                 }
                             }
                         }
@@ -805,7 +899,10 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
         if !messages.is_empty() {
             for connection in self.network.connections() {
                 let id = connection.id.clone();
-                let player = self.players.entry(id.clone()).or_insert_with(|| NetworkedPlayer::new(log, id));
+                let player = self
+                    .players
+                    .entry(id.clone())
+                    .or_insert_with(|| NetworkedPlayer::new(log, id));
                 if let Some(uid) = player.uid {
                     if self.players_info.get(&uid).is_some() {
                         let _ = connection.ensure_send(packet::Message {
@@ -818,37 +915,46 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
 
         match self.state {
             // If there is a change in the lobby update players
-            ServerState::Lobby{change_id, state_dirty: true} => {
+            ServerState::Lobby {
+                change_id,
+                state_dirty: true,
+            } => {
                 let id = change_id + 1;
                 self.state = ServerState::Lobby {
                     change_id: id,
-                    state_dirty: false
+                    state_dirty: false,
                 };
 
-                let players: Vec<_> = self.players.values()
+                let players: Vec<_> = self
+                    .players
+                    .values()
                     .filter_map(|p| p.uid.map(|v| (v, p)))
                     .filter_map(|(uid, p)| self.players_info.get(&uid).map(|v| (uid, v, p)))
-                    .map(|(uid, info, p)| {
-                        packet::LobbyEntry {
-                            #[cfg(feature = "steam")]
-                            steam_id: match info.key {
-                                player::PlayerKey::Steam(key) => key.raw(),
-                            },
-                            uid,
-                            ready: p.remote_state == PlayerState::Lobby,
-                        }
+                    .map(|(uid, info, p)| packet::LobbyEntry {
+                        #[cfg(feature = "steam")]
+                        steam_id: match info.key {
+                            player::PlayerKey::Steam(key) => key.raw(),
+                        },
+                        uid,
+                        ready: p.remote_state == PlayerState::Lobby,
                     })
                     .collect();
 
-                let player_count = self.players.values()
+                let player_count = self
+                    .players
+                    .values()
                     .filter(|p| p.remote_state == PlayerState::Lobby)
                     .count();
                 let can_start = player_count as u32 >= self.config.min_players
-                            && player_count as u32 <= self.config.max_players;
+                    && player_count as u32 <= self.config.max_players;
 
                 // Update players in the lobby with the new info
                 for connection in self.network.connections() {
-                    if let Some(&mut NetworkedPlayer{remote_state: PlayerState::Lobby, ..}) = self.players.get_mut(&connection.id) {
+                    if let Some(&mut NetworkedPlayer {
+                        remote_state: PlayerState::Lobby,
+                        ..
+                    }) = self.players.get_mut(&connection.id)
+                    {
                         // The error will be handled later
                         let _ = connection.ensure_send(packet::UpdateLobby {
                             change_id: id,
@@ -861,9 +967,11 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                 if can_start && self.config.autostart {
                     self.state = ServerState::BeginGame;
                 }
-            },
+            }
             ServerState::BeginGame => {
-                let players: Vec<_> = self.players_info.values()
+                let players: Vec<_> = self
+                    .players_info
+                    .values()
                     .map(|p| packet::PlayerEntry {
                         uid: p.uid,
                         username: p.name.clone(),
@@ -872,18 +980,33 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                     .collect();
 
                 let player_ids: Vec<PlayerId> = players.iter().map(|v| v.uid).collect();
-                self.state = ServerState::create_play_state(&self.log, &self.asset_manager, &mut self.fs, &mut self.players_info, &self.config, &player_ids);
+                self.state = ServerState::create_play_state(
+                    &self.log,
+                    &self.asset_manager,
+                    &mut self.fs,
+                    &mut self.players_info,
+                    &self.config,
+                    &player_ids,
+                );
 
-                if let ServerState::Playing{
-                    ref level, ref mission,
+                if let ServerState::Playing {
+                    ref level,
+                    ref mission,
                     ref mut entities,
                     ref scripting,
                     ref choices,
                     ref mut running_choices,
                     ..
-                } = self.state {
+                } = self.state
+                {
                     let (lstr, lstate) = level.create_initial_state();
-                    let idle = script_room::create_choices_state(log, entities, scripting, choices, running_choices);
+                    let idle = script_room::create_choices_state(
+                        log,
+                        entities,
+                        scripting,
+                        choices,
+                        running_choices,
+                    );
                     for connection in self.network.connections() {
                         if let Some(player) = self.players.get_mut(&connection.id) {
                             if player.remote_state == PlayerState::Lobby && player.uid.is_some() {
@@ -892,7 +1015,9 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                                     width: level.width,
                                     height: level.height,
                                     players: AlwaysVec(players.clone()),
-                                    mission_handler: mission.as_ref().map(|v| v.handler.borrow().into_owned()),
+                                    mission_handler: mission
+                                        .as_ref()
+                                        .map(|v| v.handler.borrow().into_owned()),
                                     strings: AlwaysVec(lstr.clone()),
                                     state: lstate.clone(),
                                     idle_state: idle.clone(),
@@ -903,8 +1028,8 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                         }
                     }
                 }
-            },
-            ServerState::Playing{..} => {
+            }
+            ServerState::Playing { .. } => {
                 // Copy commands from each player to all the other players
                 for player in self.players.values_mut() {
                     // Don't send commands to players that are still connecting
@@ -917,7 +1042,7 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                         uid
                     } else {
                         // They might be rejoining, ignore for now
-                        continue
+                        continue;
                     };
                     for ncmds in &new_commands {
                         // Don't send the player their own commands
@@ -930,17 +1055,18 @@ impl <S: SocketListener, Steam: steam::Steam> Server<S, Steam> {
                                 ncmds.0,
                                 cmd.clone(),
                             ));
-                            player.remote_commands.next_id = player.remote_commands.next_id.wrapping_add(1);
+                            player.remote_commands.next_id =
+                                player.remote_commands.next_id.wrapping_add(1);
                         }
                     }
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 }
 
-impl <Steam: steam::Steam> Server<LoopbackSocketListener, Steam> {
+impl<Steam: steam::Steam> Server<LoopbackSocketListener, Steam> {
     /// Returns the socket to be used by the local client
     pub fn client_localsocket(&mut self) -> LoopbackSocket {
         self.network.client_localsocket()
@@ -948,7 +1074,7 @@ impl <Steam: steam::Steam> Server<LoopbackSocketListener, Steam> {
 }
 
 #[cfg(feature = "steam")]
-impl <Steam: steam::Steam> Server<SteamSocketListener, Steam> {
+impl<Steam: steam::Steam> Server<SteamSocketListener, Steam> {
     /// Returns the socket to be used by the local client
     pub fn client_localsocket(&mut self) -> SteamSocket {
         self.network.client_localsocket()

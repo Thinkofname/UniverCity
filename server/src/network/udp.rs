@@ -31,24 +31,20 @@
 //! resend fragments they did not send.
 
 use super::*;
-use std::net::{
-    self,
-    SocketAddr,
-    UdpSocket as NetUdpSocket,
-};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use std::cmp;
 use std::fmt::{self, Debug};
-use std::thread;
+use std::io;
+use std::net::{self, SocketAddr, UdpSocket as NetUdpSocket};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::io;
+use std::thread;
 use std::time::Duration;
-use std::cmp;
-use byteorder::{ReadBytesExt, WriteBytesExt, LittleEndian};
 
 use crc::{crc32, Hasher32};
 
-use delta_encode::{bitio, DeltaEncodable};
 use crate::prelude::*;
+use delta_encode::{bitio, DeltaEncodable};
 
 const MAX_FRAGMENTS_PARTS: usize = ::std::u16::MAX as usize;
 const MAX_WAIT_PACKETS: usize = 128;
@@ -104,7 +100,7 @@ impl SocketListener for UdpSocketListener {
                             // is closed when the port doesn't respond to
                             // a ping.s
                             continue;
-                        },
+                        }
                     };
                     let read_data = &buf[..count];
                     let remove = {
@@ -119,25 +115,29 @@ impl SocketListener for UdpSocketListener {
                                 output_send: output_send.clone(),
                                 state: Arc::new(Mutex::new(UdpSocketState::new())),
                             };
-                            assume!(log, send_writer.send(SocketWriteInfo {
-                                addr,
-                                state: info.state.clone(),
-                                output_read,
-                                output_send: output_send.clone(),
-                            }));
-                            assume!(log, send_socket.send(UdpRemoteSocket {
-                                addr,
-                                input_read,
-                                output_send,
-                            }));
+                            assume!(
+                                log,
+                                send_writer.send(SocketWriteInfo {
+                                    addr,
+                                    state: info.state.clone(),
+                                    output_read,
+                                    output_send: output_send.clone(),
+                                })
+                            );
+                            assume!(
+                                log,
+                                send_socket.send(UdpRemoteSocket {
+                                    addr,
+                                    input_read,
+                                    output_send,
+                                })
+                            );
                             info
                         });
                         match packet_from_bytes(read_data)
                             .and_then(|v| handle_packet(&sinfo.state, &sinfo.output_send, v))
                         {
-                            Ok(Some(val)) => {
-                                sinfo.input_send.send(val).is_err()
-                            },
+                            Ok(Some(val)) => sinfo.input_send.send(val).is_err(),
                             Ok(None) => false,
                             Err(e) => {
                                 error!(log, "Failed to decode packet: {}", e);
@@ -156,26 +156,25 @@ impl SocketListener for UdpSocketListener {
         let socks = sockets.clone();
         {
             let log = log.clone();
-            thread::spawn(move || {
-                loop {
-                    let mut sockets = assume!(log, socks.lock());
-                    if let Ok(new_socket) = read_writer.try_recv() {
-                        sockets.push(new_socket);
-                    }
-                    let mut should_sleep = true;
-                    sockets.retain(|socket| {
-                        if let Ok((ensure, pck)) = socket.output_read.try_recv() {
-                            should_sleep = false;
-                            if write_to(&write_socket, socket.addr, &socket.state, pck, ensure).is_err() {
-                                return false;
-                            }
+            thread::spawn(move || loop {
+                let mut sockets = assume!(log, socks.lock());
+                if let Ok(new_socket) = read_writer.try_recv() {
+                    sockets.push(new_socket);
+                }
+                let mut should_sleep = true;
+                sockets.retain(|socket| {
+                    if let Ok((ensure, pck)) = socket.output_read.try_recv() {
+                        should_sleep = false;
+                        if write_to(&write_socket, socket.addr, &socket.state, pck, ensure).is_err()
+                        {
+                            return false;
                         }
-                        true
-                    });
-                    drop(sockets);
-                    if should_sleep {
-                        thread::sleep(Duration::from_millis(4));
                     }
+                    true
+                });
+                drop(sockets);
+                if should_sleep {
+                    thread::sleep(Duration::from_millis(4));
                 }
             });
         }
@@ -219,9 +218,11 @@ impl SocketListener for UdpSocketListener {
 }
 
 fn write_to(
-        socket: &NetUdpSocket, addr: SocketAddr,
-        state: &Mutex<UdpSocketState>, pck: packet::Packet,
-        ensure: bool
+    socket: &NetUdpSocket,
+    addr: SocketAddr,
+    state: &Mutex<UdpSocketState>,
+    pck: packet::Packet,
+    ensure: bool,
 ) -> UResult<()> {
     if ensure {
         for pck in ensure_packet(state, pck)? {
@@ -236,9 +237,10 @@ fn write_to(
 }
 
 fn write(
-        socket: &NetUdpSocket,
-        state: &Mutex<UdpSocketState>, pck: packet::Packet,
-        ensure: bool
+    socket: &NetUdpSocket,
+    state: &Mutex<UdpSocketState>,
+    pck: packet::Packet,
+    ensure: bool,
 ) -> UResult<()> {
     if ensure {
         for pck in ensure_packet(state, pck)? {
@@ -275,7 +277,9 @@ impl Socket for UdpRemoteSocket {
     fn is_local() -> bool {
         false
     }
-    fn needs_verify() -> bool { true }
+    fn needs_verify() -> bool {
+        true
+    }
 
     /// Returns the unique id for this connection
     fn id(&mut self) -> Self::Id {
@@ -283,11 +287,14 @@ impl Socket for UdpRemoteSocket {
     }
 
     fn split(self, _log: &Logger) -> (Sender, Receiver) {
-        (Sender::Unreliable {
-            inner: self.output_send,
-        }, Receiver {
-            inner: self.input_read
-        })
+        (
+            Sender::Unreliable {
+                inner: self.output_send,
+            },
+            Receiver {
+                inner: self.input_read,
+            },
+        )
     }
 }
 
@@ -301,16 +308,18 @@ impl UdpClientSocket {
     /// Creates a udp socket client
     pub fn connect(addr: SocketAddr) -> UResult<UdpClientSocket> {
         let socket = NetUdpSocket::bind(match addr {
-            SocketAddr::V4(_) =>
-                SocketAddr::V4(net::SocketAddrV4::new(net::Ipv4Addr::new(0, 0, 0, 0), 0)),
-            SocketAddr::V6(_) =>
-                SocketAddr::V6(net::SocketAddrV6::new(net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0, 0, 0)),
+            SocketAddr::V4(_) => {
+                SocketAddr::V4(net::SocketAddrV4::new(net::Ipv4Addr::new(0, 0, 0, 0), 0))
+            }
+            SocketAddr::V6(_) => SocketAddr::V6(net::SocketAddrV6::new(
+                net::Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0),
+                0,
+                0,
+                0,
+            )),
         })?;
         socket.connect(addr)?;
-        Ok(UdpClientSocket {
-            addr,
-            socket,
-        })
+        Ok(UdpClientSocket { addr, socket })
     }
 }
 
@@ -327,7 +336,9 @@ impl Socket for UdpClientSocket {
     fn is_local() -> bool {
         false
     }
-    fn needs_verify() -> bool { true }
+    fn needs_verify() -> bool {
+        true
+    }
 
     /// Returns the unique id for this connection
     fn id(&mut self) -> Self::Id {
@@ -360,11 +371,11 @@ impl Socket for UdpClientSocket {
                             if input_send.send(val).is_err() {
                                 break;
                             }
-                        },
-                        Ok(None) => {},
+                        }
+                        Ok(None) => {}
                         Err(e) => {
                             error!(log, "Failed to decode packet: {}", e);
-                            break
+                            break;
                         }
                     }
                 }
@@ -394,11 +405,10 @@ impl Socket for UdpClientSocket {
             }
         });
 
-        (Sender::Unreliable {
-            inner: output_send,
-        }, Receiver {
-            inner: input_read
-        })
+        (
+            Sender::Unreliable { inner: output_send },
+            Receiver { inner: input_read },
+        )
     }
 }
 
@@ -433,7 +443,7 @@ impl UdpSocketState {
                 slot.resend_count += 1;
                 slot.last_resend = 4 * slot.resend_count;
 
-                for part in 0 .. slot.fragments as usize {
+                for part in 0..slot.fragments as usize {
                     if slot.recv_bits.get(part) {
                         continue;
                     }
@@ -442,7 +452,7 @@ impl UdpSocketState {
                     // if less than 1000)
                     let size = cmp::min(slot.data.len() - offset, 1000);
                     // Copy the data into a new packet
-                    let data = slot.data[offset .. offset + size].to_vec();
+                    let data = slot.data[offset..offset + size].to_vec();
                     let wrapper = packet::Ensured {
                         fragment_id: slot.id,
                         fragment_part: part as u16,
@@ -503,7 +513,10 @@ pub(super) fn packet_to_bytes(packet: packet::Packet, limit: usize) -> UResult<V
     Ok(out)
 }
 
-fn ensure_packet(state: &Mutex<UdpSocketState>, packet: packet::Packet) -> UResult<Vec<packet::Packet>> {
+fn ensure_packet(
+    state: &Mutex<UdpSocketState>,
+    packet: packet::Packet,
+) -> UResult<Vec<packet::Packet>> {
     let mut writer = bitio::Writer::new(Vec::with_capacity(500));
     packet.encode(None, &mut writer)?;
     let buf = writer.finish()?;
@@ -515,12 +528,17 @@ fn ensure_packet(state: &Mutex<UdpSocketState>, packet: packet::Packet) -> UResu
 
     // Grab an id that should be unique to this packet (within a
     // given timeframe).
-    let mut state = state.lock().map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
+    let mut state = state
+        .lock()
+        .map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
     let frag_id = state.next_id;
     state.next_id = state.next_id.wrapping_add(1);
     // If the slot is taken then the other side hasn't responded to
     // in a while. Assume something is wrong and error.
-    let send_slot = match state.sent_packets.get_mut(frag_id as usize % MAX_WAIT_PACKETS) {
+    let send_slot = match state
+        .sent_packets
+        .get_mut(frag_id as usize % MAX_WAIT_PACKETS)
+    {
         Some(val) => val,
         None => return Err(ErrorKind::NoPacketSlots.into()),
     };
@@ -529,11 +547,11 @@ fn ensure_packet(state: &Mutex<UdpSocketState>, packet: packet::Packet) -> UResu
 
     // Split up the packet into 1000 byte fragments and send
     let mut mask = BitSet::new(num_fragments as usize);
-    for part in 0 .. num_fragments {
+    for part in 0..num_fragments {
         mask.set(part, true);
         let offset = part * 1000;
         let size = cmp::min(buf.len() - offset, 1000);
-        let data = buf[offset .. offset + size].to_vec();
+        let data = buf[offset..offset + size].to_vec();
         let wrapper = packet::Ensured {
             fragment_id: frag_id,
             fragment_part: part as u16,
@@ -576,14 +594,23 @@ pub(super) fn packet_from_bytes(data: &[u8]) -> UResult<packet::Packet> {
     Ok(packet)
 }
 
-fn handle_packet(state: &Mutex<UdpSocketState>, send: &mpsc::Sender<(bool, packet::Packet)>, pck: packet::Packet) -> UResult<Option<packet::Packet>> {
-    use std::mem;
+fn handle_packet(
+    state: &Mutex<UdpSocketState>,
+    send: &mpsc::Sender<(bool, packet::Packet)>,
+    pck: packet::Packet,
+) -> UResult<Option<packet::Packet>> {
     use std::cmp::min;
+    use std::mem;
     Ok(match pck {
         packet::Packet::EnsuredAck(pck) => {
-            let mut state = state.lock().map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
+            let mut state = state
+                .lock()
+                .map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
             let done = {
-                let slot = state.sent_packets.get_mut(pck.fragment_id as usize % MAX_WAIT_PACKETS).unwrap();
+                let slot = state
+                    .sent_packets
+                    .get_mut(pck.fragment_id as usize % MAX_WAIT_PACKETS)
+                    .unwrap();
                 if let Some(slot) = slot.as_mut() {
                     if slot.id != pck.fragment_id {
                         // Ignore
@@ -604,20 +631,27 @@ fn handle_packet(state: &Mutex<UdpSocketState>, send: &mpsc::Sender<(bool, packe
                 state.recv_packets[pck.fragment_id as usize % MAX_WAIT_PACKETS] = None;
             }
             None
-        },
+        }
         packet::Packet::Ensured(pck) => {
-            let mut lock = state.lock().map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
+            let mut lock = state
+                .lock()
+                .map_err(|_| ErrorKind::Msg("Lock failed".into()))?;
             let state: &mut UdpSocketState = &mut *lock;
             let done = {
-                let slot = state.recv_packets.get_mut(pck.fragment_id as usize % MAX_WAIT_PACKETS).unwrap();
+                let slot = state
+                    .recv_packets
+                    .get_mut(pck.fragment_id as usize % MAX_WAIT_PACKETS)
+                    .unwrap();
                 // Empty slot, fill it
                 if slot.is_none() {
-                    if state.recv_last_ids[pck.fragment_id as usize % MAX_WAIT_PACKETS] == pck.fragment_id {
+                    if state.recv_last_ids[pck.fragment_id as usize % MAX_WAIT_PACKETS]
+                        == pck.fragment_id
+                    {
                         // Echo, ignore it
                         return Ok(None);
                     }
                     let mut mask = BitSet::new((pck.fragment_max_parts + 1) as usize);
-                    for i in 0 .. (pck.fragment_max_parts + 1) as usize {
+                    for i in 0..(pck.fragment_max_parts + 1) as usize {
                         mask.set(i, true);
                     }
                     *slot = Some(RecvData {
@@ -628,7 +662,8 @@ fn handle_packet(state: &Mutex<UdpSocketState>, send: &mpsc::Sender<(bool, packe
                         data: vec![0; (pck.fragment_max_parts + 1) as usize * 1000],
                         len: 0,
                     });
-                    state.recv_last_ids[pck.fragment_id as usize % MAX_WAIT_PACKETS] = pck.fragment_id;
+                    state.recv_last_ids[pck.fragment_id as usize % MAX_WAIT_PACKETS] =
+                        pck.fragment_id;
                 }
                 let slot = slot.as_mut().expect("Slot missing after assignment");
                 if slot.id != pck.fragment_id {
@@ -649,25 +684,37 @@ fn handle_packet(state: &Mutex<UdpSocketState>, send: &mpsc::Sender<(bool, packe
                     slot.recv_bits.set(pck.fragment_part as usize, true);
                     // Copy the data into our buffer
                     let part = pck.fragment_part as usize;
-                    let end = min(min(slot.data.len(), (part + 1) * 1000) - (part * 1000), pck.internal_packet.0.len());
+                    let end = min(
+                        min(slot.data.len(), (part + 1) * 1000) - (part * 1000),
+                        pck.internal_packet.0.len(),
+                    );
                     // Last fragment, use as the size
                     if pck.fragment_part == slot.fragments - 1 {
                         slot.len = part * 1000 + end;
                     }
-                    slot.data[part * 1000 .. part * 1000 + end].copy_from_slice(&pck.internal_packet.0[.. end]);
+                    slot.data[part * 1000..part * 1000 + end]
+                        .copy_from_slice(&pck.internal_packet.0[..end]);
                 }
                 // Tell the other side again that we got the packet even if
                 // we ignored it encase the ack was dropped
-                send.send((false, packet::EnsuredAck {
-                    fragment_id: slot.id,
-                    fragment_part: pck.fragment_part,
-                }.into())).map_err(|_| ErrorKind::ConnectionClosed)?;
+                send.send((
+                    false,
+                    packet::EnsuredAck {
+                        fragment_id: slot.id,
+                        fragment_part: pck.fragment_part,
+                    }
+                    .into(),
+                ))
+                .map_err(|_| ErrorKind::ConnectionClosed)?;
                 slot.recv_bits.includes_set(&slot.mask)
             };
             if done {
                 // We have the whole packet now. Parse it and return it
-                let mut slot = mem::replace(&mut state.recv_packets[pck.fragment_id as usize % MAX_WAIT_PACKETS], None)
-                    .expect("Missing slot when recreating packet");
+                let mut slot = mem::replace(
+                    &mut state.recv_packets[pck.fragment_id as usize % MAX_WAIT_PACKETS],
+                    None,
+                )
+                .expect("Missing slot when recreating packet");
                 slot.data.truncate(slot.len);
                 let cur = io::Cursor::new(slot.data);
                 let mut r = bitio::Reader::new(cur);
@@ -675,7 +722,7 @@ fn handle_packet(state: &Mutex<UdpSocketState>, send: &mpsc::Sender<(bool, packe
             } else {
                 None
             }
-        },
+        }
         pck => Some(pck),
     })
 }
@@ -689,15 +736,18 @@ fn test_udp() {
     let client = UdpClientSocket::connect(addr).unwrap();
     let (mut send, _read) = client.split(&log);
     send.send(packet::ServerConnectionFail {
-        reason: "Testing 1 2 3".into()
-    }).unwrap();
+        reason: "Testing 1 2 3".into(),
+    })
+    .unwrap();
 
     // Prevent races
     thread::sleep(::std::time::Duration::from_millis(75));
 
     let client_remote = listen.next_socket().unwrap();
     let (_remote_send, mut remote_read) = client_remote.split(&log);
-    let packet = remote_read.recv_timeout(time::Duration::from_secs(5)).unwrap();
+    let packet = remote_read
+        .recv_timeout(time::Duration::from_secs(5))
+        .unwrap();
     let packet = if let packet::Packet::ServerConnectionFail(pck) = packet {
         pck
     } else {
@@ -718,14 +768,17 @@ fn test_udp_ensure() {
     let (mut send, _read) = client.split(&log);
     send.ensure_send(packet::ServerConnectionFail {
         reason: msg.clone(),
-    }).unwrap();
+    })
+    .unwrap();
 
     // Prevent races
     thread::sleep(::std::time::Duration::from_millis(75));
 
     let client_remote = listen.next_socket().unwrap();
     let (_remote_send, mut remote_read) = client_remote.split(&log);
-    let packet = remote_read.recv_timeout(time::Duration::from_secs(5)).unwrap();
+    let packet = remote_read
+        .recv_timeout(time::Duration::from_secs(5))
+        .unwrap();
     let packet = if let packet::Packet::ServerConnectionFail(pck) = packet {
         pck
     } else {

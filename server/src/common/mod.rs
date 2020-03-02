@@ -4,10 +4,10 @@ mod money;
 pub use self::money::*;
 use crate::prelude::*;
 
-use delta_encode::{bitio, DeltaEncodable};
-use std::sync::Arc;
-use std::io;
 use crate::assets;
+use delta_encode::{bitio, DeltaEncodable};
+use std::io;
+use std::sync::Arc;
 
 /// A collection of animation descriptions
 pub type AnimationSet = Arc<FNVMap<String, Animation>>;
@@ -18,32 +18,44 @@ pub struct Animation {
     /// stay on the last animation.
     pub should_loop: bool,
     /// List of animations to play
-    pub animations: Vec<assets::ResourceKey<'static>>
+    pub animations: Vec<assets::ResourceKey<'static>>,
 }
-
 
 /// JSON'able version of `Animation`
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AnimationInfo {
-    #[serde(rename="loop")]
+    #[serde(rename = "loop")]
     should_loop: bool,
     animations: Vec<String>,
 }
 
 impl AnimationInfo {
     /// Converts the JSON'able collection of animations into a `AnimationSet`
-    pub fn map_to_animation_set(module: assets::ModuleKey<'_>, vals: FNVMap<String, AnimationInfo>) -> AnimationSet {
-        Arc::new(vals.into_iter()
-            .map(|(k, v)| (k, Animation {
-                should_loop: v.should_loop,
-                animations: v.animations.into_iter()
-                    .map(|v| assets::LazyResourceKey::parse(&v)
-                        .or_module(module.borrow())
-                        .into_owned()
+    pub fn map_to_animation_set(
+        module: assets::ModuleKey<'_>,
+        vals: FNVMap<String, AnimationInfo>,
+    ) -> AnimationSet {
+        Arc::new(
+            vals.into_iter()
+                .map(|(k, v)| {
+                    (
+                        k,
+                        Animation {
+                            should_loop: v.should_loop,
+                            animations: v
+                                .animations
+                                .into_iter()
+                                .map(|v| {
+                                    assets::LazyResourceKey::parse(&v)
+                                        .or_module(module.borrow())
+                                        .into_owned()
+                                })
+                                .collect(),
+                        },
                     )
-                    .collect()
-            }))
-            .collect())
+                })
+                .collect(),
+        )
     }
 }
 
@@ -73,8 +85,7 @@ impl MissionEntry {
     /// Returns the resource key pointing to the lua module
     /// that will handle this mission
     pub fn get_handler_key(&self) -> ResourceKey<'_> {
-        LazyResourceKey::parse(&self.handler)
-            .or_module(ModuleKey::new(self.mod_name.as_str()))
+        LazyResourceKey::parse(&self.handler).or_module(ModuleKey::new(self.mod_name.as_str()))
     }
 
     /// The description of this mission with formatting fixed
@@ -100,15 +111,14 @@ pub struct ScriptData(pub Arc<bitio::Writer<Vec<u8>>>);
 
 impl PartialEq for ScriptData {
     fn eq(&self, other: &ScriptData) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-            || self.0 == other.0
+        Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
     }
 }
 
 impl DeltaEncodable for ScriptData {
-
     fn encode<W>(&self, base: Option<&Self>, w: &mut bitio::Writer<W>) -> io::Result<()>
-        where W: io::Write
+    where
+        W: io::Write,
     {
         if base.map_or(false, |v| v == self) {
             w.write_bool(false)?;
@@ -121,7 +131,8 @@ impl DeltaEncodable for ScriptData {
     }
 
     fn decode<R>(base: Option<&Self>, r: &mut bitio::Reader<R>) -> io::Result<Self>
-        where R: io::Read
+    where
+        R: io::Read,
     {
         use std::cmp;
         if r.read_bool()? {
@@ -136,7 +147,10 @@ impl DeltaEncodable for ScriptData {
         } else if let Some(base) = base {
             Ok(base.clone())
         } else {
-            Err(io::Error::new(io::ErrorKind::InvalidInput, "Missing previous state"))
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Missing previous state",
+            ))
         }
     }
 }

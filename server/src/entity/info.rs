@@ -1,16 +1,16 @@
 //! Manages any information needed to create entities
 
-use serde_json;
-use serde::de::{Visitor, Deserialize, Deserializer};
-use serde::de::DeserializeOwned;
 use rand::seq::SliceRandom;
+use serde::de::DeserializeOwned;
+use serde::de::{Deserialize, Deserializer, Visitor};
+use serde_json;
 
-use crate::util::{FNVMap};
-use std::marker::PhantomData;
-use std::sync::Arc;
 use crate::assets;
 use crate::ecs;
 use crate::prelude::*;
+use crate::util::FNVMap;
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 use crate::common::{AnimationInfo, AnimationSet};
 
@@ -19,9 +19,9 @@ pub struct Loader<CC> {
     _cc: PhantomData<CC>,
 }
 
-
-impl <'a, CC> assets::AssetLoader<'a> for Loader<CC>
-    where CC: ComponentCreator
+impl<'a, CC> assets::AssetLoader<'a> for Loader<CC>
+where
+    CC: ComponentCreator,
 {
     type LoaderData = LoaderData<CC>;
     type Return = Arc<Type<CC>>;
@@ -36,9 +36,16 @@ impl <'a, CC> assets::AssetLoader<'a> for Loader<CC>
         }
     }
 
-    fn load(data: &mut Self::LoaderData, assets: &assets::AssetManager, resource: Self::Key) -> UResult<Self::Return> {
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &assets::AssetManager,
+        resource: Self::Key,
+    ) -> UResult<Self::Return> {
         if !data.entities.contains_key(&resource) {
-            let file = assets.open_from_pack(resource.module_key(), &format!("entity/{}.json", resource.resource()))?;
+            let file = assets.open_from_pack(
+                resource.module_key(),
+                &format!("entity/{}.json", resource.resource()),
+            )?;
             let info: TypeInfo<CC::Raw> = serde_json::from_reader(file)?;
 
             let dnames = &mut data.names;
@@ -48,59 +55,79 @@ impl <'a, CC> assets::AssetLoader<'a> for Loader<CC>
             let log = &data.log;
             let icon = &info.icon;
 
-            data.entities.insert(resource.borrow().into_owned(), Arc::new(Type {
-                key: resource.borrow().into_owned(),
-                display_name: info.name,
-                components: info.components.into_iter()
-                    .map(|v| CC::from_raw(log, resource.module_key(), v))
-                    .collect(),
-                generator: info.generator
-                    .map(|v| assets::LazyResourceKey::parse(&v)
-                        .or_module(resource.module_key())
-                        .into_owned()),
-                highlight: info.highlight
-                    .map(|v| Highlight {
+            data.entities.insert(
+                resource.borrow().into_owned(),
+                Arc::new(Type {
+                    key: resource.borrow().into_owned(),
+                    display_name: info.name,
+                    components: info
+                        .components
+                        .into_iter()
+                        .map(|v| CC::from_raw(log, resource.module_key(), v))
+                        .collect(),
+                    generator: info.generator.map(|v| {
+                        assets::LazyResourceKey::parse(&v)
+                            .or_module(resource.module_key())
+                            .into_owned()
+                    }),
+                    highlight: info.highlight.map(|v| Highlight {
                         color: v.color,
                         label: v.label,
                     }),
 
-                variants: info.variants.into_iter()
-                    .map(|v| {
-                        let names = assets::LazyResourceKey::parse(v.names.as_ref().unwrap_or(names))
-                                .or_module(resource.module_key());
+                    variants: info
+                        .variants
+                        .into_iter()
+                        .map(|v| {
+                            let names =
+                                assets::LazyResourceKey::parse(v.names.as_ref().unwrap_or(names))
+                                    .or_module(resource.module_key());
 
-                        let name_list = dnames.entry(names.borrow().into_owned())
-                            .or_insert_with(|| {
-                                let file = assume!(log, assets.open_from_pack(names.module_key(), &format!("entity/names/{}.json", names.resource())));
-                                let names: NameListInfo = assume!(log, serde_json::from_reader(file));
-                                Arc::new(NameList {
-                                    first: names.first.into_iter()
-                                        .map(Into::into)
-                                        .collect(),
-                                    second: names.second.into_iter()
-                                        .map(Into::into)
-                                        .collect(),
-                                })
-                            });
-                        let mut ani = animations.clone();
-                        for (k, v) in v.animations {
-                            ani.insert(k, v);
-                        }
-                        SubType {
-                            name_list: name_list.clone(),
-                            model: assets::LazyResourceKey::parse(v.model.as_ref().unwrap_or(model))
+                            let name_list = dnames
+                                .entry(names.borrow().into_owned())
+                                .or_insert_with(|| {
+                                    let file = assume!(
+                                        log,
+                                        assets.open_from_pack(
+                                            names.module_key(),
+                                            &format!("entity/names/{}.json", names.resource())
+                                        )
+                                    );
+                                    let names: NameListInfo =
+                                        assume!(log, serde_json::from_reader(file));
+                                    Arc::new(NameList {
+                                        first: names.first.into_iter().map(Into::into).collect(),
+                                        second: names.second.into_iter().map(Into::into).collect(),
+                                    })
+                                });
+                            let mut ani = animations.clone();
+                            for (k, v) in v.animations {
+                                ani.insert(k, v);
+                            }
+                            SubType {
+                                name_list: name_list.clone(),
+                                model: assets::LazyResourceKey::parse(
+                                    v.model.as_ref().unwrap_or(model),
+                                )
                                 .or_module(resource.module_key())
                                 .into_owned(),
-                            icon: assets::LazyResourceKey::parse(v.icon.as_ref().unwrap_or(icon))
+                                icon: assets::LazyResourceKey::parse(
+                                    v.icon.as_ref().unwrap_or(icon),
+                                )
                                 .or_module(resource.module_key())
                                 .into_owned(),
-                            animations: AnimationInfo::map_to_animation_set(resource.module_key(), ani),
-                        }
-                    })
-                    .collect()
-            }));
+                                animations: AnimationInfo::map_to_animation_set(
+                                    resource.module_key(),
+                                    ani,
+                                ),
+                            }
+                        })
+                        .collect(),
+                }),
+            );
         }
-        data.entities.get(&resource)
+        data.entities
+            .get(&resource)
             .cloned()
             .ok_or_else(|| ErrorKind::NoSuchAsset.into())
     }
@@ -162,22 +189,47 @@ pub struct SubType {
     pub animations: AnimationSet,
 }
 
-impl <CC: ComponentCreator> Type<CC> {
-
+impl<CC: ComponentCreator> Type<CC> {
     /// Creates a new entity based on this type.
-    pub fn create_entity(&self, em: &mut ecs::Container, variant_id: usize, name: Option<(Arc<str>, Arc<str>)>) -> ecs::Entity {
+    pub fn create_entity(
+        &self,
+        em: &mut ecs::Container,
+        variant_id: usize,
+        name: Option<(Arc<str>, Arc<str>)>,
+    ) -> ecs::Entity {
         use rand::thread_rng;
         let variant = &self.variants[variant_id];
-        let e = <CC::Creator as super::EntityCreator>::animated_model(em, variant.model.borrow(), None, variant.animations.clone(), "idle");
+        let e = <CC::Creator as super::EntityCreator>::animated_model(
+            em,
+            variant.model.borrow(),
+            None,
+            variant.animations.clone(),
+            "idle",
+        );
         let mut rng = thread_rng();
-        em.add_component(e, super::Living {
-            key: self.key.clone(),
-            variant: variant_id,
-            name: name.unwrap_or_else(|| (
-               variant.name_list.first.choose(&mut rng).cloned().unwrap_or_else(|| "Missing".into()),
-               variant.name_list.second.choose(&mut rng).cloned().unwrap_or_else(|| "Name".into()),
-            )),
-        });
+        em.add_component(
+            e,
+            super::Living {
+                key: self.key.clone(),
+                variant: variant_id,
+                name: name.unwrap_or_else(|| {
+                    (
+                        variant
+                            .name_list
+                            .first
+                            .choose(&mut rng)
+                            .cloned()
+                            .unwrap_or_else(|| "Missing".into()),
+                        variant
+                            .name_list
+                            .second
+                            .choose(&mut rng)
+                            .cloned()
+                            .unwrap_or_else(|| "Name".into()),
+                    )
+                }),
+            },
+        );
         em.add_component(e, Controlled::new());
         for c in &self.components {
             c.apply(em, e);
@@ -226,9 +278,7 @@ pub enum ServerComponent {
         cost: UniDollar,
     },
     /// Marks the entity has a student
-    Student {
-
-    },
+    Student {},
     /// Tints part of the entity's model
     Tint {
         /// List of tints that can be used
@@ -256,19 +306,25 @@ impl ComponentCreator for ServerComponent {
 
     fn from_raw(_log: &Logger, module: assets::ModuleKey<'_>, val: ServerComponentInfo) -> Self {
         match val {
-            ServerComponentInfo::Size{width, height, depth} => ServerComponent::Size {
-                width, height, depth,
+            ServerComponentInfo::Size {
+                width,
+                height,
+                depth,
+            } => ServerComponent::Size {
+                width,
+                height,
+                depth,
             },
-            ServerComponentInfo::Speed{speed} => ServerComponent::Speed{speed},
-            ServerComponentInfo::Paid{cost} => ServerComponent::Paid{cost},
-            ServerComponentInfo::Student{} => ServerComponent::Student{},
-            ServerComponentInfo::Tint{tints} => ServerComponent::Tint{tints},
-            ServerComponentInfo::FreeRoam{script} => ServerComponent::FreeRoam {
+            ServerComponentInfo::Speed { speed } => ServerComponent::Speed { speed },
+            ServerComponentInfo::Paid { cost } => ServerComponent::Paid { cost },
+            ServerComponentInfo::Student {} => ServerComponent::Student {},
+            ServerComponentInfo::Tint { tints } => ServerComponent::Tint { tints },
+            ServerComponentInfo::FreeRoam { script } => ServerComponent::FreeRoam {
                 script: LazyResourceKey::parse(&script)
                     .or_module(module)
                     .into_owned(),
             },
-            ServerComponentInfo::Vars{vars} => ServerComponent::Vars{vars},
+            ServerComponentInfo::Vars { vars } => ServerComponent::Vars { vars },
             _ => ServerComponent::Unknown,
         }
     }
@@ -278,57 +334,76 @@ impl ComponentCreator for ServerComponent {
         use self::ServerComponent::*;
         use rand::thread_rng;
         match *self {
-            Unknown => {},
-            Size{width, height, depth} => {
-                em.add_component(e, super::Size {
-                    width,
-                    height,
-                    depth,
-                });
-            },
-            Speed{speed} => {
-                em.add_component(e, super::MovementSpeed {
-                    speed,
-                    base_speed: speed,
-                });
-            },
-            Paid{cost} => {
-                em.add_component(e, super::Paid {
+            Unknown => {}
+            Size {
+                width,
+                height,
+                depth,
+            } => {
+                em.add_component(
+                    e,
+                    super::Size {
+                        width,
+                        height,
+                        depth,
+                    },
+                );
+            }
+            Speed { speed } => {
+                em.add_component(
+                    e,
+                    super::MovementSpeed {
+                        speed,
+                        base_speed: speed,
+                    },
+                );
+            }
+            Paid { cost } => em.add_component(
+                e,
+                super::Paid {
                     cost,
                     wanted_cost: cost,
                     last_payment: None,
-                })
-            }
-            Student{} => {
+                },
+            ),
+            Student {} => {
                 em.add_component(e, super::StudentController::new());
                 em.add_component(e, super::Grades::new());
             }
-            Tint{ref tints} => {
+            Tint { ref tints } => {
                 let mut rng = thread_rng();
-                em.add_component(e, super::Tints {
-                    tints: tints.iter()
-                        .map(|v| v.choose(&mut rng).map_or(TintColor(255, 255, 255, 255), |v| *v))
-                        .map(|v| (v.0, v.1, v.2, v.3))
-                        .collect()
-                });
-            }
-            FreeRoam{ref script} => {
-                em.add_component(e, super::free_roam::FreeRoam {
-                    script: script.clone(),
-                });
-            }
-            Vars{ref vars} => {
-                match vars.as_str() {
-                    "student" => em.add_component(e, choice::StudentVars),
-                    "professor" => {
-                        em.add_component(e, AutoRest);
-                        em.add_component(e, choice::ProfessorVars);
+                em.add_component(
+                    e,
+                    super::Tints {
+                        tints: tints
+                            .iter()
+                            .map(|v| {
+                                v.choose(&mut rng)
+                                    .map_or(TintColor(255, 255, 255, 255), |v| *v)
+                            })
+                            .map(|v| (v.0, v.1, v.2, v.3))
+                            .collect(),
                     },
-                    "office_worker" => em.add_component(e, choice::OfficeWorkerVars),
-                    "janitor" => em.add_component(e, choice::JanitorVars),
-                    _ => {},
-                }
+                );
             }
+            FreeRoam { ref script } => {
+                em.add_component(
+                    e,
+                    super::free_roam::FreeRoam {
+                        script: script.clone(),
+                    },
+                );
+            }
+            Vars { ref vars } => match vars.as_str() {
+                "student" => em.add_component(e, choice::StudentVars),
+                "professor" => {
+                    em.add_component(e, AutoRest);
+                    em.add_component(e, choice::ProfessorVars);
+                }
+                "office_worker" => em.add_component(e, choice::OfficeWorkerVars),
+                "janitor" => em.add_component(e, choice::JanitorVars),
+                _ => {}
+            },
         }
     }
 }
@@ -349,7 +424,7 @@ pub fn entity_variant(ty: &Type<ServerComponent>) -> StatVariant {
                 "professor" => return Stats::PROFESSOR,
                 "office_worker" => return Stats::OFFICE_WORKER,
                 "janitor" => return Stats::JANITOR,
-                _ => {},
+                _ => {}
             }
         }
     }
@@ -367,16 +442,20 @@ pub fn load_staff_list(log: &Logger, assets: &AssetManager) -> Vec<StaffInfo> {
         let entity_raw: Vec<StaffInfoJson> = match serde_json::from_reader(entity_file) {
             Ok(val) => val,
             Err(err) => {
-                error!(log, "Failed to parse entities.json for pack {:?}: {}", module, err);
-                continue
+                error!(
+                    log,
+                    "Failed to parse entities.json for pack {:?}: {}", module, err
+                );
+                continue;
             }
         };
-        staff_list.extend(entity_raw.into_iter()
-            .map(move|v| StaffInfo {
+        staff_list.extend(entity_raw.into_iter().map(move |v| {
+            StaffInfo {
                 entity: assets::LazyResourceKey::parse(&v.entity)
                     .or_module(module.borrow())
                     .into_owned(),
-            }));
+            }
+        }));
     }
     assert!(!staff_list.is_empty()); // Can't work with no entities
     staff_list
@@ -389,29 +468,13 @@ pub fn load_staff_list(log: &Logger, assets: &AssetManager) -> Vec<StaffInfo> {
 #[doc(hidden)]
 pub enum ServerComponentInfo {
     AnimateMovement {},
-    Size {
-        width: f32,
-        height: f32,
-        depth: f32,
-    },
-    Speed {
-        speed: f32,
-    },
-    Paid {
-        cost: UniDollar,
-    },
-    Student {
-
-    },
-    Tint {
-        tints: Vec<Vec<TintColor>>,
-    },
-    FreeRoam {
-        script: String,
-    },
-    Vars {
-        vars: String,
-    },
+    Size { width: f32, height: f32, depth: f32 },
+    Speed { speed: f32 },
+    Paid { cost: UniDollar },
+    Student {},
+    Tint { tints: Vec<Vec<TintColor>> },
+    FreeRoam { script: String },
+    Vars { vars: String },
 }
 
 #[derive(Debug, Deserialize)]
@@ -462,7 +525,8 @@ struct SubTypeInfoOpt {
 
 impl<'de> Deserialize<'de> for TintColor {
     fn deserialize<D>(deserializer: D) -> Result<TintColor, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_str(TintColorVisitor)
     }
@@ -478,22 +542,21 @@ impl<'de> Visitor<'de> for TintColorVisitor {
     }
 
     fn visit_str<E>(self, v: &str) -> Result<TintColor, E>
-        where E: ::serde::de::Error,
+    where
+        E: ::serde::de::Error,
     {
         if v.starts_with('#') {
             let col = &v[1..];
             if col.len() == 6 || col.len() == 8 {
                 Ok(TintColor(
-                    u8::from_str_radix(&col[..2], 16)
-                        .map_err(E::custom)?,
-                    u8::from_str_radix(&col[2..4], 16)
-                        .map_err(E::custom)?,
-                    u8::from_str_radix(&col[4..6], 16)
-                        .map_err(E::custom)?,
+                    u8::from_str_radix(&col[..2], 16).map_err(E::custom)?,
+                    u8::from_str_radix(&col[2..4], 16).map_err(E::custom)?,
+                    u8::from_str_radix(&col[4..6], 16).map_err(E::custom)?,
                     if col.len() == 8 {
-                        u8::from_str_radix(&col[6..8], 16)
-                            .map_err(E::custom)?
-                    } else { 255 },
+                        u8::from_str_radix(&col[6..8], 16).map_err(E::custom)?
+                    } else {
+                        255
+                    },
                 ))
             } else {
                 Err(E::custom("Incorrect length for color"))
@@ -504,14 +567,13 @@ impl<'de> Visitor<'de> for TintColorVisitor {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::path::Path;
-    use std::env;
     use crate::assets::*;
     use crate::entity::ServerComponent;
+    use std::env;
+    use std::fs;
+    use std::path::Path;
 
     #[test]
     fn try_load_entities() {
@@ -541,7 +603,11 @@ mod tests {
                     continue;
                 }
                 println!("Trying to load: {:?}", path_str);
-                assets.loader_open::<super::Loader<ServerComponent>>(ResourceKey::new("base", path_str)).unwrap();
+                assets
+                    .loader_open::<super::Loader<ServerComponent>>(ResourceKey::new(
+                        "base", path_str,
+                    ))
+                    .unwrap();
             }
         }
     }

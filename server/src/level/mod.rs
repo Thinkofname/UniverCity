@@ -1,37 +1,32 @@
 //! Contains everything to do with levels in the game.
 
-pub mod tile;
 pub mod object;
 pub mod room;
+pub mod tile;
 
 mod script_helper;
-pub use self::script_helper::init_levellib;
-pub use self::script_helper::get_rooms_for_player;
 pub use self::object::{
-    ObjectPlacement,
-    ReverseObjectPlacement,
-    ObjectPlacementAction,
-    Loc2D,
-    Loc3D,
-    Size2D,
+    Loc2D, Loc3D, ObjectPlacement, ObjectPlacementAction, ReverseObjectPlacement, Size2D,
 };
+pub use self::script_helper::get_rooms_for_player;
+pub use self::script_helper::init_levellib;
 #[macro_use]
 mod macros;
 mod virt;
-pub use self::virt::RoomVirtualLevel;
 pub use self::room::{RoomPlacement, RoomState};
-mod room_placement;
+pub use self::virt::RoomVirtualLevel;
 mod placement;
+mod room_placement;
 use self::placement::*;
 
 use crate::prelude::*;
 
-use std::cell::{RefCell, Ref, RefMut};
+use crate::network::packet;
+use delta_encode::bitio;
+use lua;
+use std::cell::{Ref, RefCell, RefMut};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use delta_encode::bitio;
-use crate::network::packet;
-use lua;
 
 /// Size of a section in a level. Sections are areas of a level split
 /// up for performance (culling, rendering etc).
@@ -147,7 +142,10 @@ pub trait LevelView {
     fn get_window(&self, id: u8) -> ResourceKey<'static>;
 }
 
-impl <'a, T> LevelView for Ref<'a, T> where T: LevelView {
+impl<'a, T> LevelView for Ref<'a, T>
+where
+    T: LevelView,
+{
     fn get_tile(&self, loc: Location) -> Arc<tile::Type> {
         T::get_tile(self, loc)
     }
@@ -171,7 +169,10 @@ impl <'a, T> LevelView for Ref<'a, T> where T: LevelView {
     }
 }
 
-impl <T> LevelView for Box<T> where T: LevelView {
+impl<T> LevelView for Box<T>
+where
+    T: LevelView,
+{
     fn get_tile(&self, loc: Location) -> Arc<tile::Type> {
         T::get_tile(self, loc)
     }
@@ -216,7 +217,10 @@ pub trait LevelAccess: LevelView {
     fn get_or_create_window(&mut self, key: ResourceKey<'_>) -> u8;
 }
 
-impl <T> LevelAccess for Box<T> where T: LevelAccess {
+impl<T> LevelAccess for Box<T>
+where
+    T: LevelAccess,
+{
     fn set_tile(&mut self, loc: Location, tile: ResourceKey<'_>) {
         T::set_tile(self, loc, tile)
     }
@@ -286,16 +290,20 @@ impl LevelAccess for Level {
 impl Level {
     /// Creates a new level.
     pub fn new<EC, E>(
-            log: Logger,
-            engine: &E,
-            asset_manager: &AssetManager,
-            entities: &mut Container,
-            players: &[PlayerId], player_area: u32
+        log: Logger,
+        engine: &E,
+        asset_manager: &AssetManager,
+        entities: &mut Container,
+        players: &[PlayerId],
+        player_area: u32,
     ) -> UResult<Level>
-        where E: Invokable,
-              EC: EntityCreator
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
-        let def_id = asset_manager.loader_open::<tile::Loader>(ResourceKey::new("base", "grass"))?.id;
+        let def_id = asset_manager
+            .loader_open::<tile::Loader>(ResourceKey::new("base", "grass"))?
+            .id;
 
         let width = (players.len() as f64).sqrt().ceil() as u32;
         let height = (players.len() as f64 / f64::from(width)).ceil() as u32;
@@ -304,7 +312,14 @@ impl Level {
         let size_width = 32 * 2 + 16 + (16 + player_area) * width;
         let size_height = 32 * 2 + 16 + (16 + player_area) * height;
 
-        let mut level = Level::new_raw_internal(log.clone(), asset_manager, engine, size_width, size_height, def_id);
+        let mut level = Level::new_raw_internal(
+            log.clone(),
+            asset_manager,
+            engine,
+            size_width,
+            size_height,
+            def_id,
+        );
 
         // Initial roads
         let road = ResourceKey::new("base", "external/road");
@@ -312,101 +327,180 @@ impl Level {
         let tmp_room_id = RoomId(-1);
         {
             // Corners
-            for x in 0 ..= width {
-                for y in 0 ..= height {
+            for x in 0..=width {
+                for y in 0..=height {
                     let loc = Location::new(
                         32 + (16 + player_area as i32) * x as i32,
                         32 + (16 + player_area as i32) * y as i32,
                     );
                     let loc_max = loc + (15, 15);
                     let bound = Bound::new(loc, loc_max);
-                    let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+                    let id = assume!(
+                        log,
+                        level.place_room_id::<EC, _>(
+                            engine,
+                            entities,
+                            tmp_room_id,
+                            server_player,
+                            road.borrow(),
+                            bound
+                        )
+                    );
                     let id = level.finalize_placement(id);
                     level.finalize_room::<EC, _>(engine, entities, id)?;
                 }
             }
             // Edges
-            for x in 0 .. width {
-                let loc = Location::new(
-                    32 + 16 + (16 + player_area as i32) * x as i32,
-                    32,
-                );
+            for x in 0..width {
+                let loc = Location::new(32 + 16 + (16 + player_area as i32) * x as i32, 32);
                 let bound = Bound::new(loc, loc + (player_area as i32 - 1, 15));
-                let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+                let id = assume!(
+                    log,
+                    level.place_room_id::<EC, _>(
+                        engine,
+                        entities,
+                        tmp_room_id,
+                        server_player,
+                        road.borrow(),
+                        bound
+                    )
+                );
                 let id = level.finalize_placement(id);
                 level.finalize_room::<EC, _>(engine, entities, id)?;
             }
-            for y in 0 .. height {
-                let loc = Location::new(
-                    32,
-                    32 + 16 + (16 + player_area as i32) * y as i32,
-                );
+            for y in 0..height {
+                let loc = Location::new(32, 32 + 16 + (16 + player_area as i32) * y as i32);
                 let bound = Bound::new(loc, loc + (15, player_area as i32 - 1));
-                let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+                let id = assume!(
+                    log,
+                    level.place_room_id::<EC, _>(
+                        engine,
+                        entities,
+                        tmp_room_id,
+                        server_player,
+                        road.borrow(),
+                        bound
+                    )
+                );
                 let id = level.finalize_placement(id);
                 level.finalize_room::<EC, _>(engine, entities, id)?;
             }
         }
 
         // Places joining roads
-        for x in 0 .. width {
-            for y in 0 .. height {
+        for x in 0..width {
+            for y in 0..height {
                 let x = x as i32;
                 let y = y as i32;
-                let loc = Location::new(32 + 16 + x * (16 + player_area as i32), 32 + 16 + y * (16 + player_area as i32));
+                let loc = Location::new(
+                    32 + 16 + x * (16 + player_area as i32),
+                    32 + 16 + y * (16 + player_area as i32),
+                );
                 let pos = loc + (player_area as i32, player_area as i32);
                 // Edges
                 let bound = Bound::new(pos - (player_area as i32, 0), pos + (0, 15));
-                let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+                let id = assume!(
+                    log,
+                    level.place_room_id::<EC, _>(
+                        engine,
+                        entities,
+                        tmp_room_id,
+                        server_player,
+                        road.borrow(),
+                        bound
+                    )
+                );
                 let id = level.finalize_placement(id);
                 level.finalize_room::<EC, _>(engine, entities, id)?;
                 let bound = Bound::new(pos - (0, player_area as i32), pos + (15, 0));
-                let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+                let id = assume!(
+                    log,
+                    level.place_room_id::<EC, _>(
+                        engine,
+                        entities,
+                        tmp_room_id,
+                        server_player,
+                        road.borrow(),
+                        bound
+                    )
+                );
                 let id = level.finalize_placement(id);
                 level.finalize_room::<EC, _>(engine, entities, id)?;
             }
         }
-        for x in 0 ..= width {
+        for x in 0..=width {
             let x = x as i32;
 
             let pos = Location::new(32 + x * (16 + player_area as i32), 0);
-            let bound = Bound::new(
-                pos,
-                pos + (15, 31)
+            let bound = Bound::new(pos, pos + (15, 31));
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    server_player,
+                    road.borrow(),
+                    bound
+                )
             );
-            let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
             let id = level.finalize_placement(id);
             level.finalize_room::<EC, _>(engine, entities, id)?;
 
-
-            let pos = Location::new(32 + x * (16 + player_area as i32), 32 + 16 + (16 + player_area as i32) * height as i32);
-            let bound = Bound::new(
-                pos,
-                pos + (15, 31)
+            let pos = Location::new(
+                32 + x * (16 + player_area as i32),
+                32 + 16 + (16 + player_area as i32) * height as i32,
             );
-            let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+            let bound = Bound::new(pos, pos + (15, 31));
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    server_player,
+                    road.borrow(),
+                    bound
+                )
+            );
             let id = level.finalize_placement(id);
             level.finalize_room::<EC, _>(engine, entities, id)?;
         }
-        for y in 0 ..= height {
+        for y in 0..=height {
             let y = y as i32;
 
             let pos = Location::new(0, 32 + y * (16 + player_area as i32));
-            let bound = Bound::new(
-                pos,
-                pos + (31, 15)
+            let bound = Bound::new(pos, pos + (31, 15));
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    server_player,
+                    road.borrow(),
+                    bound
+                )
             );
-            let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
             let id = level.finalize_placement(id);
             level.finalize_room::<EC, _>(engine, entities, id)?;
 
-
-            let pos = Location::new(32 + 16 + (16 + player_area as i32) * width as i32, 32 + y * (16 + player_area as i32));
-            let bound = Bound::new(
-                pos,
-                pos + (31, 15)
+            let pos = Location::new(
+                32 + 16 + (16 + player_area as i32) * width as i32,
+                32 + y * (16 + player_area as i32),
             );
-            let id = assume!(log, level.place_room_id::<EC, _>(engine, entities, tmp_room_id, server_player, road.borrow(), bound));
+            let bound = Bound::new(pos, pos + (31, 15));
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    server_player,
+                    road.borrow(),
+                    bound
+                )
+            );
             let id = level.finalize_placement(id);
             level.finalize_room::<EC, _>(engine, entities, id)?;
         }
@@ -424,33 +518,37 @@ impl Level {
 
         for player in players {
             // Placement area for the player to use
-            let loc = Location::new(32 + 16 + ox * (16 + player_area as i32), 32 + 16 + oy * (16 + player_area as i32));
-            let id = assume!(log, level.place_room_id::<EC, _>(
-                engine, entities,
-                tmp_room_id, *player,
-                owned_area.borrow(),
-                Bound::new(
-                    loc,
-                    loc + (player_area as i32 - 1, player_area as i32 - 1)
+            let loc = Location::new(
+                32 + 16 + ox * (16 + player_area as i32),
+                32 + 16 + oy * (16 + player_area as i32),
+            );
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    *player,
+                    owned_area.borrow(),
+                    Bound::new(loc, loc + (player_area as i32 - 1, player_area as i32 - 1))
                 )
-            ));
+            );
             let id = level.finalize_placement(id);
             level.finalize_room::<EC, _>(engine, entities, id)?;
 
             // Initial building for them to work with
-            let bloc = loc + (
-                0,
-                player_area as i32 / 2 - building_size / 2,
-            );
-            let id = assume!(log, level.place_room_id::<EC, _>(
-                engine, entities,
-                tmp_room_id, *player,
-                building.borrow(),
-                Bound::new(
-                    bloc,
-                    bloc + (building_size, building_size)
+            let bloc = loc + (0, player_area as i32 / 2 - building_size / 2);
+            let id = assume!(
+                log,
+                level.place_room_id::<EC, _>(
+                    engine,
+                    entities,
+                    tmp_room_id,
+                    *player,
+                    building.borrow(),
+                    Bound::new(bloc, bloc + (building_size, building_size))
                 )
-            ));
+            );
             let id = level.finalize_placement(id);
             place_objects! {
                 init(level, engine, entities)
@@ -476,28 +574,50 @@ impl Level {
 
     /// Creates a new empty level server. This is normally used by clients as
     /// the server normally loads the level for them.
-    pub fn new_raw<E>(log: Logger, asset_manager: &AssetManager, scripting: &E, width: u32, height: u32) -> UResult<Level>
-        where E: Invokable
+    pub fn new_raw<E>(
+        log: Logger,
+        asset_manager: &AssetManager,
+        scripting: &E,
+        width: u32,
+        height: u32,
+    ) -> UResult<Level>
+    where
+        E: Invokable,
     {
-        let def_id = asset_manager.loader_open::<tile::Loader>(ResourceKey::new("base", "grass"))?.id;
-        Ok(Level::new_raw_internal(log, asset_manager, scripting, width, height, def_id))
+        let def_id = asset_manager
+            .loader_open::<tile::Loader>(ResourceKey::new("base", "grass"))?
+            .id;
+        Ok(Level::new_raw_internal(
+            log,
+            asset_manager,
+            scripting,
+            width,
+            height,
+            def_id,
+        ))
     }
 
     fn new_raw_internal<E>(
         log: Logger,
         asset_manager: &AssetManager,
         scripting: &E,
-        width: u32, height: u32,
-        def_id: tile::TileId) -> Level
-    where E: Invokable
+        width: u32,
+        height: u32,
+        def_id: tile::TileId,
+    ) -> Level
+    where
+        E: Invokable,
     {
         let sw = (width as usize + (SECTION_SIZE - 1)) / SECTION_SIZE;
         let sh = (height as usize + (SECTION_SIZE - 1)) / SECTION_SIZE;
         let mut tile_map = IntMap::new();
-        tile_map.insert(def_id, assume!(log, asset_manager.loader_open::<tile::ById>(def_id)));
+        tile_map.insert(
+            def_id,
+            assume!(log, asset_manager.loader_open::<tile::ById>(def_id)),
+        );
         let level_bounds = Bound::new(
             Location::zero(),
-            Location::new(width as i32 - 1, height as i32 - 1)
+            Location::new(width as i32 - 1, height as i32 - 1),
         );
         let lvl = Level {
             log: log.clone(),
@@ -511,22 +631,23 @@ impl Level {
                 height,
                 level_bounds,
                 asset_manager: asset_manager.clone(),
-                tiles: vec![TileData{
-                    id: def_id,
-                    owner: None,
-                    flags: TileFlag::empty(),
-                }; (width * height) as usize],
+                tiles: vec![
+                    TileData {
+                        id: def_id,
+                        owner: None,
+                        flags: TileFlag::empty(),
+                    };
+                    (width * height) as usize
+                ],
                 tile_map,
-                walls: vec![WallData{
-                    data: [None; 2],
-                }; ((width + 1) * (height + 1)) as usize],
+                walls: vec![WallData { data: [None; 2] }; ((width + 1) * (height + 1)) as usize],
                 dirty_sections: vec![true; sw * sh],
                 window_type: vec![],
                 window_type_map: FNVMap::default(),
                 pathmap: {
                     let size = (((width + 3) / 4) * ((height + 3) / 4)) as usize;
                     let mut pathmap = Vec::with_capacity(size);
-                    for _ in 0 .. size {
+                    for _ in 0..size {
                         pathmap.push(PathSection {
                             info: [0xFFFF_FFFF_FFFF_FFFF; 15 * 4],
                             movement_cost: 0,
@@ -571,20 +692,26 @@ impl Level {
 
         {
             let mut cost = 0;
-            for y in sy * 4 .. (sy * 4 + 4) {
-                for x in sx * 4 .. (sx * 4 + 4) {
-                    cost += tiles.get_tile(Location::new(x as i32, y as i32)).movement_cost;
+            for y in sy * 4..(sy * 4 + 4) {
+                for x in sx * 4..(sx * 4 + 4) {
+                    cost += tiles
+                        .get_tile(Location::new(x as i32, y as i32))
+                        .movement_cost;
                 }
             }
             let section = &mut tiles.pathmap[idx];
             section.movement_cost = cost;
         }
 
-        for y in min_y .. min_y + 16 {
-            for x in min_x .. min_x + 16 {
+        for y in min_y..min_y + 16 {
+            for x in min_x..min_x + 16 {
                 let cx = x & 0xF;
                 let cy = y & 0xF;
-                if visited.get(cx + cy * 16) || !self.level_bounds.in_bounds(Location::new(x as i32 / 4, y as i32 / 4)) {
+                if visited.get(cx + cy * 16)
+                    || !self
+                        .level_bounds
+                        .in_bounds(Location::new(x as i32 / 4, y as i32 / 4))
+                {
                     continue;
                 }
 
@@ -595,10 +722,10 @@ impl Level {
 
                 let touched = flood_fill(&mut visited, &*tiles, &*rooms, x, y, sx, sy);
                 let section = &mut tiles.pathmap[idx];
-                for e1 in 0 ..= 15 * 4 {
+                for e1 in 0..=15 * 4 {
                     if touched & (1 << e1) != 0 {
                         let edge = &mut section.info[e1];
-                        for e2 in 0 ..= 15 * 4 {
+                        for e2 in 0..=15 * 4 {
                             if touched & (1 << e2) != 0 {
                                 *edge |= 1 << e2;
                             }
@@ -623,8 +750,7 @@ impl Level {
 
     /// Flags the section at the location as dirty
     pub fn flag_dirty(&mut self, x: i32, y: i32) {
-        self.tiles.borrow_mut()
-            .flag_dirty(x, y)
+        self.tiles.borrow_mut().flag_dirty(x, y)
     }
 
     /// Gets the tile at the passed location. If the location is out of bounds then
@@ -670,7 +796,6 @@ impl Level {
     pub fn try_room_info(&self, id: RoomId) -> Option<Ref<'_, RoomPlacement>> {
         let rooms = self.rooms.borrow();
         ref_filter_map(rooms, |v| v.try_room_info(id))
-
     }
     /// Returns the placement information of the room with the given
     /// id.
@@ -693,8 +818,13 @@ impl Level {
 
     /// Returns the room placement information for the room at the location
     /// if any, otherwise this returns `None`.
-    pub fn get_room_at<'a>(tiles: &LevelTiles, rooms: &'a LevelRooms, loc: Location) -> Option<&'a RoomPlacement> {
-        tiles.get_tile_raw(loc)
+    pub fn get_room_at<'a>(
+        tiles: &LevelTiles,
+        rooms: &'a LevelRooms,
+        loc: Location,
+    ) -> Option<&'a RoomPlacement> {
+        tiles
+            .get_tile_raw(loc)
             .and_then(|v| v.owner)
             .map(|v| rooms.get_room_info(v))
     }
@@ -705,7 +835,11 @@ impl Level {
         self.tiles.borrow_mut().get_and_clear_dirty_section(x, y)
     }
 
-    fn virt_placer(log: &Logger, rooms: &Rc<RefCell<LevelRooms>>, id: RoomId) -> virt::VirtualPlacer {
+    fn virt_placer(
+        log: &Logger,
+        rooms: &Rc<RefCell<LevelRooms>>,
+        id: RoomId,
+    ) -> virt::VirtualPlacer {
         virt::VirtualPlacer {
             rooms: rooms.clone(),
             log: log.clone(),
@@ -715,14 +849,16 @@ impl Level {
 
     /// Starts trying to place the named object in the given room
     pub fn begin_object_placement<'a, E, EC>(
-            &mut self, room: RoomId,
-            engine: &E,
-            entities: &mut Container,
-            obj: ResourceKey<'a>,
-            version: Option<i32>,
+        &mut self,
+        room: RoomId,
+        engine: &E,
+        entities: &mut Container,
+        obj: ResourceKey<'a>,
+        version: Option<i32>,
     ) -> UResult<()>
-        where E: Invokable,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
         let limited = {
             let (building, limited) = {
@@ -731,13 +867,15 @@ impl Level {
                 (room.building_level.is_some(), room.limited_editing)
             };
             if building {
-                return Level::virt_placer(&self.log, &self.rooms, room).begin_object_placement::<E, EC>(
-                    &self.log,
-                    &self.asset_manager,
-                    engine,
-                    entities, obj,
-                    version
-                )
+                return Level::virt_placer(&self.log, &self.rooms, room)
+                    .begin_object_placement::<E, EC>(
+                        &self.log,
+                        &self.asset_manager,
+                        engine,
+                        entities,
+                        obj,
+                        version,
+                    );
             }
             limited
         };
@@ -748,13 +886,8 @@ impl Level {
             room::LimitedRoom {
                 room_id: room,
                 level: self,
-            }.begin_object_placement::<E, EC>(
-                &log,
-                &assets,
-                engine,
-                entities, obj,
-                version
-            )
+            }
+            .begin_object_placement::<E, EC>(&log, &assets, engine, entities, obj, version)
         } else {
             Err(ErrorKind::InvalidRoomState.into())
         }
@@ -764,15 +897,17 @@ impl Level {
     /// valid this returns an error but the object will still be moved
     /// it'll just be unplaceable
     pub fn move_active_object<E, EC>(
-            &mut self, room: RoomId,
-            engine: &E,
-            entities: &mut Container,
-            pos: (f32, f32),
-            version: Option<i32>,
-            rotation: i16,
+        &mut self,
+        room: RoomId,
+        engine: &E,
+        entities: &mut Container,
+        pos: (f32, f32),
+        version: Option<i32>,
+        rotation: i16,
     ) -> UResult<()>
-        where E: Invokable,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
         let limited = {
             let (building, limited) = {
@@ -781,13 +916,16 @@ impl Level {
                 (room.building_level.is_some(), room.limited_editing)
             };
             if building {
-                return Level::virt_placer(&self.log, &self.rooms, room).move_active_object::<E, EC>(
-                    &self.log,
-                    &self.asset_manager,
-                    engine,
-                    entities, pos,
-                    version, rotation
-                )
+                return Level::virt_placer(&self.log, &self.rooms, room)
+                    .move_active_object::<E, EC>(
+                        &self.log,
+                        &self.asset_manager,
+                        engine,
+                        entities,
+                        pos,
+                        version,
+                        rotation,
+                    );
             }
             limited
         };
@@ -797,13 +935,8 @@ impl Level {
             room::LimitedRoom {
                 room_id: room,
                 level: self,
-            }.move_active_object::<E, EC>(
-                &log,
-                &assets,
-                engine,
-                entities, pos,
-                version, rotation
-            )
+            }
+            .move_active_object::<E, EC>(&log, &assets, engine, entities, pos, version, rotation)
         } else {
             Err(ErrorKind::InvalidRoomState.into())
         }
@@ -811,7 +944,8 @@ impl Level {
 
     /// Cancels placement of the active object
     pub fn cancel_object_placement<EC>(&mut self, room: RoomId, entities: &mut Container)
-        where EC: EntityCreator,
+    where
+        EC: EntityCreator,
     {
         {
             let building = {
@@ -820,27 +954,31 @@ impl Level {
                 room.building_level.is_some()
             };
             if building {
-                return Level::virt_placer(&self.log, &self.rooms, room).cancel_object_placement::<EC>(&self.log, entities)
+                return Level::virt_placer(&self.log, &self.rooms, room)
+                    .cancel_object_placement::<EC>(&self.log, entities);
             }
         };
         let log = self.log.clone();
         room::LimitedRoom {
             room_id: room,
             level: self,
-        }.cancel_object_placement::<EC>(&log, entities);
+        }
+        .cancel_object_placement::<EC>(&log, entities);
     }
 
     /// Places the active object if its in a valid location otherwise
     /// returns an error and does nothing
     pub fn finalize_object_placement<E, EC>(
-            &mut self, room: RoomId,
-            engine: &E,
-            entities: &mut Container,
-            version: Option<i32>,
-            rotation: i16,
+        &mut self,
+        room: RoomId,
+        engine: &E,
+        entities: &mut Container,
+        version: Option<i32>,
+        rotation: i16,
     ) -> UResult<usize>
-        where E: Invokable,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
         let limited = {
             let (building, limited) = {
@@ -849,14 +987,15 @@ impl Level {
                 (room.building_level.is_some(), room.limited_editing)
             };
             if building {
-                return Level::virt_placer(&self.log, &self.rooms, room).finalize_object_placement::<E, EC>(
-                    &self.log,
-                    &self.asset_manager,
-                    engine,
-                    entities,
-                    version,
-                    rotation
-                )
+                return Level::virt_placer(&self.log, &self.rooms, room)
+                    .finalize_object_placement::<E, EC>(
+                        &self.log,
+                        &self.asset_manager,
+                        engine,
+                        entities,
+                        version,
+                        rotation,
+                    );
             }
             limited
         };
@@ -866,14 +1005,8 @@ impl Level {
             room::LimitedRoom {
                 room_id: room,
                 level: self,
-            }.finalize_object_placement::<E, EC>(
-                &log,
-                &assets,
-                engine,
-                entities,
-                version,
-                rotation
-            )
+            }
+            .finalize_object_placement::<E, EC>(&log, &assets, engine, entities, version, rotation)
         } else {
             Err(ErrorKind::InvalidRoomState.into())
         }
@@ -883,11 +1016,13 @@ impl Level {
         log: &Logger,
         lvl: &mut L,
         objects: &mut [Option<(ObjectPlacement, ReverseObjectPlacement)>],
-        entities: &mut Container, room_id: RoomId,
+        entities: &mut Container,
+        room_id: RoomId,
         object_id: usize,
     ) -> UResult<ObjectPlacement>
-        where EC: EntityCreator,
-              L: placement::ObjectPlaceable
+    where
+        EC: EntityCreator,
+        L: placement::ObjectPlaceable,
     {
         if object_id >= objects.len() || objects[object_id].is_none() {
             bail!("Invalid object ID");
@@ -895,11 +1030,12 @@ impl Level {
         // Remove the objects after this one as they
         // may depend on it
         let mut replacement_list = Vec::with_capacity(objects.len() - (object_id + 1));
-        for obj in objects[object_id + 1 ..].iter_mut().rev() {
+        for obj in objects[object_id + 1..].iter_mut().rev() {
             let obj = obj.take();
             if let Some(obj) = obj {
                 replacement_list.push(Some(obj.0));
-                obj.1.apply::<_, EC>(log, lvl, entities)
+                obj.1
+                    .apply::<_, EC>(log, lvl, entities)
                     // Removing these objects shouldn't fail
                     .expect("Failed to remove object");
             } else {
@@ -909,10 +1045,9 @@ impl Level {
         replacement_list.reverse();
 
         // Remove the object that was requested
-        let obj = objects[object_id]
-            .take()
-            .expect("Object missing");
-        obj.1.apply::<_, EC>(log, lvl, entities)
+        let obj = objects[object_id].take().expect("Object missing");
+        obj.1
+            .apply::<_, EC>(log, lvl, entities)
             .expect("Failed to remove object");
         lvl.rebuild_placement_map();
 
@@ -941,7 +1076,8 @@ impl Level {
                 let obj = obj.take();
                 if let Some(obj) = obj {
                     unapplied.push(Some(obj.0));
-                    obj.1.apply::<_, EC>(log, lvl, entities)
+                    obj.1
+                        .apply::<_, EC>(log, lvl, entities)
                         // Removing these objects shouldn't fail
                         .expect("Failed to remove object");
                 } else {
@@ -952,7 +1088,8 @@ impl Level {
             unapplied.reverse();
             for (idx, obj) in unapplied.into_iter().enumerate() {
                 if let Some(obj) = obj {
-                    let rev = obj.apply::<_, EC>(log, lvl, entities, room_id, false)
+                    let rev = obj
+                        .apply::<_, EC>(log, lvl, entities, room_id, false)
                         .expect("Failed to replace object");
                     objects[object_id + idx] = Some((obj, rev));
                 }
@@ -964,14 +1101,21 @@ impl Level {
     }
 
     /// Removes the object with the given id from the room
-    pub fn remove_object<EC: EntityCreator>(&mut self, entities: &mut Container, room_id: RoomId, object_id: usize) -> UResult<ObjectPlacement> {
+    pub fn remove_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        room_id: RoomId,
+        object_id: usize,
+    ) -> UResult<ObjectPlacement> {
         use std::mem;
         let log = self.log.clone();
         let (mut objects, area) = {
             let (building, area, mut objects) = {
                 let mut rooms = self.rooms.borrow_mut();
                 let room = rooms.get_room_info_mut(room_id);
-                let objects = room.building_level.as_mut()
+                let objects = room
+                    .building_level
+                    .as_mut()
                     .map(|v| mem::replace(&mut v.objects, Vec::new()))
                     .unwrap_or_else(|| mem::replace(&mut room.objects, Vec::new()));
                 (room.building_level.is_some(), room.area, objects)
@@ -979,9 +1123,11 @@ impl Level {
             if building {
                 let ret = Self::try_remove_object::<_, EC>(
                     &log,
-                    &mut Level::virt_placer(&log, &self.rooms, room_id), &mut objects,
-                    entities, room_id,
-                    object_id
+                    &mut Level::virt_placer(&log, &self.rooms, room_id),
+                    &mut objects,
+                    entities,
+                    room_id,
+                    object_id,
                 );
                 let mut rooms = self.rooms.borrow_mut();
                 let room = rooms.get_room_info_mut(room_id);
@@ -1001,9 +1147,11 @@ impl Level {
             };
             Self::try_remove_object::<_, EC>(
                 &log,
-                &mut lvl, &mut objects,
-                entities, room_id,
-                object_id
+                &mut lvl,
+                &mut objects,
+                entities,
+                room_id,
+                object_id,
             )
         };
         {
@@ -1022,8 +1170,11 @@ impl Level {
 
     /// Replaces the object with the given id into the room
     pub fn replace_object<EC: EntityCreator>(
-            &mut self, entities: &mut Container, room_id: RoomId,
-            object_id: usize, obj: ObjectPlacement
+        &mut self,
+        entities: &mut Container,
+        room_id: RoomId,
+        object_id: usize,
+        obj: ObjectPlacement,
     ) {
         use std::mem;
         let (mut objects, area) = {
@@ -1042,7 +1193,10 @@ impl Level {
                 level: self,
                 room_id,
             };
-            let rev = assume!(lvl.level.log, obj.apply::<_, EC>(&log, &mut lvl, entities, room_id, false));
+            let rev = assume!(
+                lvl.level.log,
+                obj.apply::<_, EC>(&log, &mut lvl, entities, room_id, false)
+            );
             objects[object_id] = Some((obj, rev));
         }
 
@@ -1059,19 +1213,28 @@ impl Level {
     }
 
     /// Returns the objects in the room
-    pub fn get_room_objects(&self, room_id: RoomId) -> Ref<'_, [Option<(ObjectPlacement, ReverseObjectPlacement)>]> {
+    pub fn get_room_objects(
+        &self,
+        room_id: RoomId,
+    ) -> Ref<'_, [Option<(ObjectPlacement, ReverseObjectPlacement)>]> {
         let info = self.get_room_info(room_id);
-        Ref::map(info, |info| if let Some(lvl) = info.building_level.as_ref() {
-            lvl.objects.as_slice()
-        } else {
-            info.objects.as_slice()
+        Ref::map(info, |info| {
+            if let Some(lvl) = info.building_level.as_ref() {
+                lvl.objects.as_slice()
+            } else {
+                info.objects.as_slice()
+            }
         })
     }
 
     /// Returns whether the requested room can be placed at the passed location.
     fn can_place_room(&self, owner: PlayerId, room_key: ResourceKey<'_>, bound: Bound) -> bool {
         // Is the room in bounds?
-        if !(bound.min.x >= 0 && bound.min.y >= 0 && bound.max.x < self.width as i32 && bound.max.y < self.height as i32) {
+        if !(bound.min.x >= 0
+            && bound.min.y >= 0
+            && bound.max.x < self.width as i32
+            && bound.max.y < self.height as i32)
+        {
             debug!(self.log, "Room out of bounds"; "room" => ?room_key, "owner" => ?owner, "bounds" => ?bound, "level_size" => ?(self.width, self.height));
             return false;
         }
@@ -1091,14 +1254,26 @@ impl Level {
 
     /// Returns whether the area is large enough for the requested room
     pub fn check_room_size(&self, room_key: ResourceKey<'_>, bound: Bound) -> bool {
-        let room = assume!(self.log, self.asset_manager.loader_open::<room::Loader>(room_key));
+        let room = assume!(
+            self.log,
+            self.asset_manager.loader_open::<room::Loader>(room_key)
+        );
         // Is the room big enough?
         bound.width() >= room.min_size.0 && bound.height() >= room.min_size.1
     }
 
     /// Returns whether the tile is suitable for the room type
-    pub fn check_tile_placeable(&self, owner_id: PlayerId, room_key: ResourceKey<'_>, loc: Location) -> bool {
-        let room = assume!(self.log, self.asset_manager.loader_open::<room::Loader>(room_key.borrow()));
+    pub fn check_tile_placeable(
+        &self,
+        owner_id: PlayerId,
+        room_key: ResourceKey<'_>,
+        loc: Location,
+    ) -> bool {
+        let room = assume!(
+            self.log,
+            self.asset_manager
+                .loader_open::<room::Loader>(room_key.borrow())
+        );
         // Is the room in bounds?
         if !self.level_bounds.in_bounds(loc) {
             debug!(self.log, "Tile out of bounds"; "room" => ?room_key, "owner" => ?owner_id, "location" => ?loc);
@@ -1116,7 +1291,7 @@ impl Level {
             if let Some(owner) = tile.owner {
                 let owner = rooms.get_room_info(owner);
                 if owner.owner != owner_id {
-                debug!(self.log, "Tile not owned"; "room" => ?room_key, "owner" => ?owner_id, "location" => ?loc);
+                    debug!(self.log, "Tile not owned"; "room" => ?room_key, "owner" => ?owner_id, "location" => ?loc);
                     return false;
                 }
                 for dir in &ALL_DIRECTIONS {
@@ -1127,8 +1302,8 @@ impl Level {
                         }
                     }
                 }
-                for yy in 0 .. 4 {
-                    for xx in 0 .. 4 {
+                for yy in 0..4 {
+                    for xx in 0..4 {
                         if owner.is_placeable_scaled(loc.x * 4 + xx, loc.y * 4 + yy) {
                             debug!(self.log, "Tile has placement blocked"; "room" => ?room_key, "owner" => ?owner_id, "location" => ?loc);
                             return false;
@@ -1164,10 +1339,10 @@ impl Level {
 
     /// Places the room back into the building state
     pub fn undo_room_build<EC: EntityCreator, E: Invokable>(
-            &mut self,
-            engine: &E,
-            entities: &mut Container,
-            room_id: RoomId
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        room_id: RoomId,
     ) {
         use std::mem;
 
@@ -1198,7 +1373,11 @@ impl Level {
         };
         for obj in objects {
             if let Some(obj) = obj {
-                let rev = assume!(self.log, obj.0.apply::<_, EC>(&log, &mut virt, entities, room_id, false));
+                let rev = assume!(
+                    self.log,
+                    obj.0
+                        .apply::<_, EC>(&log, &mut virt, entities, room_id, false)
+                );
                 virt.objects.push(Some((obj.0, rev)));
             } else {
                 virt.objects.push(None);
@@ -1240,7 +1419,8 @@ impl Level {
         let mut virt = RoomVirtualLevel::new(
             &self.log,
             id,
-            fbound.min.x, fbound.min.y,
+            fbound.min.x,
+            fbound.min.y,
             fbound.width() as u32,
             fbound.height() as u32,
             bound,
@@ -1258,28 +1438,41 @@ impl Level {
         virt
     }
 
-    pub(crate) fn do_update_room<EC: EntityCreator, E: Invokable>(&self, engine: &E, entities: &mut Container, room_id: RoomId) {
-        let area = {
-            self.get_room_info(room_id).area
-        };
+    pub(crate) fn do_update_room<EC: EntityCreator, E: Invokable>(
+        &self,
+        engine: &E,
+        entities: &mut Container,
+        room_id: RoomId,
+    ) {
+        let area = { self.get_room_info(room_id).area };
         self.do_update_room_area::<EC, E>(engine, entities, Some(room_id), area);
     }
-    pub(crate) fn do_update_room_area<EC: EntityCreator, E: Invokable>(&self, engine: &E, entities: &mut Container, room_id: Option<RoomId>, area: Bound) {
+    pub(crate) fn do_update_room_area<EC: EntityCreator, E: Invokable>(
+        &self,
+        engine: &E,
+        entities: &mut Container,
+        room_id: Option<RoomId>,
+        area: Bound,
+    ) {
         // Run possible update scripts
         let mut near_rooms = FNVSet::default();
         room_id.map(|room_id| near_rooms.insert(room_id));
         {
             let tiles = self.tiles.borrow();
-            for x in -1 ..= area.width() {
-                tiles.get_room_owner(area.min + (x, -1))
+            for x in -1..=area.width() {
+                tiles
+                    .get_room_owner(area.min + (x, -1))
                     .map(|v| near_rooms.insert(v));
-                tiles.get_room_owner(area.min + (x, area.height()))
+                tiles
+                    .get_room_owner(area.min + (x, area.height()))
                     .map(|v| near_rooms.insert(v));
             }
-            for y in -1 ..= area.height() {
-                tiles.get_room_owner(area.min + (-1, y))
+            for y in -1..=area.height() {
+                tiles
+                    .get_room_owner(area.min + (-1, y))
                     .map(|v| near_rooms.insert(v));
-                tiles.get_room_owner(area.min + (area.width(), y))
+                tiles
+                    .get_room_owner(area.min + (area.width(), y))
                     .map(|v| near_rooms.insert(v));
             }
         }
@@ -1291,14 +1484,20 @@ impl Level {
                 room.needs_update = true;
             }
             RoomPlacement::do_update::<_, EC::ScriptTypes>(
-                &self.log, &self.asset_manager, engine,
+                &self.log,
+                &self.asset_manager,
+                engine,
                 entities,
-                &self.rooms, room_id,
+                &self.rooms,
+                room_id,
             );
             RoomPlacement::do_update_apply::<_, EC::ScriptTypes>(
-                &self.log, &self.asset_manager, engine,
+                &self.log,
+                &self.asset_manager,
+                engine,
                 entities,
-                &self.rooms, room_id,
+                &self.rooms,
+                room_id,
             );
         }
     }
@@ -1331,7 +1530,7 @@ impl Level {
 
     /// Creates a packet containing the initial state of the level
     pub fn create_initial_state(&self) -> (Vec<String>, packet::Raw) {
-        use delta_encode::bitio::{Writer, write_len_bits};
+        use delta_encode::bitio::{write_len_bits, Writer};
         use delta_encode::DeltaEncodable;
         use flate2::write::DeflateEncoder;
         use flate2::Compression;
@@ -1358,11 +1557,14 @@ impl Level {
 
             write_string_packed(&mut state, &mut strings, room.key.as_string());
 
-            let _ = state.write_unsigned(match room.state {
-                RoomState::Planning => 0,
-                RoomState::Building => 1,
-                RoomState::Done => 2,
-            }, 2);
+            let _ = state.write_unsigned(
+                match room.state {
+                    RoomState::Planning => 0,
+                    RoomState::Building => 1,
+                    RoomState::Done => 2,
+                },
+                2,
+            );
             let objects = if let Some(lvl) = room.building_level.as_ref() {
                 &lvl.objects
             } else {
@@ -1378,7 +1580,8 @@ impl Level {
                         position: obj.0.position,
                         rotation: obj.0.rotation,
                         version: obj.0.version,
-                    }.encode(None, &mut state);
+                    }
+                    .encode(None, &mut state);
                 }
             }
         }
@@ -1388,27 +1591,26 @@ impl Level {
             string_data[i] = s;
         }
 
-        let state = assume!(self.log, state.finish()
-            .and_then(|v| v.finish())
-        );
+        let state = assume!(self.log, state.finish().and_then(|v| v.finish()));
         (string_data, packet::Raw(state))
     }
 
     /// Loads the initial state of the level from the packet
     pub fn load_initial_state<EC, E>(
-            &mut self,
-            engine: &E,
-            entities: &mut Container,
-            strings: Vec<String>,
-            state: packet::Raw,
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        strings: Vec<String>,
+        state: packet::Raw,
     ) -> UResult<()>
-        where E: Invokable,
-              EC: EntityCreator
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
-        use std::io::Cursor;
-        use delta_encode::bitio::{Reader, read_len_bits};
+        use delta_encode::bitio::{read_len_bits, Reader};
         use delta_encode::DeltaEncodable;
         use flate2::read::DeflateDecoder;
+        use std::io::Cursor;
 
         let strings = strings;
         let mut state = Reader::new(DeflateDecoder::new(Cursor::new(state.0)));
@@ -1416,14 +1618,14 @@ impl Level {
 
         let mut objects = Vec::with_capacity(len);
 
-        for _ in 0 .. len {
+        for _ in 0..len {
             let id = RoomId(state.read_signed(16)? as i16);
             let owner = PlayerId(state.read_signed(16)? as i16);
             let area = Bound::decode(None, &mut state)?;
             let tile_update_state = if state.read_bool()? {
                 let len = read_len_bits(&mut state)?;
                 let mut data = Vec::with_capacity(len);
-                for _ in 0 .. len {
+                for _ in 0..len {
                     data.push(state.read_unsigned(8)? as u8);
                 }
                 Some(data)
@@ -1461,7 +1663,7 @@ impl Level {
             };
             let mut to_load = Vec::with_capacity(len);
             let len = read_len_bits(&mut state)?;
-            for _ in 0 .. len {
+            for _ in 0..len {
                 if state.read_bool()? {
                     let object: ObjectNetworkInfo = ObjectNetworkInfo::decode(None, &mut state)?;
                     to_load.push(Some(object));
@@ -1476,13 +1678,28 @@ impl Level {
             self.compute_path_data = false;
             for (obj_id, obj) in objects.into_iter().enumerate() {
                 if let Some(object) = obj {
-                    self.begin_object_placement::<_, EC>(id, engine, entities, object.key, Some(object.version))?;
-                    self.move_active_object::<_, EC>(
-                        id, engine, entities,
-                        (object.position.x, object.position.y),
-                        Some(object.version), object.rotation,
+                    self.begin_object_placement::<_, EC>(
+                        id,
+                        engine,
+                        entities,
+                        object.key,
+                        Some(object.version),
                     )?;
-                    self.finalize_object_placement::<_, EC>(id, engine, entities, Some(object.version), object.rotation)?;
+                    self.move_active_object::<_, EC>(
+                        id,
+                        engine,
+                        entities,
+                        (object.position.x, object.position.y),
+                        Some(object.version),
+                        object.rotation,
+                    )?;
+                    self.finalize_object_placement::<_, EC>(
+                        id,
+                        engine,
+                        entities,
+                        Some(object.version),
+                        object.rotation,
+                    )?;
                 } else {
                     needs_gaps.push(obj_id);
                 }
@@ -1502,7 +1719,8 @@ impl Level {
             };
             {
                 let room_info = {
-                    self.asset_manager.loader_open::<room::Loader>(self.get_room_info(id).key.borrow())?
+                    self.asset_manager
+                        .loader_open::<room::Loader>(self.get_room_info(id).key.borrow())?
                 };
                 let cost = room_info.cost_for_room(self, id);
                 let room: &mut RoomPlacement = &mut *self.get_room_info_mut(id);
@@ -1523,8 +1741,8 @@ impl Level {
         let max_y = ((area.max.y + 3) / 4) + 1;
         let w = (self.width as i32 + 3) / 4;
         let h = (self.height as i32 + 3) / 4;
-        for y in min_y .. max_y {
-            for x in min_x .. max_x {
+        for y in min_y..max_y {
+            for x in min_x..max_x {
                 if x >= 0 && y >= 0 && x < w && y < h {
                     self.recompute_path_section(x as usize, y as usize);
                 }
@@ -1633,8 +1851,8 @@ impl LevelAccess for LevelTiles {
         if self.level_bounds.in_bounds(loc) {
             self.tiles[Self::location_index(loc, self.width)] = tile;
 
-            for xx in -1 .. 2 {
-                for yy in -1 .. 2 {
+            for xx in -1..2 {
+                for yy in -1..2 {
                     self.flag_dirty(loc.x + xx, loc.y + yy);
                 }
             }
@@ -1647,14 +1865,14 @@ impl LevelAccess for LevelTiles {
             return id;
         }
         let id = self.window_type.len();
-        self.window_type_map.insert(key.borrow().into_owned(), id as u8);
+        self.window_type_map
+            .insert(key.borrow().into_owned(), id as u8);
         self.window_type.push(key.into_owned());
         id as u8
     }
 }
 
 impl LevelTiles {
-
     fn location_index(loc: Location, width: u32) -> usize {
         (loc.x + loc.y * (width as i32)) as usize
     }
@@ -1663,7 +1881,10 @@ impl LevelTiles {
     /// the location is out of bounds then it is ignored.
     pub fn set_tile(&mut self, loc: Location, tile: ResourceKey<'_>) {
         if self.level_bounds.in_bounds(loc) {
-            let t = if let Ok(t) = self.asset_manager.loader_open::<tile::Loader>(tile.borrow()) {
+            let t = if let Ok(t) = self
+                .asset_manager
+                .loader_open::<tile::Loader>(tile.borrow())
+            {
                 t
             } else {
                 panic!("Tried to set an invalid tile: {:?}", tile);
@@ -1674,8 +1895,8 @@ impl LevelTiles {
                 td.flags = TileFlag::empty();
             }
             self.tile_map.insert(t.id, t);
-            for xx in -1 .. 2 {
-                for yy in -1 .. 2 {
+            for xx in -1..2 {
+                for yy in -1..2 {
                     self.flag_dirty(loc.x + xx, loc.y + yy);
                 }
             }
@@ -1742,8 +1963,8 @@ impl LevelTiles {
     pub fn set_tile_flags(&mut self, loc: Location, flags: TileFlag) {
         if self.level_bounds.in_bounds(loc) {
             self.tiles[Self::location_index(loc, self.width)].flags = flags;
-            for xx in -1 .. 2 {
-                for yy in -1 .. 2 {
+            for xx in -1..2 {
+                for yy in -1..2 {
                     self.flag_dirty(loc.x + xx, loc.y + yy);
                 }
             }
@@ -1764,7 +1985,9 @@ impl LevelTiles {
         special_bounds.min -= (1, 1);
         if special_bounds.in_bounds(loc) {
             let idx = (loc.x + 1) + (loc.y + 1) * (self.width + 1) as i32;
-            self.walls.get(idx as usize).and_then(|v| v.data[dir.as_usize() >> 1])
+            self.walls
+                .get(idx as usize)
+                .and_then(|v| v.data[dir.as_usize() >> 1])
         } else {
             None
         }
@@ -1804,13 +2027,21 @@ impl LevelTiles {
                 let was_wall = self.get_wall_info(loc, *dir).is_some();
                 let is_wall = {
                     self.get_tile(loc).should_place_wall(self, loc, *dir)
-                        || self.get_tile(loc.shift(*dir)).should_place_wall(self, loc.shift(*dir), dir.reverse())
+                        || self.get_tile(loc.shift(*dir)).should_place_wall(
+                            self,
+                            loc.shift(*dir),
+                            dir.reverse(),
+                        )
                 };
                 if was_wall != is_wall {
                     if is_wall {
-                        self.set_wall_info(loc, *dir, Some(WallInfo {
-                            flag: TileWallFlag::None,
-                        }));
+                        self.set_wall_info(
+                            loc,
+                            *dir,
+                            Some(WallInfo {
+                                flag: TileWallFlag::None,
+                            }),
+                        );
                     } else {
                         self.set_wall_info(loc, *dir, None);
                     }
@@ -1864,14 +2095,15 @@ impl script::LuaTracked for LevelRooms {
 
 impl LevelRooms {
     /// Iterates over rooms in placement order
-    pub fn iter_rooms<'a>(&'a self) -> impl Iterator<Item=(RoomId, &RoomPlacement)> + 'a {
-        self.room_order.iter()
+    pub fn iter_rooms<'a>(&'a self) -> impl Iterator<Item = (RoomId, &RoomPlacement)> + 'a {
+        self.room_order
+            .iter()
             .cloned()
             .flat_map(move |v| self.rooms.get(v).map(|r| (v, r)))
     }
 
     /// Returns a collection of room ids
-    pub fn room_ids(&self) -> impl Iterator<Item=RoomId> + '_ {
+    pub fn room_ids(&self) -> impl Iterator<Item = RoomId> + '_ {
         self.rooms.keys()
     }
 
@@ -1904,21 +2136,30 @@ impl LevelRooms {
     }
 }
 
-fn write_string_packed<W, S>(state: &mut bitio::Writer<W>, strings: &mut FNVMap<String, usize>, string: S)
-    where W: ::std::io::Write,
-          S: Into<String>,
+fn write_string_packed<W, S>(
+    state: &mut bitio::Writer<W>,
+    strings: &mut FNVMap<String, usize>,
+    string: S,
+) where
+    W: ::std::io::Write,
+    S: Into<String>,
 {
     let len = strings.len();
     let id = *strings.entry(string.into()).or_insert(len);
     let _ = state.write_unsigned(id as u64, 16);
 }
 
-fn read_string_packed<'a, R>(state: &mut bitio::Reader<R>, strings: &'a [String]) -> ::std::io::Result<&'a str>
-    where R: ::std::io::Read
+fn read_string_packed<'a, R>(
+    state: &mut bitio::Reader<R>,
+    strings: &'a [String],
+) -> ::std::io::Result<&'a str>
+where
+    R: ::std::io::Read,
 {
     use std::io;
     let id = state.read_unsigned(16)? as usize;
-    strings.get(id)
+    strings
+        .get(id)
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid string"))
         .map(|v| v.as_str())
 }
@@ -1960,13 +2201,19 @@ impl Check {
         }
         let check = match val.chars().next() {
             Some('.') => Check::Property(x, y, val[1..].into()),
-            Some('@') => Check::Owner(x, y, match &val[1..] {
-                "room" => OwnerType::Room,
-                _ => panic!("Invalid owner type"),
-            }),
-            _ => Check::Name(x, y, LazyResourceKey::parse(val)
-                    .or_module(module)
-                    .into_owned()),
+            Some('@') => Check::Owner(
+                x,
+                y,
+                match &val[1..] {
+                    "room" => OwnerType::Room,
+                    _ => panic!("Invalid owner type"),
+                },
+            ),
+            _ => Check::Name(
+                x,
+                y,
+                LazyResourceKey::parse(val).or_module(module).into_owned(),
+            ),
         };
         if inv {
             Check::Not(Box::new(check))
@@ -1989,43 +2236,46 @@ impl Check {
                 let o = level.get_tile(loc.offset(ox + dx, oy + dy));
                 o.properties.contains(prop)
             }
-            Check::Not(ref sub) => {
-                !sub.test(level, loc, dx, dy)
-            }
-            Check::Owner(ox, oy, owner_type) => {
-                match owner_type {
-                    OwnerType::Room => {
-                        let self_owner = level.get_room_owner(loc);
-                        let other_owner = level.get_room_owner(loc.offset(ox + dx, oy + dy));
-                        self_owner == other_owner
-                    }
+            Check::Not(ref sub) => !sub.test(level, loc, dx, dy),
+            Check::Owner(ox, oy, owner_type) => match owner_type {
+                OwnerType::Room => {
+                    let self_owner = level.get_room_owner(loc);
+                    let other_owner = level.get_room_owner(loc.offset(ox + dx, oy + dy));
+                    self_owner == other_owner
                 }
-            }
+            },
         }
     }
 }
 
-
 pub(crate) fn edge_to_id(x: usize, y: usize) -> Option<usize> {
     match (x, y) {
-        (0, y @ 0 ..= 14) => Some(y),
-        (x @ 0 ..= 14, 15) => Some(15 + x),
-        (15, y @ 0 ..= 15) => Some(45 - y),
-        (x @ 0 ..= 15, 0) => Some(60 - x),
-        _ => None
+        (0, y @ 0..=14) => Some(y),
+        (x @ 0..=14, 15) => Some(15 + x),
+        (15, y @ 0..=15) => Some(45 - y),
+        (x @ 0..=15, 0) => Some(60 - x),
+        _ => None,
     }
 }
 pub(crate) fn id_to_edge(id: usize) -> (usize, usize) {
     match id {
-        id @ 0 ..= 14 => (0, id),
-        id @ 15 ..= 29 => (id - 15, 15),
-        id @ 30 ..= 45 => (15, 15 - (id - 30)),
-        id @ 46 ..= 60 => (15 - (id - 45), 0),
+        id @ 0..=14 => (0, id),
+        id @ 15..=29 => (id - 15, 15),
+        id @ 30..=45 => (15, 15 - (id - 30)),
+        id @ 46..=60 => (15 - (id - 45), 0),
         _ => unreachable!(),
     }
 }
 
-pub(crate) fn flood_fill(visited: &mut BitSet, tiles: &LevelTiles, rooms: &LevelRooms, x: usize, y: usize, sx: usize, sy: usize) -> u64 {
+pub(crate) fn flood_fill(
+    visited: &mut BitSet,
+    tiles: &LevelTiles,
+    rooms: &LevelRooms,
+    x: usize,
+    y: usize,
+    sx: usize,
+    sy: usize,
+) -> u64 {
     use std::cmp::min as cmin;
 
     let mut queue = Vec::with_capacity(32 * 4);
@@ -2036,17 +2286,14 @@ pub(crate) fn flood_fill(visited: &mut BitSet, tiles: &LevelTiles, rooms: &Level
     let min = (sx as i32 * 16, sy as i32 * 16);
     let max = (
         cmin(min.0 + 15, tiles.width as i32 * 4),
-        cmin(min.1 + 15, tiles.height as i32 * 4)
+        cmin(min.1 + 15, tiles.height as i32 * 4),
     );
 
     while let Some((x, y)) = queue.pop() {
         let cx = x & 0xF;
         let cy = y & 0xF;
         let idx = (cx + cy * 16) as usize;
-        if x < min.0 || x > max.0
-            || y < min.1 || y > max.1
-            || visited.get(idx)
-        {
+        if x < min.0 || x > max.0 || y < min.1 || y > max.1 || visited.get(idx) {
             continue;
         }
 
@@ -2062,12 +2309,11 @@ pub(crate) fn flood_fill(visited: &mut BitSet, tiles: &LevelTiles, rooms: &Level
 
         for d in &ALL_DIRECTIONS {
             let (ox, oy) = d.offset();
-            let idx = (
-                ((x + ox)&0xF)
-                + ((y + oy)&0xF) * 16
-            ) as usize;
-            if x + ox >= min.0 && x + ox <= max.0
-                && y + oy >= min.1 && y + oy <= max.1
+            let idx = (((x + ox) & 0xF) + ((y + oy) & 0xF) * 16) as usize;
+            if x + ox >= min.0
+                && x + ox <= max.0
+                && y + oy >= min.1
+                && y + oy <= max.1
                 && !visited.get(idx)
             {
                 queue.push((x + ox, y + oy));
@@ -2095,31 +2341,35 @@ pub fn can_visit(tiles: &LevelTiles, rooms: &LevelRooms, x: usize, y: usize) -> 
     }
 
     fn map(v: Option<WallInfo>) -> Option<TileWallFlag> {
-        v.map(|v| v.flag).and_then(|v| if let TileWallFlag::Door = v { None } else { Some(v) })
+        v.map(|v| v.flag).and_then(|v| {
+            if let TileWallFlag::Door = v {
+                None
+            } else {
+                Some(v)
+            }
+        })
     }
 
     let flag = match cx & 0b11 {
         0 => map(tiles.get_wall_info(loc, Direction::East)),
         3 => map(tiles.get_wall_info(loc, Direction::West)),
         _ => None,
-    }.or_else(|| {
-        match cy & 0b11 {
-            0 => map(tiles.get_wall_info(loc, Direction::North)),
-            3 => map(tiles.get_wall_info(loc, Direction::South)),
-            _ => None,
-        }
-    }).or_else(|| {
-        match (cx & 0b11, cy & 0b11) {
-            (0, 0) => map(tiles.get_wall_info(loc.shift(Direction::North), Direction::East))
-                .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::East), Direction::North))),
-            (3, 0) => map(tiles.get_wall_info(loc.shift(Direction::North), Direction::West))
-                .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::West), Direction::North))),
-            (0, 3) => map(tiles.get_wall_info(loc.shift(Direction::South), Direction::East))
-                .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::East), Direction::South))),
-            (3, 3) => map(tiles.get_wall_info(loc.shift(Direction::South), Direction::West))
-                .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::West), Direction::South))),
-            _ => None,
-        }
+    }
+    .or_else(|| match cy & 0b11 {
+        0 => map(tiles.get_wall_info(loc, Direction::North)),
+        3 => map(tiles.get_wall_info(loc, Direction::South)),
+        _ => None,
+    })
+    .or_else(|| match (cx & 0b11, cy & 0b11) {
+        (0, 0) => map(tiles.get_wall_info(loc.shift(Direction::North), Direction::East))
+            .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::East), Direction::North))),
+        (3, 0) => map(tiles.get_wall_info(loc.shift(Direction::North), Direction::West))
+            .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::West), Direction::North))),
+        (0, 3) => map(tiles.get_wall_info(loc.shift(Direction::South), Direction::East))
+            .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::East), Direction::South))),
+        (3, 3) => map(tiles.get_wall_info(loc.shift(Direction::South), Direction::West))
+            .or_else(|| map(tiles.get_wall_info(loc.shift(Direction::West), Direction::South))),
+        _ => None,
     });
     flag.is_none()
 }

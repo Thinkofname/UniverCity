@@ -4,10 +4,7 @@ mod requests;
 pub use self::requests::*;
 mod handle;
 pub(crate) use self::handle::*;
-pub use self::handle::{
-    PlayerConfig,
-    PlayerKey,
-};
+pub use self::handle::{PlayerConfig, PlayerKey};
 
 use crate::ecs;
 use crate::level::room;
@@ -20,11 +17,10 @@ pub struct Id(pub i16);
 /// An instance of the player either local or
 /// remote
 pub trait Player {
-
     /// The type used to create entities
     type EntityCreator: crate::entity::EntityCreator;
     /// The type used to load entity descriptions
-    type EntityInfo: crate::entity::ComponentCreator<Creator=Self::EntityCreator>;
+    type EntityInfo: crate::entity::ComponentCreator<Creator = Self::EntityCreator>;
 
     /// Returns the player's unique id
     fn get_uid(&self) -> Id;
@@ -74,7 +70,7 @@ pub enum State {
         /// server and the sender.
         #[delta_default]
         entity: Option<ecs::Entity>,
-    }
+    },
 }
 
 impl State {
@@ -86,4 +82,3 @@ impl State {
         }
     }
 }
-

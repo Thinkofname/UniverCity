@@ -1,4 +1,3 @@
-
 /// A direction along one of the 2 axis (x, z)
 #[derive(Clone, Copy, PartialEq, Eq, Debug, DeltaEncode)]
 pub enum Direction {
@@ -9,7 +8,7 @@ pub enum Direction {
     /// Negative along the x axis
     East,
     /// Positive along the x axis
-    West
+    West,
 }
 
 /// All possible directions

@@ -1,11 +1,7 @@
 use super::*;
 
 #[derive(Clone, Copy)]
-pub(super) struct Instruction(
-    pub(super) u8,
-    pub(super) u8,
-    pub(super) u16
-);
+pub(super) struct Instruction(pub(super) u8, pub(super) u8, pub(super) u16);
 
 impl Instruction {
     #[inline]

@@ -4,11 +4,11 @@ use std::rc::Rc;
 
 use crate::server;
 
+use crate::instance;
 use crate::prelude::*;
-use crate::{GameState, GameInstance};
 use crate::state;
 use crate::ui;
-use crate::instance;
+use crate::{GameInstance, GameState};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ConfirmResponse {
@@ -41,11 +41,11 @@ impl Default for ConfirmConfig {
     }
 }
 
-impl <F> Confirm<F>
-    where F: Fn(ConfirmResponse) + 'static
+impl<F> Confirm<F>
+where
+    F: Fn(ConfirmResponse) + 'static,
 {
-    pub(crate) fn new(config: ConfirmConfig, reply: F) -> Confirm<F>
-    {
+    pub(crate) fn new(config: ConfirmConfig, reply: F) -> Confirm<F> {
         Confirm {
             ui: None,
             config,
@@ -54,8 +54,9 @@ impl <F> Confirm<F>
     }
 }
 
-impl <F> state::State for Confirm<F>
-    where F: Fn(ConfirmResponse) + 'static
+impl<F> state::State for Confirm<F>
+where
+    F: Fn(ConfirmResponse) + 'static,
 {
     fn copy(&self) -> Box<dyn state::State> {
         Box::new(Confirm {
@@ -65,10 +66,18 @@ impl <F> state::State for Confirm<F>
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "prompt/confirm"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "prompt/confirm"));
 
         if let Some(title) = query!(node, title > @text).next() {
             title.set_text(self.config.title.as_str());
@@ -94,17 +103,28 @@ impl <F> state::State for Confirm<F>
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<instance::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-            (self.reply)(ConfirmResponse::Accept);
-        });
-        evt.handle_event_if::<instance::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-            (self.reply)(ConfirmResponse::Cancel);
-        });
+        evt.handle_event_if::<instance::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Pop;
+                (self.reply)(ConfirmResponse::Accept);
+            },
+        );
+        evt.handle_event_if::<instance::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Pop;
+                (self.reply)(ConfirmResponse::Cancel);
+            },
+        );
         action
     }
 }

@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// A group that can be iterated over in parallel
@@ -10,8 +9,9 @@ pub struct Group<'a, F: FetchableComponent<'a> + 'a> {
     pub(crate) offset: usize,
 }
 
-impl <'a, F> Iterator for Group<'a, F>
-    where F: FetchableComponent<'a>
+impl<'a, F> Iterator for Group<'a, F>
+where
+    F: FetchableComponent<'a>,
 {
     type Item = (Entity, F::Component);
 
@@ -26,9 +26,7 @@ impl <'a, F> Iterator for Group<'a, F>
                     id,
                     generation: entities.generations[id as usize],
                 };
-                let components = unsafe {
-                    self.components.fetch_component(id)
-                };
+                let components = unsafe { self.components.fetch_component(id) };
                 return Some((entity, components));
             } else {
                 self.offset += 1;

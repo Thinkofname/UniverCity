@@ -54,36 +54,40 @@ pub trait Capturable {
 }
 
 macro_rules! handle_state_func {
-    ($me:ident, $func:expr) => (
+    ($me:ident, $func:expr) => {
         match { $func } {
             Some((idx, Action::Switch(new))) => {
                 let cur_ty = $me.states[idx].2.state_type_id();
-                if cur_ty != new.state_type_id() && StateManager::is_state_active_of(&$me.states, &*new) {
+                if cur_ty != new.state_type_id()
+                    && StateManager::is_state_active_of(&$me.states, &*new)
+                {
                     // Can't have two of the same state active at once (currently)
                     $me.removed_states.push($me.states.remove(idx));
                 } else {
                     let old = mem::replace(&mut $me.states[idx], (false, false, new));
                     $me.removed_states.push(old);
                 }
-            },
+            }
             Some((idx, Action::Push(new))) => {
-                if new.can_have_duplicates() || !StateManager::is_state_active_of(&$me.states, &*new) {
+                if new.can_have_duplicates()
+                    || !StateManager::is_state_active_of(&$me.states, &*new)
+                {
                     $me.states.insert(idx + 1, (false, false, new));
                 }
-            },
+            }
             Some((idx, Action::Toggle(new))) => {
                 if let Some(pos) = StateManager::is_state_active_of_at(&$me.states, &*new) {
                     $me.removed_states.push($me.states.remove(pos));
                 } else {
                     $me.states.insert(idx + 1, (false, false, new));
                 }
-            },
+            }
             Some((idx, Action::Pop)) => {
                 $me.removed_states.push($me.states.remove(idx));
-            },
-            _ => {},
+            }
+            _ => {}
         }
-    )
+    };
 }
 
 impl Capturable for StateManager {
@@ -97,31 +101,38 @@ impl StateManager {
     /// passed state
     pub fn new<S: State + 'static>(state: S) -> StateManager {
         StateManager {
-            states: vec![
-                (false, false, Box::new(state)),
-            ],
+            states: vec![(false, false, Box::new(state))],
             removed_states: vec![],
             next_cap_id: 0,
             captures: FNVMap::default(),
         }
     }
 
-    fn update_states(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState) {
+    fn update_states(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        game_state: &mut crate::GameState,
+    ) {
         let mut changed = true;
         while changed {
-            let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+            let mut req = CaptureRequester {
+                next_cap_id: self.next_cap_id,
+            };
             for mut state in self.removed_states.drain(..) {
                 if state.1 {
-                    state.2.inactive_req(&mut req,instance, game_state);
+                    state.2.inactive_req(&mut req, instance, game_state);
                 }
                 if state.0 {
-                    state.2.removed_req(&mut req,instance, game_state);
+                    state.2.removed_req(&mut req, instance, game_state);
                 }
             }
             // Mark previous states as inactive
-            for state in self.states.iter_mut().rev()
-                    .skip_while(|v| !v.2.takes_focus())
-                    .skip(1)
+            for state in self
+                .states
+                .iter_mut()
+                .rev()
+                .skip_while(|v| !v.2.takes_focus())
+                .skip(1)
             {
                 if state.1 {
                     state.2.inactive(instance, game_state);
@@ -130,7 +141,10 @@ impl StateManager {
             }
             // Mark the current states as active
             let mut action: Option<(usize, Action)> = None;
-            let first_active = self.states.iter().enumerate()
+            let first_active = self
+                .states
+                .iter()
+                .enumerate()
                 .rev()
                 .find(|v| (v.1).2.takes_focus())
                 .map_or(0, |v| v.0);
@@ -139,7 +153,7 @@ impl StateManager {
                     state.0 = true;
                     let act = state.2.added_req(&mut req, instance, game_state);
                     match act {
-                        Action::Nothing => {},
+                        Action::Nothing => {}
                         act => action = Some((idx, act)),
                     }
                 }
@@ -147,7 +161,7 @@ impl StateManager {
                     state.1 = true;
                     let act = state.2.active_req(&mut req, instance, game_state);
                     match act {
-                        Action::Nothing => {},
+                        Action::Nothing => {}
                         act => action = Some((idx, act)),
                     }
                 }
@@ -165,26 +179,36 @@ impl StateManager {
     /// If the capture is uncollected this collects the capture otherwise it returns itself
     pub fn collect_capture(&mut self, possible: &mut PossibleCapture) {
         match *possible {
-            PossibleCapture::Uncollected(id) => *possible = PossibleCapture::Captured(self.captures.remove(&id).expect("Repeated capture collection")),
-            PossibleCapture::Captured(_) => {},
+            PossibleCapture::Uncollected(id) => {
+                *possible = PossibleCapture::Captured(
+                    self.captures
+                        .remove(&id)
+                        .expect("Repeated capture collection"),
+                )
+            }
+            PossibleCapture::Captured(_) => {}
         }
     }
 
     /// Drops a capture if it hasn't been colllected
     pub fn drop_capture(&mut self, possible: PossibleCapture) {
         match possible {
-            PossibleCapture::Uncollected(id) => {self.captures.remove(&id);},
-            PossibleCapture::Captured(_) => {},
+            PossibleCapture::Uncollected(id) => {
+                self.captures.remove(&id);
+            }
+            PossibleCapture::Captured(_) => {}
         }
     }
 
     /// Returns a snapshot of the current state
     pub fn capture(&self) -> CapturedState {
         CapturedState {
-            states: self.states.iter()
+            states: self
+                .states
+                .iter()
                 .skip(1)
                 .map(|&(add, _, ref state)| (add, false, state.copy()))
-                .collect()
+                .collect(),
         }
     }
 
@@ -204,10 +228,15 @@ impl StateManager {
     pub fn tick(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState) {
         self.update_states(instance, game_state);
 
-        let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+        let mut req = CaptureRequester {
+            next_cap_id: self.next_cap_id,
+        };
 
         let mut action: Option<(usize, Action)> = None;
-        let first_active = self.states.iter().enumerate()
+        let first_active = self
+            .states
+            .iter()
+            .enumerate()
             .rev()
             .find(|v| (v.1).2.takes_focus())
             .map_or(0, |v| v.0);
@@ -232,18 +261,31 @@ impl StateManager {
     /// Calls the mouse move event on the active state
     ///
     /// Special due to the event spam it would cause
-    pub fn mouse_move(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState, mouse_pos: (i32, i32)) {
+    pub fn mouse_move(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        game_state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) {
         self.update_states(instance, game_state);
 
-        let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+        let mut req = CaptureRequester {
+            next_cap_id: self.next_cap_id,
+        };
 
         let mut action: Option<(usize, Action)> = None;
-        let first_active = self.states.iter().enumerate()
+        let first_active = self
+            .states
+            .iter()
+            .enumerate()
             .rev()
             .find(|v| (v.1).2.takes_focus())
             .map_or(0, |v| v.0);
         for (idx, state) in self.states.iter_mut().enumerate().skip(first_active).rev() {
-            match state.2.mouse_move_req(&mut req, instance, game_state, mouse_pos) {
+            match state
+                .2
+                .mouse_move_req(&mut req, instance, game_state, mouse_pos)
+            {
                 Action::Nothing => continue,
                 act => {
                     action = Some((idx, act));
@@ -266,18 +308,31 @@ impl StateManager {
     /// allow states to release control where possible
     ///
     /// Special due to the event spam it would cause
-    pub fn mouse_move_ui(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState, mouse_pos: (i32, i32)) {
+    pub fn mouse_move_ui(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        game_state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) {
         self.update_states(instance, game_state);
 
-        let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+        let mut req = CaptureRequester {
+            next_cap_id: self.next_cap_id,
+        };
 
         let mut action: Option<(usize, Action)> = None;
-        let first_active = self.states.iter().enumerate()
+        let first_active = self
+            .states
+            .iter()
+            .enumerate()
             .rev()
             .find(|v| (v.1).2.takes_focus())
             .map_or(0, |v| v.0);
         for (idx, state) in self.states.iter_mut().enumerate().skip(first_active).rev() {
-            match state.2.mouse_move_ui_req(&mut req, instance, game_state, mouse_pos) {
+            match state
+                .2
+                .mouse_move_ui_req(&mut req, instance, game_state, mouse_pos)
+            {
                 Action::Nothing => continue,
                 act => {
                     action = Some((idx, act));
@@ -295,18 +350,32 @@ impl StateManager {
     }
 
     /// Calls the key action event on the active state
-    pub fn key_action(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState, key_action: keybinds::KeyAction, mouse_pos: (i32, i32)) {
+    pub fn key_action(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        game_state: &mut crate::GameState,
+        key_action: keybinds::KeyAction,
+        mouse_pos: (i32, i32),
+    ) {
         self.update_states(instance, game_state);
 
-        let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+        let mut req = CaptureRequester {
+            next_cap_id: self.next_cap_id,
+        };
 
         let mut action: Option<(usize, Action)> = None;
-        let first_active = self.states.iter().enumerate()
+        let first_active = self
+            .states
+            .iter()
+            .enumerate()
             .rev()
             .find(|v| (v.1).2.takes_focus())
             .map_or(0, |v| v.0);
         for (idx, state) in self.states.iter_mut().enumerate().skip(first_active).rev() {
-            match state.2.key_action_req(&mut req, instance, game_state, key_action, mouse_pos) {
+            match state
+                .2
+                .key_action_req(&mut req, instance, game_state, key_action, mouse_pos)
+            {
                 Action::Nothing => continue,
                 act => {
                     action = Some((idx, act));
@@ -324,13 +393,23 @@ impl StateManager {
     }
 
     /// Calls the ui event on the active state
-    pub fn ui_event(&mut self, instance: &mut Option<GameInstance>, game_state: &mut crate::GameState, evt: &mut event::EventHandler) {
+    pub fn ui_event(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        game_state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) {
         self.update_states(instance, game_state);
 
-        let mut req = CaptureRequester { next_cap_id: self.next_cap_id };
+        let mut req = CaptureRequester {
+            next_cap_id: self.next_cap_id,
+        };
 
         let mut action: Option<(usize, Action)> = None;
-        let first_active = self.states.iter().enumerate()
+        let first_active = self
+            .states
+            .iter()
+            .enumerate()
             .rev()
             .find(|v| (v.1).2.takes_focus())
             .map_or(0, |v| v.0);
@@ -376,17 +455,29 @@ impl StateManager {
     /// active
     pub fn is_state_active<S: State + 'static>(&self) -> bool {
         let ty = any::TypeId::of::<S>();
-        self.states.iter().filter(|v| v.1).any(|v| v.2.state_type_id() == ty)
+        self.states
+            .iter()
+            .filter(|v| v.1)
+            .any(|v| v.2.state_type_id() == ty)
     }
 
     fn is_state_active_of(states: &[(bool, bool, Box<dyn State>)], s: &dyn State) -> bool {
         let ty = s.state_type_id();
-        states.iter().filter(|v| v.1).any(|v| v.2.state_type_id() == ty)
+        states
+            .iter()
+            .filter(|v| v.1)
+            .any(|v| v.2.state_type_id() == ty)
     }
 
-    fn is_state_active_of_at(states: &[(bool, bool, Box<dyn State>)], s: &dyn State) -> Option<usize> {
+    fn is_state_active_of_at(
+        states: &[(bool, bool, Box<dyn State>)],
+        s: &dyn State,
+    ) -> Option<usize> {
         let ty = s.state_type_id();
-        states.iter().filter(|v| v.1).position(|v| v.2.state_type_id() == ty)
+        states
+            .iter()
+            .filter(|v| v.1)
+            .position(|v| v.2.state_type_id() == ty)
     }
 
     /// Returns whether the state list is empty or not
@@ -427,18 +518,35 @@ pub trait State: any::Any {
     /// Crates a copy of the state in its current form
     fn copy(&self) -> Box<dyn State>;
     /// Returns the state as an `Any` type
-    fn state_type_id(&self) -> any::TypeId { any::TypeId::of::<Self>() }
+    fn state_type_id(&self) -> any::TypeId {
+        any::TypeId::of::<Self>()
+    }
     /// Returns whether this state takes full focus from
     /// states below it or not.
-    fn takes_focus(&self) -> bool { false }
+    fn takes_focus(&self) -> bool {
+        false
+    }
     /// Whether the state can handle be open multiple times
-    fn can_have_duplicates(&self) -> bool { false }
+    fn can_have_duplicates(&self) -> bool {
+        false
+    }
 
     /// Called once when initially added.
     ///
     /// Called at most once.
-    fn added(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState) -> Action { Action::Nothing }
-    fn added_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> Action {
+    fn added(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+    ) -> Action {
+        Action::Nothing
+    }
+    fn added_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> Action {
         self.added(instance, state)
     }
 
@@ -447,7 +555,12 @@ pub trait State: any::Any {
     ///
     /// Called at most once after `added` is called.
     fn removed(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState) {}
-    fn removed_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) {
+    fn removed_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) {
         self.removed(instance, state);
     }
     /// Called when the state becomes active.
@@ -455,8 +568,19 @@ pub trait State: any::Any {
     /// May be called multiple times but will always have
     /// `inactive` called once between calls (excluding the first
     /// time)
-    fn active(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState) -> Action { Action::Nothing }
-    fn active_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> Action {
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+    ) -> Action {
+        Action::Nothing
+    }
+    fn active_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> Action {
         self.active(instance, state)
     }
     /// Called when the state stops being active.
@@ -467,13 +591,29 @@ pub trait State: any::Any {
     /// Will be called before remove if the state was active
     /// upon removal.
     fn inactive(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState) {}
-    fn inactive_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) {
+    fn inactive_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) {
         self.inactive(instance, state);
     }
 
     /// Called once a frame whilst the state is active
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState) -> Action { Action::Nothing }
-    fn tick_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+    ) -> Action {
+        Action::Nothing
+    }
+    fn tick_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> Action {
         self.tick(instance, state)
     }
 
@@ -482,10 +622,21 @@ pub trait State: any::Any {
     /// Called when the mouse moves whilst the state is active
     ///
     /// Special due to the event spam it would cause
-    fn mouse_move(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, _mouse_pos: (i32, i32)) -> Action {
+    fn mouse_move(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        _mouse_pos: (i32, i32),
+    ) -> Action {
         Action::Nothing
     }
-    fn mouse_move_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, mouse_pos: (i32, i32)) -> Action {
+    fn mouse_move_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) -> Action {
         self.mouse_move(instance, state, mouse_pos)
     }
 
@@ -495,30 +646,61 @@ pub trait State: any::Any {
     /// allow states to release control where possible
     ///
     /// Special due to the event spam it would cause
-    fn mouse_move_ui(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, _mouse_pos: (i32, i32)) -> Action {
+    fn mouse_move_ui(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        _mouse_pos: (i32, i32),
+    ) -> Action {
         Action::Nothing
     }
-    fn mouse_move_ui_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, mouse_pos: (i32, i32)) -> Action {
+    fn mouse_move_ui_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) -> Action {
         self.mouse_move_ui(instance, state, mouse_pos)
     }
 
     /// Called whenever a key action is fired whilst the state is active
-    fn key_action(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, _action: keybinds::KeyAction, _mouse_pos: (i32, i32)) -> Action {
+    fn key_action(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        _action: keybinds::KeyAction,
+        _mouse_pos: (i32, i32),
+    ) -> Action {
         Action::Nothing
     }
     fn key_action_req(
-        &mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>,
-        state: &mut crate::GameState, action: keybinds::KeyAction, mouse_pos: (i32, i32)
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        mouse_pos: (i32, i32),
     ) -> Action {
         self.key_action(instance, state, action, mouse_pos)
     }
 
     /// Called whenever a ui event is fired whilst the state is active
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, _evt: &mut event::EventHandler) -> Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        _evt: &mut event::EventHandler,
+    ) -> Action {
         Action::Nothing
     }
-    fn ui_event_req(&mut self, _req: &mut CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> Action {
+    fn ui_event_req(
+        &mut self,
+        _req: &mut CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> Action {
         self.ui_event(instance, state, evt)
     }
 }
-

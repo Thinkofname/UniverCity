@@ -1,11 +1,11 @@
 //! Game instance management
 
-use std::thread;
-use std::sync::mpsc;
 use crate::util::FNVMap;
-use std::time;
 #[cfg(feature = "steam")]
 use server::steamworks;
+use std::sync::mpsc;
+use std::thread;
+use std::time;
 
 // States
 mod base;
@@ -13,24 +13,24 @@ pub use self::base::BaseState;
 mod build;
 pub(crate) mod scripting;
 
-use crate::state;
-use crate::ui;
-use crate::keybinds;
-use crate::script;
+use crate::ecs;
 use crate::entity;
 use crate::errors;
-use crate::ecs;
-use crate::server;
+use crate::keybinds;
 use crate::prelude::*;
+use crate::script;
+use crate::server;
+use crate::server::entity::snapshot;
+use crate::server::event;
+use crate::server::level;
+use crate::server::lua;
+use crate::server::lua::{Ref, Table};
 use crate::server::network::{self, packet};
 use crate::server::player::State;
-use crate::server::event;
-use crate::server::entity::snapshot;
-use crate::server::lua::{Ref, Table};
-use crate::server::level;
-use delta_encode::{bitio, AlwaysVec, DeltaEncodable};
-use crate::server::lua;
 use crate::server::saving::filesystem::*;
+use crate::state;
+use crate::ui;
+use delta_encode::{bitio, AlwaysVec, DeltaEncodable};
 
 /// A instance of a game session
 pub struct GameInstance {
@@ -132,15 +132,15 @@ impl server::saving::IconCapture for ServerScreenshot {
 enum NetworkState {
     Loading,
     Playing,
-    Closed
+    Closed,
 }
 
 impl GameInstance {
     /// Creates a game instance with a single player server
     pub fn single_player(
-        log: &Logger, asset_manager: &AssetManager,
-        #[cfg(feature = "steam")]
-        steam: steamworks::Client,
+        log: &Logger,
+        asset_manager: &AssetManager,
+        #[cfg(feature = "steam")] steam: steamworks::Client,
         name: String,
         mission: Option<ResourceKey<'static>>,
     ) -> errors::Result<(GameInstance, thread::JoinHandle<()>)> {
@@ -159,26 +159,38 @@ impl GameInstance {
         #[cfg(feature = "steam")]
         let steamworks = steam.clone();
         let server_thread = thread::spawn(move || {
-            let fs = crate::make_filesystem(#[cfg(feature = "steam")] &steam);
+            let fs = crate::make_filesystem(
+                #[cfg(feature = "steam")]
+                &steam,
+            );
             let fs = fs.into_boxed();
             #[cfg(not(feature = "steam"))]
             let steam = ();
-            let (mut server, shutdown) = server::Server::<LoopbackSocketListener, _>::new(server_log, assets, steam, fs, (), server::ServerConfig {
-                save_type: if mission.is_some() {
-                    server::saving::SaveType::Mission
-                } else {
-                    server::saving::SaveType::FreePlay
+            let (mut server, shutdown) = server::Server::<LoopbackSocketListener, _>::new(
+                server_log,
+                assets,
+                steam,
+                fs,
+                (),
+                server::ServerConfig {
+                    save_type: if mission.is_some() {
+                        server::saving::SaveType::Mission
+                    } else {
+                        server::saving::SaveType::FreePlay
+                    },
+                    save_name: name,
+                    min_players: 1,
+                    max_players: 1,
+                    autostart: true,
+                    player_area_size: 100,
+                    locked_players: false,
+                    mission,
+                    tick_rate: std::cell::Cell::new(20),
                 },
-                save_name: name,
-                min_players: 1,
-                max_players: 1,
-                autostart: true,
-                player_area_size: 100,
-                locked_players: false,
-                mission,
-                tick_rate: std::cell::Cell::new(20),
-            }, Some(Box::new(screenshot_server)), None)
-                .expect("Failed to start local server");
+                Some(Box::new(screenshot_server)),
+                None,
+            )
+            .expect("Failed to start local server");
             let socket = server.client_localsocket();
             assume!(server.log, socket_send.send((socket, shutdown)));
             server.run();
@@ -202,7 +214,15 @@ impl GameInstance {
             pck => bail!("wrong packet: {:?}", pck),
         };
 
-        let mut instance = Self::multi_player(log, asset_manager, #[cfg(feature = "steam")] steamworks, pck, sender, receiver)?;
+        let mut instance = Self::multi_player(
+            log,
+            asset_manager,
+            #[cfg(feature = "steam")]
+            steamworks,
+            pck,
+            sender,
+            receiver,
+        )?;
         instance.is_local = true;
         instance.shutdown_waiter = Some(shutdown);
         instance.screenshot_helper = Some(ScreenshotHelper {
@@ -216,16 +236,29 @@ impl GameInstance {
     pub fn multi_player(
         log: &Logger,
         asset_manager: &AssetManager,
-        #[cfg(feature = "steam")]
-        steam: steamworks::Client,
+        #[cfg(feature = "steam")] steam: steamworks::Client,
         pck: packet::GameBegin,
         sender: Sender,
-        receiver: Receiver
+        receiver: Receiver,
     ) -> errors::Result<GameInstance> {
         use crate::server::lua::Scope;
-        let mut instance = Self::create_instance(log, asset_manager, pck.mission_handler, #[cfg(feature = "steam")] steam, sender, receiver, pck.width, pck.height);
+        let mut instance = Self::create_instance(
+            log,
+            asset_manager,
+            pck.mission_handler,
+            #[cfg(feature = "steam")]
+            steam,
+            sender,
+            receiver,
+            pck.width,
+            pck.height,
+        );
         instance.player.id = player::Id(pck.uid);
-        instance.scripting.set(Scope::Global, "control_player", i32::from(instance.player.id.0));
+        instance.scripting.set(
+            Scope::Global,
+            "control_player",
+            i32::from(instance.player.id.0),
+        );
 
         for player in pck.players.0 {
             if player.uid == instance.player.id {
@@ -236,23 +269,43 @@ impl GameInstance {
             instance.players.insert(player.uid, rplayer);
         }
 
-        instance.level.load_initial_state::<entity::ClientEntityCreator, _>(&instance.scripting, &mut instance.entities, pck.strings.0, pck.state)?;
-        for packet::IdleState{player,idx,state} in pck.idle_state.0 {
-            scripting::load_choice_state(log, &mut instance.entities, &instance.scripting, &mut instance.running_choices, player, idx as usize, state.0);
+        instance
+            .level
+            .load_initial_state::<entity::ClientEntityCreator, _>(
+                &instance.scripting,
+                &mut instance.entities,
+                pck.strings.0,
+                pck.state,
+            )?;
+        for packet::IdleState { player, idx, state } in pck.idle_state.0 {
+            scripting::load_choice_state(
+                log,
+                &mut instance.entities,
+                &instance.scripting,
+                &mut instance.running_choices,
+                player,
+                idx as usize,
+                state.0,
+            );
         }
         instance.ensure_send(packet::LevelLoaded {})?;
         instance.local_network_state = NetworkState::Playing;
 
         if let Some(handler) = instance.mission_handler.as_ref() {
-            if let Err(err) = instance.scripting.with_borrows()
+            if let Err(err) = instance
+                .scripting
+                .with_borrows()
                 .borrow(&crate::server::mission::MissionAllowed)
                 .borrow_mut(&mut instance.level)
                 .borrow_mut(&mut instance.entities)
-                .invoke_function::<_, ()>("invoke_module_method", (
-                    lua::Ref::new_string(&instance.scripting, handler.module()),
-                    lua::Ref::new_string(&instance.scripting, handler.resource()),
-                    lua::Ref::new_string(&instance.scripting, "client_init"),
-                ))
+                .invoke_function::<_, ()>(
+                    "invoke_module_method",
+                    (
+                        lua::Ref::new_string(&instance.scripting, handler.module()),
+                        lua::Ref::new_string(&instance.scripting, handler.resource()),
+                        lua::Ref::new_string(&instance.scripting, "client_init"),
+                    ),
+                )
             {
                 warn!(instance.log, "Failed to init mission: {}", err);
             }
@@ -264,19 +317,21 @@ impl GameInstance {
         log: &Logger,
         asset_manager: &AssetManager,
         mission_handler: Option<ResourceKey<'static>>,
-        #[cfg(feature = "steam")]
-        steam: steamworks::Client,
+        #[cfg(feature = "steam")] steam: steamworks::Client,
         sender: Sender,
         receiver: Receiver,
-        width: u32, height: u32,
+        width: u32,
+        height: u32,
     ) -> GameInstance {
-
         let mut entities = ecs::Container::new();
         server::entity::register_components(&mut entities);
         entity::register_components(&mut entities);
 
-        entities.add_component(Container::WORLD, CLogger{log: log.clone()});
-        entities.add_component(Container::WORLD, course::LessonManager::new(log.clone(), asset_manager));
+        entities.add_component(Container::WORLD, CLogger { log: log.clone() });
+        entities.add_component(
+            Container::WORLD,
+            course::LessonManager::new(log.clone(), asset_manager),
+        );
 
         let log = log.new(o!("client" => true));
         let scripting = script::Engine::new(&log, asset_manager.clone());
@@ -289,9 +344,20 @@ impl GameInstance {
         entity::register_frame_systems(&mut frame_systems);
 
         let snapshots = snapshot::Snapshots::new(&log, &[player::Id(0)]);
-        scripting.store_tracked::<snapshot::EntityMap>(snapshot::EntityMap(snapshots.entity_map.clone()));
+        scripting.store_tracked::<snapshot::EntityMap>(snapshot::EntityMap(
+            snapshots.entity_map.clone(),
+        ));
         GameInstance {
-            level: assume!(log, Level::new_raw(log.new(o!("type" => "level")), asset_manager, &scripting, width, height)),
+            level: assume!(
+                log,
+                Level::new_raw(
+                    log.new(o!("type" => "level")),
+                    asset_manager,
+                    &scripting,
+                    width,
+                    height
+                )
+            ),
             log: log.clone(),
             asset_manager: asset_manager.clone(),
             #[cfg(feature = "steam")]
@@ -355,9 +421,15 @@ impl GameInstance {
     }
 
     /// Attempts sync the game's state to the server
-    pub fn tick(&mut self, state: &mut crate::GameState, manager: &mut state::StateManager, delta: f64) {
+    pub fn tick(
+        &mut self,
+        state: &mut crate::GameState,
+        manager: &mut state::StateManager,
+        delta: f64,
+    ) {
         if self.local_network_state == NetworkState::Closed
-            || self.remote_network_state == NetworkState::Closed {
+            || self.remote_network_state == NetworkState::Closed
+        {
             // TODO: Should drop back to somewhere other than the main menu
 
             // Close all open windows/states
@@ -405,7 +477,8 @@ impl GameInstance {
 
         if !self.paused {
             let d = entity::Delta(delta);
-            self.frame_systems.run_with_borrows(&mut self.entities)
+            self.frame_systems
+                .run_with_borrows(&mut self.entities)
                 .borrow(&self.last_cursor_position)
                 .borrow(&*self.level.tiles.borrow())
                 .borrow(&*self.level.rooms.borrow())
@@ -430,22 +503,23 @@ impl GameInstance {
                 &self.scripting,
                 &mut self.running_choices,
             );
-            scripting::client_tick(
-                &self.log,
-                &mut self.entities,
-                &self.scripting,
-            );
+            scripting::client_tick(&self.log, &mut self.entities, &self.scripting);
 
             if let Some(handler) = self.mission_handler.as_ref() {
-                if let Err(err) = self.scripting.with_borrows()
+                if let Err(err) = self
+                    .scripting
+                    .with_borrows()
                     .borrow(&crate::server::mission::MissionAllowed)
                     .borrow_mut(&mut self.level)
                     .borrow_mut(&mut self.entities)
-                    .invoke_function::<_, ()>("invoke_module_method", (
-                        lua::Ref::new_string(&self.scripting, handler.module()),
-                        lua::Ref::new_string(&self.scripting, handler.resource()),
-                        lua::Ref::new_string(&self.scripting, "client_update"),
-                    ))
+                    .invoke_function::<_, ()>(
+                        "invoke_module_method",
+                        (
+                            lua::Ref::new_string(&self.scripting, handler.module()),
+                            lua::Ref::new_string(&self.scripting, handler.resource()),
+                            lua::Ref::new_string(&self.scripting, "client_update"),
+                        ),
+                    )
                 {
                     warn!(self.log, "Failed to tick mission: {}", err);
                 }
@@ -456,7 +530,8 @@ impl GameInstance {
             }
 
             // Tick entities
-            self.systems.run_with_borrows(&mut self.entities)
+            self.systems
+                .run_with_borrows(&mut self.entities)
                 .borrow(&self.last_cursor_position)
                 .borrow(&*self.level.tiles.borrow())
                 .borrow(&*self.level.rooms.borrow())
@@ -473,7 +548,7 @@ impl GameInstance {
         self.next_keep_alive -= 1;
         if self.next_keep_alive < 0 {
             self.next_keep_alive = 60;
-            self.send(packet::KeepAlive{})?;
+            self.send(packet::KeepAlive {})?;
         }
 
         let timeout_time = if self.is_local {
@@ -508,11 +583,21 @@ impl GameInstance {
     }
 
     /// Handles key actions if able
-    pub fn handle_key_action(&mut self, _action: keybinds::KeyAction, _state: &mut crate::GameState, _mouse_pos: (i32, i32)) {
+    pub fn handle_key_action(
+        &mut self,
+        _action: keybinds::KeyAction,
+        _state: &mut crate::GameState,
+        _mouse_pos: (i32, i32),
+    ) {
     }
 
     /// Attempts to handle the passed event
-    pub fn handle_ui_event(&mut self, evt: &mut event::EventHandler, state: &mut crate::GameState, manager: &mut state::StateManager) {
+    pub fn handle_ui_event(
+        &mut self,
+        evt: &mut event::EventHandler,
+        state: &mut crate::GameState,
+        manager: &mut state::StateManager,
+    ) {
         evt.handle_event::<InspectEntity, _>(|InspectEntity(e)| {
             manager.add_state(base::EntityInfoState::new(e));
         });
@@ -521,27 +606,32 @@ impl GameInstance {
                 state.renderer.suggest_camera_position(
                     room.area.min.x as f32 + room.area.width() as f32 / 2.0,
                     room.area.min.y as f32 + room.area.height() as f32 / 2.0,
-                    45.0
+                    45.0,
                 );
             }
         });
         evt.handle_event::<DoPayStaff, _>(|DoPayStaff(e, bonus)| {
             if let Some(id) = self.entities.get_component::<NetworkId>(e).map(|v| v.0) {
-                let mut cmd: Command = PayStaff::new(
-                    id,
-                    bonus,
-                ).into();
+                let mut cmd: Command = PayStaff::new(id, bonus).into();
                 let mut proxy = GameProxy::proxy(state);
-                try_cmd!(self.log, cmd.execute(&mut proxy, &mut self.player, CommandParams {
-                    log: &self.log,
-                    level: &mut self.level,
-                    engine: &self.scripting,
-                    entities: &mut self.entities,
-                    snapshots: &self.snapshots,
-                    mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
-                }), {
-                    self.push_command(cmd, manager);
-                });
+                try_cmd!(
+                    self.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut self.player,
+                        CommandParams {
+                            log: &self.log,
+                            level: &mut self.level,
+                            engine: &self.scripting,
+                            entities: &mut self.entities,
+                            snapshots: &self.snapshots,
+                            mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        self.push_command(cmd, manager);
+                    }
+                );
             }
         });
     }
@@ -551,22 +641,36 @@ impl GameInstance {
         match not {
             notify::Notification::StaffQuit { entity_id } => {
                 if let Some(entity) = self.snapshots.get_entity_by_id(entity_id) {
-                    if let Some(name) = self.entities.get_component::<Living>(entity).map(|v| v.name.clone()) {
+                    if let Some(name) = self
+                        .entities
+                        .get_component::<Living>(entity)
+                        .map(|v| v.name.clone())
+                    {
                         let desc = node! {
                             description {
                                 @text(format!("{} {} has quit due to being unhappy with their job", name.0, name.1))
                             }
                         };
                         let title = "Staff Quitting";
-                        self.display_notifcation(ResourceKey::new("base", "ui/icons/staff_quit"), title, desc, true);
+                        self.display_notifcation(
+                            ResourceKey::new("base", "ui/icons/staff_quit"),
+                            title,
+                            desc,
+                            true,
+                        );
                     }
                 } else {
-                    self.delayed_notifications.push(notify::Notification::StaffQuit { entity_id });
+                    self.delayed_notifications
+                        .push(notify::Notification::StaffQuit { entity_id });
                 }
-            },
+            }
             notify::Notification::StaffPay { entity_id, wants } => {
                 if let Some(entity) = self.snapshots.get_entity_by_id(entity_id) {
-                    if let Some(name) = self.entities.get_component::<Living>(entity).map(|v| v.name.clone()) {
+                    if let Some(name) = self
+                        .entities
+                        .get_component::<Living>(entity)
+                        .map(|v| v.name.clone())
+                    {
                         let desc = node! {
                             active_notification(style="staff_pay".to_owned()) {
                                 content {
@@ -583,18 +687,22 @@ impl GameInstance {
                                 }
                             }
                         };
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
-                            evt.emit(DoPayStaff(entity, false));
-                            if let Some(id) = node.parent()
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.get_property::<i32>("id"))
-                            {
-                                evt.emit(base::CloseNotification(id as u32));
-                            }
-                            evt.emit(base::CloseNotificationWindow);
-                            true
-                        }));
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
+                                evt.emit(DoPayStaff(entity, false));
+                                if let Some(id) = node
+                                    .parent()
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.get_property::<i32>("id"))
+                                {
+                                    evt.emit(base::CloseNotification(id as u32));
+                                }
+                                evt.emit(base::CloseNotificationWindow);
+                                true
+                            }),
+                        );
                         buttons.add_child(btn);
 
                         let btn = node! {
@@ -604,18 +712,22 @@ impl GameInstance {
                                 }
                             }
                         };
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
-                            evt.emit(DoPayStaff(entity, true));
-                            if let Some(id) = node.parent()
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.get_property::<i32>("id"))
-                            {
-                                evt.emit(base::CloseNotification(id as u32));
-                            }
-                            evt.emit(base::CloseNotificationWindow);
-                            true
-                        }));
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
+                                evt.emit(DoPayStaff(entity, true));
+                                if let Some(id) = node
+                                    .parent()
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.get_property::<i32>("id"))
+                                {
+                                    evt.emit(base::CloseNotification(id as u32));
+                                }
+                                evt.emit(base::CloseNotificationWindow);
+                                true
+                            }),
+                        );
 
                         buttons.add_child(btn);
                         let btn = node! {
@@ -625,11 +737,14 @@ impl GameInstance {
                                 }
                             }
                         };
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                            evt.emit(InspectEntity(entity));
-                            evt.emit(base::CloseNotificationWindow);
-                            true
-                        }));
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                                evt.emit(InspectEntity(entity));
+                                evt.emit(base::CloseNotificationWindow);
+                                true
+                            }),
+                        );
 
                         buttons.add_child(btn);
                         let btn = node! {
@@ -639,47 +754,69 @@ impl GameInstance {
                                 }
                             }
                         };
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
-                            if let Some(id) = node.parent()
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.parent())
-                                .and_then(|v| v.get_property::<i32>("id"))
-                            {
-                                evt.emit(base::CloseNotification(id as u32));
-                            }
-                            evt.emit(base::CloseNotificationWindow);
-                            true
-                        }));
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
+                                if let Some(id) = node
+                                    .parent()
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.parent())
+                                    .and_then(|v| v.get_property::<i32>("id"))
+                                {
+                                    evt.emit(base::CloseNotification(id as u32));
+                                }
+                                evt.emit(base::CloseNotificationWindow);
+                                true
+                            }),
+                        );
                         buttons.add_child(btn);
 
                         desc.add_child(buttons);
                         let title = "Staff Pay Raise";
-                        self.display_notifcation_reason(ResourceKey::new("base", "ui/icons/staff_raise"), title, desc, false, base::KeepReason::EntityOwned(entity));
+                        self.display_notifcation_reason(
+                            ResourceKey::new("base", "ui/icons/staff_raise"),
+                            title,
+                            desc,
+                            false,
+                            base::KeepReason::EntityOwned(entity),
+                        );
                     }
                 } else {
-                    self.delayed_notifications.push(notify::Notification::StaffPay { entity_id, wants });
+                    self.delayed_notifications
+                        .push(notify::Notification::StaffPay { entity_id, wants });
                 }
-            },
-            notify::Notification::Text { icon, title, description } => {
+            }
+            notify::Notification::Text {
+                icon,
+                title,
+                description,
+            } => {
                 let desc = node! {
                     description {
                         @text(description)
                     }
                 };
                 self.display_notifcation(icon, title, desc, true);
-            },
+            }
             notify::Notification::RoomMissingDismiss(room_id) => {
                 for v in &self.notifications {
-                    if let base::KeepReason::RoomActive(rid)  = v.keep_reason {
+                    if let base::KeepReason::RoomActive(rid) = v.keep_reason {
                         if rid == room_id {
-                            state.ui_manager.events
+                            state
+                                .ui_manager
+                                .events
                                 .borrow_mut()
                                 .emit(base::ClickNotification(v.id));
                         }
                     }
                 }
-            },
-            notify::Notification::RoomMissing { room_id, icon, title, description } => {
+            }
+            notify::Notification::RoomMissing {
+                room_id,
+                icon,
+                title,
+                description,
+            } => {
                 let desc = node! {
                     active_notification(style="room_text".to_owned()) {
                         content {
@@ -695,11 +832,14 @@ impl GameInstance {
                         }
                     }
                 };
-                btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _node, _| {
-                    evt.emit(InspectRoom(room_id));
-                    evt.emit(base::CloseNotificationWindow);
-                    true
-                }));
+                btn.set_property(
+                    "on_click",
+                    ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _node, _| {
+                        evt.emit(InspectRoom(room_id));
+                        evt.emit(base::CloseNotificationWindow);
+                        true
+                    }),
+                );
                 buttons.add_child(btn);
 
                 let btn = node! {
@@ -709,54 +849,72 @@ impl GameInstance {
                         }
                     }
                 };
-                btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
-                    if let Some(id) = node.parent() // buttons
-                        .and_then(|v| v.parent()) // active_notification
-                        .and_then(|v| v.parent()) // content
-                        .and_then(|v| v.get_property::<i32>("id"))
-                    {
-                        evt.emit(base::CloseNotification(id as u32));
-                    }
-                    evt.emit(base::CloseNotificationWindow);
-                    true
-                }));
+                btn.set_property(
+                    "on_click",
+                    ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, node, _| {
+                        if let Some(id) = node
+                            .parent() // buttons
+                            .and_then(|v| v.parent()) // active_notification
+                            .and_then(|v| v.parent()) // content
+                            .and_then(|v| v.get_property::<i32>("id"))
+                        {
+                            evt.emit(base::CloseNotification(id as u32));
+                        }
+                        evt.emit(base::CloseNotificationWindow);
+                        true
+                    }),
+                );
                 buttons.add_child(btn);
 
                 desc.add_child(buttons);
-                self.display_notifcation_reason(icon, title, desc, false, base::KeepReason::RoomActive(room_id));
-            },
+                self.display_notifcation_reason(
+                    icon,
+                    title,
+                    desc,
+                    false,
+                    base::KeepReason::RoomActive(room_id),
+                );
+            }
             notify::Notification::Script { script, func, data } => {
-                let (icon, title, description) = match self.scripting.with_borrows()
+                let (icon, title, description) = match self
+                    .scripting
+                    .with_borrows()
                     .borrow_mut(&mut self.level)
                     .borrow_mut(&mut self.entities)
-                    .invoke_function::<_, Ref<Table>>("invoke_module_method", (
-                        Ref::new_string(&self.scripting, script.module()),
-                        Ref::new_string(&self.scripting, script.resource()),
-                        Ref::new_string(&self.scripting, func),
-                        Ref::new(&self.scripting, data.0),
-                    )) {
+                    .invoke_function::<_, Ref<Table>>(
+                        "invoke_module_method",
+                        (
+                            Ref::new_string(&self.scripting, script.module()),
+                            Ref::new_string(&self.scripting, script.resource()),
+                            Ref::new_string(&self.scripting, func),
+                            Ref::new(&self.scripting, data.0),
+                        ),
+                    ) {
                     Ok(val) => {
-                        let icon = val.get::<_, Ref<String>>(Ref::new_string(&self.scripting, "icon"));
+                        let icon =
+                            val.get::<_, Ref<String>>(Ref::new_string(&self.scripting, "icon"));
                         let icon = LazyResourceKey::parse(
                             icon.as_ref()
                                 .map(|v| v.as_ref())
-                                .unwrap_or("base:ui/icons/inspection")
-
+                                .unwrap_or("base:ui/icons/inspection"),
                         )
-                            .or_module(script.module_key())
-                            .into_owned();
-                        let title: Option<Ref<String>> = val.get(Ref::new_string(&self.scripting, "title"));
-                        let description: Option<Ref<ui::NodeRef>> = val.get(Ref::new_string(&self.scripting, "description"));
+                        .or_module(script.module_key())
+                        .into_owned();
+                        let title: Option<Ref<String>> =
+                            val.get(Ref::new_string(&self.scripting, "title"));
+                        let description: Option<Ref<ui::NodeRef>> =
+                            val.get(Ref::new_string(&self.scripting, "description"));
                         (icon, title, description)
-                    },
+                    }
                     Err(err) => {
                         error!(self.log, "Failed to decode notification"; "script" => ? script, "error" => % err);
                         return;
-                    },
+                    }
                 };
                 self.display_notifcation(
                     icon,
-                    title.as_ref()
+                    title
+                        .as_ref()
                         .map(|v| v.as_ref())
                         .unwrap_or("Missing title"),
                     description
@@ -764,14 +922,18 @@ impl GameInstance {
                         .unwrap_or_else(|| node!(description)),
                     true,
                 );
-            },
+            }
         }
     }
 
     /// Handles incoming packets
-    pub fn handle_packets(&mut self, state: &mut crate::GameState, manager: &mut state::StateManager) -> errors::Result<()> {
-        use crate::server::network::packet::Packet::*;
+    pub fn handle_packets(
+        &mut self,
+        state: &mut crate::GameState,
+        manager: &mut state::StateManager,
+    ) -> errors::Result<()> {
         use self::NetworkState::*;
+        use crate::server::network::packet::Packet::*;
         while let Ok(pck) = self.receiver.try_recv() {
             match (self.remote_network_state, pck) {
                 (_, UpdateStats(pck)) => {
@@ -780,27 +942,29 @@ impl GameInstance {
                     }
                     self.player.update_id = pck.update_id;
                     self.player.history = pck.history.0;
-                },
+                }
                 (_, Message(pck)) => {
                     self.chat_messages.extend(pck.messages.0);
-                },
+                }
                 (Playing, Notification(pck)) => {
                     for not in pck.notifications.0 {
                         self.do_notification(state, not);
                     }
-                },
+                }
                 (Playing, EntityFrame(pck)) => {
-                    match self.snapshots.resolve_delta::<entity::ClientComponent, _, _>(
-                        &mut self.level,
-                        &mut self.entities,
-                        &self.asset_manager,
-                        &mut self.running_choices,
-                        &mut self.day_tick,
-                        &mut self.entity_state,
-                        pck,
-                        &mut self.player,
-                        &mut self.player_state,
-                    ) {
+                    match self
+                        .snapshots
+                        .resolve_delta::<entity::ClientComponent, _, _>(
+                            &mut self.level,
+                            &mut self.entities,
+                            &self.asset_manager,
+                            &mut self.running_choices,
+                            &mut self.day_tick,
+                            &mut self.entity_state,
+                            pck,
+                            &mut self.player,
+                            &mut self.player_state,
+                        ) {
                         Ok((entity_ack, player_ack)) => {
                             // If we accepted the frame ack it
                             // to the server
@@ -813,7 +977,7 @@ impl GameInstance {
                             if let Some(reply) = player_ack {
                                 self.send(reply)?;
                             }
-                        },
+                        }
                         Err(err) => {
                             info!(self.log, "Ignoring frame: {:?}", err);
                         }
@@ -826,10 +990,13 @@ impl GameInstance {
                     let accepted_id = {
                         let mut data = bitio::Reader::new(::std::io::Cursor::new(pck.commands.0));
                         let len = data.read_unsigned(8)?;
-                        for i in 0 .. len {
+                        for i in 0..len {
                             let id = pck.start_id + i as u32;
 
-                            let packet::CommandPair{player_id, command: mut cmd} = packet::CommandPair::decode(None, &mut data)?;
+                            let packet::CommandPair {
+                                player_id,
+                                command: mut cmd,
+                            } = packet::CommandPair::decode(None, &mut data)?;
 
                             // Have we already processed this command in a previous
                             // packet?
@@ -838,7 +1005,12 @@ impl GameInstance {
                             }
                             // Is this the next command we are expecting?
                             if id != self.last_command.wrapping_add(1) {
-                                info!(self.log, "Ignoring command. wanted: {}, got: {}", self.last_command.wrapping_add(1), id);
+                                info!(
+                                    self.log,
+                                    "Ignoring command. wanted: {}, got: {}",
+                                    self.last_command.wrapping_add(1),
+                                    id
+                                );
                                 break;
                             }
 
@@ -852,30 +1024,44 @@ impl GameInstance {
                                     let mut proxy = ServerHandler {
                                         running_choices: &mut self.running_choices,
                                     };
-                                    cmd.execute(&mut proxy, &mut self.server_player, CommandParams {
-                                        log: &self.log,
-                                        level: &mut self.level,
-                                        engine: &self.scripting,
-                                        entities: &mut self.entities,
-                                        snapshots: &self.snapshots,
-                                        mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
-                                    })
-                                },
+                                    cmd.execute(
+                                        &mut proxy,
+                                        &mut self.server_player,
+                                        CommandParams {
+                                            log: &self.log,
+                                            level: &mut self.level,
+                                            engine: &self.scripting,
+                                            entities: &mut self.entities,
+                                            snapshots: &self.snapshots,
+                                            mission_handler: self
+                                                .mission_handler
+                                                .as_ref()
+                                                .map(|v| v.borrow()),
+                                        },
+                                    )
+                                }
                                 // Normal remote player
                                 player_id => {
                                     let mut proxy = RemoteGameProxy::proxy(state);
-                                    cmd.execute(&mut proxy, if let Some(player) = self.players.get_mut(&player_id) {
-                                        player
-                                    } else {
-                                        bail!("No player for {:?}", player_id);
-                                    }, CommandParams {
-                                        log: &self.log,
-                                        level: &mut self.level,
-                                        engine: &self.scripting,
-                                        entities: &mut self.entities,
-                                        snapshots: &self.snapshots,
-                                        mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
-                                    })
+                                    cmd.execute(
+                                        &mut proxy,
+                                        if let Some(player) = self.players.get_mut(&player_id) {
+                                            player
+                                        } else {
+                                            bail!("No player for {:?}", player_id);
+                                        },
+                                        CommandParams {
+                                            log: &self.log,
+                                            level: &mut self.level,
+                                            engine: &self.scripting,
+                                            entities: &mut self.entities,
+                                            snapshots: &self.snapshots,
+                                            mission_handler: self
+                                                .mission_handler
+                                                .as_ref()
+                                                .map(|v| v.borrow()),
+                                        },
+                                    )
                                 }
                             };
                             if let Err(err) = result {
@@ -894,10 +1080,8 @@ impl GameInstance {
                     };
                     // Let the server know what commands we have executed so
                     // that it wont continue to send us them.
-                    self.send(packet::AckRemoteCommands {
-                        accepted_id,
-                    })?;
-                },
+                    self.send(packet::AckRemoteCommands { accepted_id })?;
+                }
                 (Playing, RejectCommands(pck)) => {
                     error!(self.log, "Out of sync with the server, rolling back");
                     // Remove all the accepted commands from the queue
@@ -910,14 +1094,18 @@ impl GameInstance {
                     let mut proxy = GameProxy::proxy(state);
                     let mut cap = None;
                     for mut cmd in self.commands.drain(..).rev() {
-                        cmd.1.undo(&mut proxy, &mut self.player, CommandParams {
-                            log: &self.log,
-                            level: &mut self.level,
-                            engine: &self.scripting,
-                            entities: &mut self.entities,
-                            snapshots: &self.snapshots,
-                            mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
-                        });
+                        cmd.1.undo(
+                            &mut proxy,
+                            &mut self.player,
+                            CommandParams {
+                                log: &self.log,
+                                level: &mut self.level,
+                                engine: &self.scripting,
+                                entities: &mut self.entities,
+                                snapshots: &self.snapshots,
+                                mission_handler: self.mission_handler.as_ref().map(|v| v.borrow()),
+                            },
+                        );
                         cap = Some(cmd.2);
                     }
                     if let Some(cap) = cap {
@@ -928,8 +1116,8 @@ impl GameInstance {
                     // Use the rejected command's id for the sorry command and then
                     // continue from there
                     self.next_command_id = pck.rejected_id;
-                    self.push_command(Command::Sorry(Sorry{}), manager);
-                },
+                    self.push_command(Command::Sorry(Sorry {}), manager);
+                }
                 (Playing, AckCommands(pck)) => {
                     // Remove all the accepted commands from the queue
                     if let Some(pos) = self.commands.iter().position(|v| v.0 == pck.accepted_id) {
@@ -937,19 +1125,19 @@ impl GameInstance {
                             manager.drop_capture(cmd.2);
                         }
                     }
-                },
-                (Loading, GameStart(..)) =>{
+                }
+                (Loading, GameStart(..)) => {
                     self.remote_network_state = Playing;
-                },
+                }
                 (_, Request(req)) => {
                     self.request_manager.parse_request(req);
-                },
+                }
                 (_, Reply(rpl)) => {
                     state.ui_manager.events().emit(network::ReplyEvent(rpl));
-                },
+                }
                 (_, KeepAlive(..)) => {
                     self.last_keep_alive_reply = time::Instant::now();
-                },
+                }
                 (state, pck) => error!(self.log, "Unhandled packet: {:?} -> {:?}", state, pck),
             }
         }
@@ -958,7 +1146,8 @@ impl GameInstance {
 
     /// Pushes a command to the command queue and allocates an id for it
     pub fn push_command<C>(&mut self, c: Command, cap: &mut C)
-        where C: state::Capturable
+    where
+        C: state::Capturable,
     {
         let id = self.next_command_id;
         self.next_command_id = self.next_command_id.wrapping_add(1);
@@ -984,16 +1173,29 @@ impl GameInstance {
     }
 
     /// Displays a notification to the player on the screen
-    pub fn display_notifcation<T>(&mut self, icon: ResourceKey<'_>, title: T, description: ui::Node, closable: bool)
-        where T: Into<String>,
+    pub fn display_notifcation<T>(
+        &mut self,
+        icon: ResourceKey<'_>,
+        title: T,
+        description: ui::Node,
+        closable: bool,
+    ) where
+        T: Into<String>,
     {
         self.display_notifcation_reason(icon, title, description, closable, base::KeepReason::None)
     }
 
     /// Displays a notification to the player on the screen with
     /// a dismiss reason
-    pub fn display_notifcation_reason<T>(&mut self, icon: ResourceKey<'_>, title: T, description: ui::Node, closable: bool, reason: base::KeepReason)
-        where T: Into<String>,
+    pub fn display_notifcation_reason<T>(
+        &mut self,
+        icon: ResourceKey<'_>,
+        title: T,
+        description: ui::Node,
+        closable: bool,
+        reason: base::KeepReason,
+    ) where
+        T: Into<String>,
     {
         let id = self.notification_next_id;
         self.notification_next_id = self.notification_next_id.wrapping_add(1);
@@ -1109,22 +1311,31 @@ struct GameProxy<'a> {
     state: &'a mut crate::GameState,
 }
 
-impl <'a> GameProxy<'a> {
+impl<'a> GameProxy<'a> {
     fn proxy(state: &'a mut crate::GameState) -> GameProxy<'a> {
-        GameProxy {
-            state,
-        }
+        GameProxy { state }
     }
 }
 
-impl <'a> CommandHandler for GameProxy<'a> {
+impl<'a> CommandHandler for GameProxy<'a> {
     type Player = PlayerInfo;
 
-    fn execute_edit_room<E>(&mut self, cmd: &mut EditRoom, _player: &mut PlayerInfo, params: &mut CommandParams<'_, E>) -> server::errors::Result<()>
-        where E: server::script::Invokable,
+    fn execute_edit_room<E>(
+        &mut self,
+        cmd: &mut EditRoom,
+        _player: &mut PlayerInfo,
+        params: &mut CommandParams<'_, E>,
+    ) -> server::errors::Result<()>
+    where
+        E: server::script::Invokable,
     {
         let room = params.level.get_room_info(cmd.room_id);
-        if !room.controller.is_invalid() && params.entities.get_component::<entity::ClientBooked>(room.controller).is_some() {
+        if !room.controller.is_invalid()
+            && params
+                .entities
+                .get_component::<entity::ClientBooked>(room.controller)
+                .is_some()
+        {
             Err(server::errors::ErrorKind::RoomNoFullOwnership.into())
         } else {
             Ok(())
@@ -1152,22 +1363,25 @@ struct RemoteGameProxy<'a> {
     _state: &'a mut crate::GameState,
 }
 
-impl <'a> RemoteGameProxy<'a> {
+impl<'a> RemoteGameProxy<'a> {
     fn proxy(state: &'a mut crate::GameState) -> RemoteGameProxy<'a> {
-        RemoteGameProxy {
-            _state: state,
-        }
+        RemoteGameProxy { _state: state }
     }
 }
 
-impl <'a> CommandHandler for RemoteGameProxy<'a> {
+impl<'a> CommandHandler for RemoteGameProxy<'a> {
     type Player = RemotePlayer;
 
-
-    fn execute_place_staff<E>(&mut self, _cmd: &mut PlaceStaff, player: &mut RemotePlayer, params: &mut CommandParams<'_, E>) -> server::errors::Result<()>
-        where E: server::script::Invokable,
+    fn execute_place_staff<E>(
+        &mut self,
+        _cmd: &mut PlaceStaff,
+        player: &mut RemotePlayer,
+        params: &mut CommandParams<'_, E>,
+    ) -> server::errors::Result<()>
+    where
+        E: server::script::Invokable,
     {
-        if let State::EditEntity{entity: Some(e)} = player.state {
+        if let State::EditEntity { entity: Some(e) } = player.state {
             params.entities.remove_entity(e);
             player.set_state(State::None);
             Ok(())
@@ -1197,16 +1411,13 @@ impl Player for RemotePlayer {
         UniDollar(0)
     }
 
-    fn change_money(&mut self, _val: UniDollar) {
-
-    }
+    fn change_money(&mut self, _val: UniDollar) {}
 
     fn get_rating(&self) -> i16 {
         0
     }
 
-    fn set_rating(&mut self, _val: i16) {
-    }
+    fn set_rating(&mut self, _val: i16) {}
 
     fn can_charge(&self) -> bool {
         false
@@ -1216,11 +1427,8 @@ impl Player for RemotePlayer {
         player::PlayerConfig::default()
     }
 
-    fn set_config(&mut self, _cfg: player::PlayerConfig) {
-    }
+    fn set_config(&mut self, _cfg: player::PlayerConfig) {}
 }
-
-
 
 /// Fake player used by the server
 pub(crate) struct ServerPlayer {
@@ -1264,13 +1472,19 @@ impl player::Player for ServerPlayer {
 struct ServerHandler<'a> {
     running_choices: &'a mut scripting::RunningChoices,
 }
-impl <'a> CommandHandler for ServerHandler<'a> {
+impl<'a> CommandHandler for ServerHandler<'a> {
     type Player = ServerPlayer;
 
-    fn execute_place_staff<E>(&mut self, _cmd: &mut PlaceStaff, player: &mut ServerPlayer, params: &mut CommandParams<'_, E>) -> server::errors::Result<()>
-        where E: server::script::Invokable,
+    fn execute_place_staff<E>(
+        &mut self,
+        _cmd: &mut PlaceStaff,
+        player: &mut ServerPlayer,
+        params: &mut CommandParams<'_, E>,
+    ) -> server::errors::Result<()>
+    where
+        E: server::script::Invokable,
     {
-        if let State::EditEntity{entity: Some(e)} = player.state {
+        if let State::EditEntity { entity: Some(e) } = player.state {
             params.entities.remove_entity(e);
             player.set_state(State::None);
             Ok(())
@@ -1279,27 +1493,55 @@ impl <'a> CommandHandler for ServerHandler<'a> {
         }
     }
 
-    fn execute_exec_idle<E>(&mut self, cmd: &mut ExecIdle, _player: &mut ServerPlayer, params: &mut CommandParams<'_, E>) -> server::errors::Result<()>
-        where E: Invokable,
+    fn execute_exec_idle<E>(
+        &mut self,
+        cmd: &mut ExecIdle,
+        _player: &mut ServerPlayer,
+        params: &mut CommandParams<'_, E>,
+    ) -> server::errors::Result<()>
+    where
+        E: Invokable,
     {
         use std::sync::Arc;
-        let script = assume!(params.log, self.running_choices.student_idle_scripts.get(cmd.idx as usize));
-        let rc = self.running_choices.student_idle.entry((cmd.player, cmd.idx as usize))
-            .or_insert_with(|| scripting::RunningChoice { entities: Vec::new(), handle: None });
-        let handle = rc.handle.get_or_insert_with(|| Ref::new(params.engine, scripting::IdleScriptHandle {
-            player: cmd.player,
-            props: Ref::new_table(params.engine),
-        }));
-        if let Err(err) = params.engine.with_borrows()
+        let script = assume!(
+            params.log,
+            self.running_choices
+                .student_idle_scripts
+                .get(cmd.idx as usize)
+        );
+        let rc = self
+            .running_choices
+            .student_idle
+            .entry((cmd.player, cmd.idx as usize))
+            .or_insert_with(|| scripting::RunningChoice {
+                entities: Vec::new(),
+                handle: None,
+            });
+        let handle = rc.handle.get_or_insert_with(|| {
+            Ref::new(
+                params.engine,
+                scripting::IdleScriptHandle {
+                    player: cmd.player,
+                    props: Ref::new_table(params.engine),
+                },
+            )
+        });
+        if let Err(err) = params
+            .engine
+            .with_borrows()
             .borrow_mut(params.entities)
-            .invoke_function::<_, ()>("invoke_module_method", (
-                Ref::new_string(params.engine, script.script.module()),
-                Ref::new_string(params.engine, script.script.resource()),
-                Ref::new_string(params.engine, "on_exec"),
-                handle.clone(),
-                Ref::new_string(params.engine, cmd.method.as_str()),
-                Ref::new(params.engine, Arc::clone(&cmd.data.0))
-        )) {
+            .invoke_function::<_, ()>(
+                "invoke_module_method",
+                (
+                    Ref::new_string(params.engine, script.script.module()),
+                    Ref::new_string(params.engine, script.script.resource()),
+                    Ref::new_string(params.engine, "on_exec"),
+                    handle.clone(),
+                    Ref::new_string(params.engine, cmd.method.as_str()),
+                    Ref::new(params.engine, Arc::clone(&cmd.data.0)),
+                ),
+            )
+        {
             error!(params.log, "Failed to on_exec idle script"; "error" => %err);
         }
         Ok(())

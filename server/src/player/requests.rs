@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 use delta_encode::AlwaysVec;
 use std::sync::Arc;
@@ -86,7 +85,6 @@ pub struct NamedGradeEntry {
     /// The final grade
     pub grade: Grade,
 }
-
 
 /// The state of a single timetable period
 #[derive(DeltaEncode, Clone, Copy, PartialEq, Eq, Debug)]

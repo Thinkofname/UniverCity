@@ -2,16 +2,16 @@
 
 use serde_json::{self, Value};
 
+use crate::assets;
+use crate::level::{self, Check};
+use crate::prelude::*;
 use crate::util::{Direction, FNVMap, FNVSet, Location};
 use std::sync::Arc;
-use crate::level::{self, Check};
-use crate::assets;
-use crate::prelude::*;
 
 /// Loads tile descriptions from an asset manager.
 pub enum Loader {}
 
-impl <'a> assets::AssetLoader<'a> for Loader {
+impl<'a> assets::AssetLoader<'a> for Loader {
     type LoaderData = LoaderData;
     type Return = Arc<Type>;
     type Key = assets::ResourceKey<'a>;
@@ -23,21 +23,34 @@ impl <'a> assets::AssetLoader<'a> for Loader {
         }
     }
 
-    fn load(data: &mut Self::LoaderData, assets: &assets::AssetManager, resource: Self::Key) -> UResult<Self::Return> {
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &assets::AssetManager,
+        resource: Self::Key,
+    ) -> UResult<Self::Return> {
         let id = data.by_name.get(&resource).cloned();
         let id = match id {
             Some(id) => id,
             None => {
-                let file = assets.open_from_pack(resource.module_key(), &format!("tiles/{}.json", resource.resource()))?;
+                let file = assets.open_from_pack(
+                    resource.module_key(),
+                    &format!("tiles/{}.json", resource.resource()),
+                )?;
                 let info: TypeInfo = serde_json::from_reader(file)?;
                 let id = data.tiles.len();
                 let mut rules = vec![];
                 for tex in info.texture {
                     let mut checks = vec![];
                     for m in tex.matches {
-                        let x = m[0].as_i64().ok_or_else(|| ErrorKind::Msg("Expected integer for `x` texture check".into()))? as i32;
-                        let y = m[1].as_i64().ok_or_else(|| ErrorKind::Msg("Expected integer for `y` texture check".into()))? as i32;
-                        let val = m[2].as_str().ok_or_else(|| ErrorKind::Msg("Expected string for `val` texture check".into()))?;
+                        let x = m[0].as_i64().ok_or_else(|| {
+                            ErrorKind::Msg("Expected integer for `x` texture check".into())
+                        })? as i32;
+                        let y = m[1].as_i64().ok_or_else(|| {
+                            ErrorKind::Msg("Expected integer for `y` texture check".into())
+                        })? as i32;
+                        let val = m[2].as_str().ok_or_else(|| {
+                            ErrorKind::Msg("Expected string for `val` texture check".into())
+                        })?;
                         checks.push(Check::new(resource.module_key(), x, y, val));
                     }
                     if checks.is_empty() {
@@ -58,9 +71,7 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                     if checks.is_empty() {
                         checks.push(Check::Always);
                     }
-                    Some(WallRule {
-                        checks,
-                    })
+                    Some(WallRule { checks })
                 } else {
                     None
                 };
@@ -79,9 +90,10 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                 }));
                 data.by_name.insert(resource.into_owned(), id as TileId);
                 id as TileId
-            },
+            }
         };
-        data.tiles.get(id as usize)
+        data.tiles
+            .get(id as usize)
             .cloned()
             .ok_or_else(|| ErrorKind::NoSuchAsset.into())
     }
@@ -91,7 +103,7 @@ impl <'a> assets::AssetLoader<'a> for Loader {
 /// if it isn't already loaded
 pub enum ById {}
 
-impl <'a> assets::AssetLoader<'a> for ById {
+impl<'a> assets::AssetLoader<'a> for ById {
     type LoaderData = LoaderData;
     type Return = Arc<Type>;
     type Key = TileId;
@@ -103,8 +115,13 @@ impl <'a> assets::AssetLoader<'a> for ById {
         }
     }
 
-    fn load(data: &mut Self::LoaderData, _assets: &assets::AssetManager, id: Self::Key) -> UResult<Self::Return> {
-        data.tiles.get(id as usize)
+    fn load(
+        data: &mut Self::LoaderData,
+        _assets: &assets::AssetManager,
+        id: Self::Key,
+    ) -> UResult<Self::Return> {
+        data.tiles
+            .get(id as usize)
             .cloned()
             .ok_or_else(|| ErrorKind::NoSuchAsset.into())
     }
@@ -115,7 +132,6 @@ pub struct LoaderData {
     tiles: Vec<Arc<Type>>,
     by_name: FNVMap<assets::ResourceKey<'static>, TileId>,
 }
-
 
 /// The type required to store a tile id. Useful encase this changes later.
 pub type TileId = u16;
@@ -146,21 +162,28 @@ struct TextureRule {
 }
 
 impl Type {
-
     /// Returns all possible textures this tile could use.
     ///
     /// Used for preloading
-    pub fn get_possible_textures<'a>(&'a self) -> impl Iterator<Item=assets::ResourceKey<'a>> + 'a {
-        Box::new(self.texture_rules.iter()
-            .map(|v| &v.texture)
-            .map(|v| v.borrow()))
+    pub fn get_possible_textures<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = assets::ResourceKey<'a>> + 'a {
+        Box::new(
+            self.texture_rules
+                .iter()
+                .map(|v| &v.texture)
+                .map(|v| v.borrow()),
+        )
     }
 
     /// Returns the texture for the given location by matching the rules
     /// defined for this type.
-    pub fn get_texture_for<L: level::LevelView>(&self, level: &L, loc: Location) -> assets::ResourceKey<'_> {
-        'check:
-        for rule in &self.texture_rules {
+    pub fn get_texture_for<L: level::LevelView>(
+        &self,
+        level: &L,
+        loc: Location,
+    ) -> assets::ResourceKey<'_> {
+        'check: for rule in &self.texture_rules {
             for check in &rule.checks {
                 if !check.test(level, loc, 0, 0) {
                     continue 'check;
@@ -172,7 +195,12 @@ impl Type {
     }
 
     /// Returns the texture to be used for a wall if one should be placed in the direction.
-    pub fn should_place_wall<L: level::LevelView>(&self, level: &L, loc: Location, dir: Direction) -> bool {
+    pub fn should_place_wall<L: level::LevelView>(
+        &self,
+        level: &L,
+        loc: Location,
+        dir: Direction,
+    ) -> bool {
         if let Some(wall) = self.wall_rule.as_ref() {
             if level.get_tile_flags(loc).contains(TileFlag::NO_WALLS) {
                 return false;
@@ -198,33 +226,34 @@ struct TypeInfo {
     properties: Vec<String>,
     #[serde(default)]
     wall: Option<WallInfo>,
-    #[serde(default="move_cost")]
+    #[serde(default = "move_cost")]
     movement_cost: i32,
     #[serde(default)]
     movement_edge_cost: Option<i32>,
 }
 
-fn move_cost() -> i32 { 10 }
+fn move_cost() -> i32 {
+    10
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TextureRuleInfo {
     texture: String,
-    #[serde(default, rename="match")]
+    #[serde(default, rename = "match")]
     matches: Vec<Vec<Value>>,
 }
 #[derive(Debug, Serialize, Deserialize)]
 struct WallInfo {
-    #[serde(default, rename="match")]
+    #[serde(default, rename = "match")]
     matches: Vec<String>,
 }
 
-
 #[cfg(test)]
 mod tests {
+    use crate::assets::*;
+    use std::env;
     use std::fs;
     use std::path::Path;
-    use std::env;
-    use crate::assets::*;
 
     #[test]
     fn try_load_tiles() {
@@ -250,7 +279,9 @@ mod tests {
                 let path_str = &path_str[..path_str.len() - 5];
 
                 println!("Trying to load: {:?}", path_str);
-                assets.loader_open::<super::Loader>(ResourceKey::new("base", path_str)).unwrap();
+                assets
+                    .loader_open::<super::Loader>(ResourceKey::new("base", path_str))
+                    .unwrap();
             }
         }
     }

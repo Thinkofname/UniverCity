@@ -1,12 +1,17 @@
 use super::*;
-use crate::prelude::*;
-use crate::ui;
 use crate::entity;
+use crate::prelude::*;
 use crate::server::event;
+use crate::ui;
 
 use std::sync::mpsc;
 
-pub fn create_level(log: &Logger, assets: &AssetManager, ui: &mut ui::Manager, entities: &mut Container) -> server::errors::Result<Level> {
+pub fn create_level(
+    log: &Logger,
+    assets: &AssetManager,
+    ui: &mut ui::Manager,
+    entities: &mut Container,
+) -> server::errors::Result<Level> {
     let level = Level::new::<entity::ClientEntityCreator, _>(
         log.new(o!("type" => "level")),
         ui.get_script_engine(),
@@ -35,15 +40,17 @@ pub fn create_level(log: &Logger, assets: &AssetManager, ui: &mut ui::Manager, e
     // Registration office
     {
         let bloc = base_loc + (1, 15);
-        let id = assume!(log, level.place_room_id::<entity::ClientEntityCreator, _>(
-            engine, entities,
-            tmp_room_id, player,
-            ResourceKey::new("base", "registration_office"),
-            Bound::new(
-                bloc,
-                bloc + (4, 4)
+        let id = assume!(
+            log,
+            level.place_room_id::<entity::ClientEntityCreator, _>(
+                engine,
+                entities,
+                tmp_room_id,
+                player,
+                ResourceKey::new("base", "registration_office"),
+                Bound::new(bloc, bloc + (4, 4))
             )
-        ));
+        );
         let id = level.finalize_placement(id);
         place_objects! {
             init(level, engine, entities)
@@ -63,15 +70,17 @@ pub fn create_level(log: &Logger, assets: &AssetManager, ui: &mut ui::Manager, e
     // Lecture room
     {
         let bloc = base_loc + (1, 7);
-        let id = assume!(log, level.place_room_id::<entity::ClientEntityCreator, _>(
-            engine, entities,
-            tmp_room_id, player,
-            ResourceKey::new("base", "lecture_room"),
-            Bound::new(
-                bloc,
-                bloc + (4, 4)
+        let id = assume!(
+            log,
+            level.place_room_id::<entity::ClientEntityCreator, _>(
+                engine,
+                entities,
+                tmp_room_id,
+                player,
+                ResourceKey::new("base", "lecture_room"),
+                Bound::new(bloc, bloc + (4, 4))
             )
-        ));
+        );
         let id = level.finalize_placement(id);
         place_objects! {
             init(level, engine, entities)
@@ -83,8 +92,8 @@ pub fn create_level(log: &Logger, assets: &AssetManager, ui: &mut ui::Manager, e
             }
         }
 
-        for y in 0 .. 3 {
-            for x in 0 .. 3 {
+        for y in 0..3 {
+            for x in 0..3 {
                 place_objects! {
                     init(level, engine, entities)
                     room(id at bloc) {
@@ -99,7 +108,6 @@ pub fn create_level(log: &Logger, assets: &AssetManager, ui: &mut ui::Manager, e
     Ok(level)
 }
 
-
 pub struct MainMenuState {
     ui: Option<ui::Node>,
 }
@@ -111,9 +119,7 @@ pub struct DummyInstance {
 
 impl MainMenuState {
     pub fn new() -> MainMenuState {
-        MainMenuState {
-            ui: None,
-        }
+        MainMenuState { ui: None }
     }
 }
 
@@ -124,12 +130,22 @@ impl state::State for MainMenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/main_menu"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/main_menu"));
         self.ui = Some(node.clone());
-        state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
+        state
+            .renderer
+            .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
 
         state.audio.set_playlist("menu");
 
@@ -185,11 +201,18 @@ impl state::State for ModMenuState {
         unimplemented!()
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(ResourceKey::new("base", "menus/modding"));
-
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/modding"));
 
         let assets_folders = assume!(state.global_logger, std::fs::read_dir("./assets"))
             .flat_map(|v| v.ok())
@@ -201,7 +224,7 @@ impl state::State for ModMenuState {
                 let name = if let Ok(name) = folder.file_name().into_string() {
                     name
                 } else {
-                    continue
+                    continue;
                 };
                 let name_copy = name.clone();
                 let evt = ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _node, _| {
@@ -234,22 +257,31 @@ impl state::State for ModMenuState {
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, _state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut GameState,
+    ) -> state::Action {
         if let Some(watcher) = self.start_watcher.as_mut().and_then(|v| v.try_recv().ok()) {
-            return state::Action::Push(Box::new(UploadWait {
-                ui: None,
-                watcher,
-            }));
+            return state::Action::Push(Box::new(UploadWait { ui: None, watcher }));
         }
         state::Action::Nothing
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.as_ref());
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-        });
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Pop;
+            },
+        );
         evt.handle_event::<UploadMod, _>(|evt| {
             let (tx, rx) = mpsc::channel();
             self.start_watcher = Some(rx);
@@ -260,13 +292,17 @@ impl state::State for ModMenuState {
 }
 
 #[cfg(feature = "steam")]
-fn do_upload(log: &Logger, sender: mpsc::Sender<steamworks::UpdateWatchHandle<steamworks::ClientManager>>, steam: steamworks::Client, name: String) {
+fn do_upload(
+    log: &Logger,
+    sender: mpsc::Sender<steamworks::UpdateWatchHandle<steamworks::ClientManager>>,
+    steam: steamworks::Client,
+    name: String,
+) {
     use std::fs;
     let ugc = steam.ugc();
 
     // Look for existing mod info to work with
-    let meta_path = Path::new("assets").join(&name).join("meta.json")
-        .to_owned();
+    let meta_path = Path::new("assets").join(&name).join("meta.json").to_owned();
     let info: server::ModMeta = if let Ok(meta) = fs::File::open(&meta_path)
         .map_err(errors::Error::from)
         .and_then(|v| serde_json::from_reader(v).map_err(errors::Error::from))
@@ -276,31 +312,43 @@ fn do_upload(log: &Logger, sender: mpsc::Sender<steamworks::UpdateWatchHandle<st
     } else {
         let log = log.clone();
         info!(log, "Creating new item for {}", name);
-        ugc.create_item(crate::STEAM_APP_ID, steamworks::FileType::Community, move |res| {
-            match res {
+        ugc.create_item(
+            crate::STEAM_APP_ID,
+            steamworks::FileType::Community,
+            move |res| match res {
                 Ok((id, _needs_sign)) => {
                     let meta = assume!(log, fs::File::create(meta_path.clone()));
-                    assume!(log, serde_json::to_writer_pretty(meta, &server::ModMeta {
-                        main: name.clone(),
-                        workshop_id: id,
-                    }));
+                    assume!(
+                        log,
+                        serde_json::to_writer_pretty(
+                            meta,
+                            &server::ModMeta {
+                                main: name.clone(),
+                                workshop_id: id,
+                            }
+                        )
+                    );
                     let sender = sender.clone();
                     do_upload(&log, sender, steam.clone(), name.clone());
-                },
+                }
                 Err(err) => error!(log, "Failed to create mod on steam: {:?}", err),
-            }
-        });
+            },
+        );
         return;
     };
 
     info!(log, "{:#?}", info);
     let log = log.clone();
-    let watcher = ugc.start_item_update(crate::STEAM_APP_ID, info.workshop_id)
+    let watcher = ugc
+        .start_item_update(crate::STEAM_APP_ID, info.workshop_id)
         .title(&name)
         .content_path(&Path::new("assets").join(&name))
         .submit(None, move |res| {
             info!(log, "{:?}", res);
-            steam.friends().activate_game_overlay_to_web_page(&format!("steam://url/CommunityFilePage/{}", info.workshop_id.0));
+            steam.friends().activate_game_overlay_to_web_page(&format!(
+                "steam://url/CommunityFilePage/{}",
+                info.workshop_id.0
+            ));
         });
     let _ = sender.send(watcher);
 }
@@ -320,10 +368,18 @@ impl state::State for UploadWait {
         unimplemented!()
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "prompt/info"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "prompt/info"));
 
         if let Some(title) = query!(node, title > @text).next() {
             title.set_text("Uploading");
@@ -343,7 +399,11 @@ impl state::State for UploadWait {
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, _state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut GameState,
+    ) -> state::Action {
         let node = self.ui.as_ref().unwrap();
         let (status, progress, total) = self.watcher.progress();
         if status == steamworks::UpdateStatus::Invalid {
@@ -367,10 +427,18 @@ impl state::State for ModDownloadWait {
         unimplemented!()
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "prompt/info"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "prompt/info"));
 
         if let Some(title) = query!(node, title > @text).next() {
             title.set_text("Waiting for mods to download");
@@ -390,7 +458,11 @@ impl state::State for ModDownloadWait {
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         let mut waiting_for_workshop = false;
         let ugc = state.steam.ugc();
         for item in ugc.subscribed_items() {

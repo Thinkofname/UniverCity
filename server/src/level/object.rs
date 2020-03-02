@@ -2,18 +2,18 @@
 
 use serde_json;
 
+use super::*;
+use crate::assets;
 use crate::util::*;
 use delta_encode::AlwaysVec;
 use std::sync::Arc;
-use crate::assets;
-use super::*;
 
 use crate::common::{AnimationInfo, AnimationSet};
 
 /// Loads object descriptions from an asset manager.
 pub enum Loader {}
 
-impl <'a> assets::AssetLoader<'a> for Loader {
+impl<'a> assets::AssetLoader<'a> for Loader {
     type LoaderData = LoaderData;
     type Return = Arc<Type>;
     type Key = assets::ResourceKey<'a>;
@@ -24,17 +24,24 @@ impl <'a> assets::AssetLoader<'a> for Loader {
         }
     }
 
-    fn load(data: &mut Self::LoaderData, assets: &assets::AssetManager, resource: Self::Key) -> UResult<Self::Return> {
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &assets::AssetManager,
+        resource: Self::Key,
+    ) -> UResult<Self::Return> {
         use std::collections::hash_map::Entry;
         Ok(match data.objects.entry(resource.into_owned()) {
             Entry::Occupied(val) => val.into_mut().clone(),
             Entry::Vacant(val) => {
-                let file = assets.open_from_pack(val.key().module_key(), &format!("objects/{}.json", val.key().resource()))?;
+                let file = assets.open_from_pack(
+                    val.key().module_key(),
+                    &format!("objects/{}.json", val.key().resource()),
+                )?;
                 let info: TypeInfo = serde_json::from_reader(file)?;
 
                 let (handle, params) = match info.placer {
                     Placer::NoParams(handle) => (handle, FNVMap::default()),
-                    Placer::Params{handle, params} => (handle, params),
+                    Placer::Params { handle, params } => (handle, params),
                 };
 
                 let (sub, method) = if let Some(pos) = handle.char_indices().find(|v| v.1 == '#') {
@@ -51,11 +58,13 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                         assets::LazyResourceKey::parse(sub)
                             .or_module(val.key().module_key())
                             .into_owned(),
-                        method[1..].into()
+                        method[1..].into(),
                     ),
                     placer_parameters: params,
                     ty: info.ty,
-                    animations: info.animations.map(|v| AnimationInfo::map_to_animation_set(val.key().module_key(), v)),
+                    animations: info
+                        .animations
+                        .map(|v| AnimationInfo::map_to_animation_set(val.key().module_key(), v)),
                     lower_walls_placement: info.lower_walls_placement,
                     cost: info.cost.unwrap_or(UniDollar(0)),
                     placement_style: info.placement_style,
@@ -141,14 +150,15 @@ pub struct ObjectPlacePosition {
 
 impl ObjectPlacement {
     // TODO: ?
-    pub(super) fn empty(key: assets::ResourceKey<'_>, pos: (f32, f32), rotation: i16) -> ObjectPlacement {
+    pub(super) fn empty(
+        key: assets::ResourceKey<'_>,
+        pos: (f32, f32),
+        rotation: i16,
+    ) -> ObjectPlacement {
         ObjectPlacement {
             key: key.into_owned(),
             actions: AlwaysVec(vec![]),
-            position: ObjectPlacePosition {
-                x: pos.0,
-                y: pos.1,
-            },
+            position: ObjectPlacePosition { x: pos.0, y: pos.1 },
             rotation,
             version: 0,
         }
@@ -162,9 +172,15 @@ pub struct ReverseObjectPlacement {
 }
 
 impl ReverseObjectPlacement {
-    pub(super)fn apply<L, EC>(&self, log: &Logger, level: &mut L, entities: &mut Container) -> Result<(), String>
-        where L: LevelAccess,
-              EC: EntityCreator,
+    pub(super) fn apply<L, EC>(
+        &self,
+        log: &Logger,
+        level: &mut L,
+        entities: &mut Container,
+    ) -> Result<(), String>
+    where
+        L: LevelAccess,
+        EC: EntityCreator,
     {
         for action in self.actions.iter().rev() {
             action.execute_action::<L, EC>(log, level, entities)?;
@@ -185,22 +201,33 @@ impl ReverseObjectPlacement {
 
 impl ObjectPlacement {
     pub(crate) fn apply<L, EC>(
-            &self,
-            log: &Logger,
-            level: &mut L, entities: &mut Container,
-            room: room::Id, invalid: bool
+        &self,
+        log: &Logger,
+        level: &mut L,
+        entities: &mut Container,
+        room: room::Id,
+        invalid: bool,
     ) -> Result<ReverseObjectPlacement, String>
-        where L: LevelAccess,
-              EC: EntityCreator,
+    where
+        L: LevelAccess,
+        EC: EntityCreator,
     {
         let mut reverse = vec![];
         for action in &self.actions.0 {
-            match action.execute_action::<L, EC>(log, self.key.borrow(), level, entities, room, invalid) {
+            match action.execute_action::<L, EC>(
+                log,
+                self.key.borrow(),
+                level,
+                entities,
+                room,
+                invalid,
+            ) {
                 Ok(val) => reverse.push(val),
                 Err(err) => {
                     // Revert first
                     for rev in reverse.into_iter().rev() {
-                        rev.execute_action::<L, EC>(log, level, entities).expect("Failed to roll back actions after failing")
+                        rev.execute_action::<L, EC>(log, level, entities)
+                            .expect("Failed to roll back actions after failing")
                     }
                     return Err(err);
                 }
@@ -218,7 +245,7 @@ pub enum WallPlacementFlag {
     /// Flags a wall as a window
     Window {
         /// The window model
-        key: ResourceKey<'static>
+        key: ResourceKey<'static>,
     },
     /// Flags a wall as a door
     Door,
@@ -324,28 +351,45 @@ pub struct Size2D(pub f32, pub f32);
 
 impl ObjectPlacementAction {
     fn execute_action<L, EC>(
-            &self,
-            log: &Logger,
-            key: assets::ResourceKey<'_>,
-            level: &mut L, entities: &mut Container,
-            room: room::Id, invalid: bool
+        &self,
+        log: &Logger,
+        key: assets::ResourceKey<'_>,
+        level: &mut L,
+        entities: &mut Container,
+        room: room::Id,
+        invalid: bool,
     ) -> Result<ReverseObjectPlacementAction, String>
-        where L: LevelAccess,
-              EC: EntityCreator,
+    where
+        L: LevelAccess,
+        EC: EntityCreator,
     {
         match *self {
-            ObjectPlacementAction::WallFlag{location, direction, ref flag} => {
-                let mut info = level.get_wall_info(location, direction).ok_or_else(|| "No wall at location".to_owned())?;
+            ObjectPlacementAction::WallFlag {
+                location,
+                direction,
+                ref flag,
+            } => {
+                let mut info = level
+                    .get_wall_info(location, direction)
+                    .ok_or_else(|| "No wall at location".to_owned())?;
                 let orig = info.flag;
                 info.flag = match *flag {
                     WallPlacementFlag::None => TileWallFlag::None,
-                    WallPlacementFlag::Window{ref key} => TileWallFlag::Window(level.get_or_create_window(key.borrow())),
+                    WallPlacementFlag::Window { ref key } => {
+                        TileWallFlag::Window(level.get_or_create_window(key.borrow()))
+                    }
                     WallPlacementFlag::Door => TileWallFlag::Door,
                 };
                 level.set_wall_info(location, direction, Some(info));
-                Ok(ReverseObjectPlacementAction::WallFlag { location, direction, flag: orig})
-            },
-            ObjectPlacementAction::Tile{location, ref key, ..} => {
+                Ok(ReverseObjectPlacementAction::WallFlag {
+                    location,
+                    direction,
+                    flag: orig,
+                })
+            }
+            ObjectPlacementAction::Tile {
+                location, ref key, ..
+            } => {
                 if level.get_room_owner(location) != Some(room) {
                     return Ok(ReverseObjectPlacementAction::None);
                 }
@@ -368,17 +412,23 @@ impl ObjectPlacementAction {
                     old,
                     old_walls,
                 })
-            },
-            ObjectPlacementAction::TileFlag{location, flag} => {
+            }
+            ObjectPlacementAction::TileFlag { location, flag } => {
                 let flags = level.get_tile_flags(location);
                 level.set_tile_flags(location, flags | flag);
-                Ok(ReverseObjectPlacementAction::TileFlag {
-                    location,
-                    flags,
-                })
+                Ok(ReverseObjectPlacementAction::TileFlag { location, flags })
             }
-            ObjectPlacementAction::StaticModel{location, rotation, ref object, ref texture} => {
-                let e = EC::static_model(entities, object.borrow(), texture.as_ref().map(|v| v.borrow()));
+            ObjectPlacementAction::StaticModel {
+                location,
+                rotation,
+                ref object,
+                ref texture,
+            } => {
+                let e = EC::static_model(
+                    entities,
+                    object.borrow(),
+                    texture.as_ref().map(|v| v.borrow()),
+                );
                 {
                     let pos = assume!(log, entities.get_component_mut::<Position>(e));
                     pos.x = location.0;
@@ -391,16 +441,31 @@ impl ObjectPlacementAction {
                 }
                 entities.add_component(e, RoomOwned::new(room));
                 tag_object_entity(log, &level.get_asset_manager(), key.borrow(), entities, e);
-                Ok(ReverseObjectPlacementAction::StaticModel{ entity: e })
-            },
-            ObjectPlacementAction::AnimatedModel{location, rotation, ref object, ref texture, ref animation} => {
+                Ok(ReverseObjectPlacementAction::StaticModel { entity: e })
+            }
+            ObjectPlacementAction::AnimatedModel {
+                location,
+                rotation,
+                ref object,
+                ref texture,
+                ref animation,
+            } => {
                 let animations = {
                     let assets = level.get_asset_manager();
-                    assume!(log,
-                        assume!(log, assets.loader_open::<object::Loader>(key.borrow())).animations.clone()
+                    assume!(
+                        log,
+                        assume!(log, assets.loader_open::<object::Loader>(key.borrow()))
+                            .animations
+                            .clone()
                     )
                 };
-                let e = EC::animated_model(entities, object.borrow(), texture.as_ref().map(|v| v.borrow()), animations, animation);
+                let e = EC::animated_model(
+                    entities,
+                    object.borrow(),
+                    texture.as_ref().map(|v| v.borrow()),
+                    animations,
+                    animation,
+                );
                 {
                     let pos = assume!(log, entities.get_component_mut::<Position>(e));
                     pos.x = location.0;
@@ -413,11 +478,11 @@ impl ObjectPlacementAction {
                 }
                 entities.add_component(e, RoomOwned::new(room));
                 tag_object_entity(log, &level.get_asset_manager(), key.borrow(), entities, e);
-                Ok(ReverseObjectPlacementAction::AnimatedModel{ entity: e })
-            },
-            ObjectPlacementAction::CollisionBound{..}
-            | ObjectPlacementAction::PlacementBound{..}
-            | ObjectPlacementAction::SelectionBound{..}
+                Ok(ReverseObjectPlacementAction::AnimatedModel { entity: e })
+            }
+            ObjectPlacementAction::CollisionBound { .. }
+            | ObjectPlacementAction::PlacementBound { .. }
+            | ObjectPlacementAction::SelectionBound { .. }
             | ObjectPlacementAction::BlocksTile(..) => Ok(ReverseObjectPlacementAction::None),
         }
     }
@@ -425,22 +490,27 @@ impl ObjectPlacementAction {
 
 fn tag_object_entity(
     log: &Logger,
-    assets: &assets::AssetManager, key: assets::ResourceKey<'_>,
-    entities: &mut Container, e: Entity
+    assets: &assets::AssetManager,
+    key: assets::ResourceKey<'_>,
+    entities: &mut Container,
+    e: Entity,
 ) {
     let obj = assume!(log, assets.loader_open::<object::Loader>(key.borrow()));
 
     match obj.ty.as_ref().map(|v| v.as_ref()) {
         Some("door") => {
             entities.add_component(e, Door::new(false));
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
-    entities.add_component(e, Object {
-        key: key.into_owned(),
-        ty: obj.ty.clone(),
-    });
+    entities.add_component(
+        e,
+        Object {
+            key: key.into_owned(),
+            ty: obj.ty.clone(),
+        },
+    );
 }
 
 #[derive(Debug)]
@@ -469,24 +539,39 @@ enum ReverseObjectPlacementAction {
 }
 
 impl ReverseObjectPlacementAction {
-    fn execute_action<L, EC>(&self, log: &Logger, level: &mut L, entities: &mut Container) -> Result<(), String>
-        where L: LevelAccess,
-              EC: EntityCreator,
+    fn execute_action<L, EC>(
+        &self,
+        log: &Logger,
+        level: &mut L,
+        entities: &mut Container,
+    ) -> Result<(), String>
+    where
+        L: LevelAccess,
+        EC: EntityCreator,
     {
         match *self {
-            ReverseObjectPlacementAction::WallFlag{location, direction, flag} => {
-                let mut info = level.get_wall_info(location, direction)
+            ReverseObjectPlacementAction::WallFlag {
+                location,
+                direction,
+                flag,
+            } => {
+                let mut info = level
+                    .get_wall_info(location, direction)
                     .ok_or_else(|| "No wall at location".to_owned())?;
                 info.flag = flag;
                 level.set_wall_info(location, direction, Some(info));
                 Ok(())
             }
-            ReverseObjectPlacementAction::StaticModel{entity}
-            | ReverseObjectPlacementAction::AnimatedModel{entity} => {
+            ReverseObjectPlacementAction::StaticModel { entity }
+            | ReverseObjectPlacementAction::AnimatedModel { entity } => {
                 entities.remove_entity(entity);
                 Ok(())
             }
-            ReverseObjectPlacementAction::Tile{location, old, old_walls} => {
+            ReverseObjectPlacementAction::Tile {
+                location,
+                old,
+                old_walls,
+            } => {
                 if let Some(old) = old {
                     if old.owner == level.get_tile_raw(location).and_then(|v| v.owner) {
                         level.set_tile_raw(location, old);
@@ -504,7 +589,7 @@ impl ReverseObjectPlacementAction {
                 }
                 Ok(())
             }
-            ReverseObjectPlacementAction::TileFlag{location, flags} => {
+            ReverseObjectPlacementAction::TileFlag { location, flags } => {
                 level.set_tile_flags(location, flags);
                 Ok(())
             }
@@ -515,12 +600,12 @@ impl ReverseObjectPlacementAction {
     fn get_entities(&self, out: &mut Vec<Entity>) {
         match *self {
             ReverseObjectPlacementAction::None
-            | ReverseObjectPlacementAction::WallFlag{..}
-            | ReverseObjectPlacementAction::Tile{..}
-            | ReverseObjectPlacementAction::TileFlag{..} => {}
+            | ReverseObjectPlacementAction::WallFlag { .. }
+            | ReverseObjectPlacementAction::Tile { .. }
+            | ReverseObjectPlacementAction::TileFlag { .. } => {}
 
-            ReverseObjectPlacementAction::StaticModel{entity}
-            | ReverseObjectPlacementAction::AnimatedModel{entity} => {
+            ReverseObjectPlacementAction::StaticModel { entity }
+            | ReverseObjectPlacementAction::AnimatedModel { entity } => {
                 out.push(entity);
             }
         }
@@ -535,7 +620,7 @@ struct TypeInfo {
     description: String,
     group: String,
     placer: Placer,
-    #[serde(rename="type")]
+    #[serde(rename = "type")]
     ty: Option<String>,
     animations: Option<FNVMap<String, AnimationInfo>>,
     #[serde(default = "return_true")]
@@ -552,17 +637,19 @@ enum Placer {
     Params {
         handle: String,
         params: FNVMap<String, String>,
-    }
+    },
 }
 
-fn return_true() -> bool { true }
+fn return_true() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::assets::*;
+    use std::env;
     use std::fs;
     use std::path::Path;
-    use std::env;
-    use crate::assets::*;
 
     #[test]
     fn try_load_objects() {
@@ -590,7 +677,9 @@ mod tests {
                     continue;
                 }
                 println!("Trying to load: {:?}", path_str);
-                assets.loader_open::<super::Loader>(ResourceKey::new("base", path_str)).unwrap();
+                assets
+                    .loader_open::<super::Loader>(ResourceKey::new("base", path_str))
+                    .unwrap();
             }
         }
     }

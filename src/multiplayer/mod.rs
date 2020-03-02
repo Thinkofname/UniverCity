@@ -1,8 +1,7 @@
-
-use std::net;
-use std::time;
 #[cfg(feature = "steam")]
 use server::steamworks;
+use std::net;
+use std::time;
 
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -13,13 +12,13 @@ use crate::server::assets;
 use crate::server::network::{self, packet};
 use crate::server::saving::filesystem::*;
 
-use crate::prelude::*;
-use super::{GameState, GameInstance};
-use crate::state;
-use crate::ui;
+use super::{GameInstance, GameState};
 use crate::errors;
 use crate::instance;
+use crate::prelude::*;
 use crate::render;
+use crate::state;
+use crate::ui;
 
 mod dedicated_server;
 
@@ -57,23 +56,26 @@ struct JoinSteam(steamworks::LobbyId);
 
 #[cfg(feature = "steam")]
 fn generate_user_list(ui: &ui::Node, steam: &steamworks::Client, renderer: &mut render::Renderer) {
-    if let Some(lobby_list) = query!(ui, content(lobby_list=true)).next() {
+    if let Some(lobby_list) = query!(ui, content(lobby_list = true)).next() {
         for c in lobby_list.children() {
             lobby_list.remove_child(c);
         }
         let friends = steam.friends();
         let current = friends.get_friends(steamworks::FriendFlags::ALL);
-        for (idx, friend) in current.into_iter()
+        for (idx, friend) in current
+            .into_iter()
             .filter(|friend| {
                 let game = friend.game_played();
-                game.map_or(false, |game| game.game.app_id() == crate::STEAM_APP_ID && game.lobby.is_valid())
+                game.map_or(false, |game| {
+                    game.game.app_id() == crate::STEAM_APP_ID && game.lobby.is_valid()
+                })
             })
             .enumerate()
         {
             let game = if let Some(game) = friend.game_played() {
                 game
             } else {
-                continue
+                continue;
             };
             let icon = if let Some(data) = friend.medium_avatar() {
                 let icon = ResourceKey::new("dynamic", format!("64@64@steam_icon_{}", idx));
@@ -106,10 +108,13 @@ fn generate_user_list(ui: &ui::Node, steam: &steamworks::Client, renderer: &mut 
             };
             if let Some(btn) = query!(entry, button).next() {
                 let lobby = game.lobby;
-                btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                    evt.emit(JoinSteam(lobby));
-                    true
-                }));
+                btn.set_property(
+                    "on_click",
+                    ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                        evt.emit(JoinSteam(lobby));
+                        true
+                    }),
+                );
             }
             lobby_list.add_child(entry);
         }
@@ -125,21 +130,35 @@ impl state::State for MenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/multiplayer"));
-        if let Some(server) = query!(node, button(id="server")).next() {
-            server.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(ModeDedicatedServer);
-                true
-            }));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/multiplayer"));
+        if let Some(server) = query!(node, button(id = "server")).next() {
+            server.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(ModeDedicatedServer);
+                    true
+                }),
+            );
         }
-        if let Some(server) = query!(node, button(id="friends")).next() {
-            server.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(ModeHostSteam);
-                true
-            }));
+        if let Some(server) = query!(node, button(id = "friends")).next() {
+            server.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(ModeHostSteam);
+                    true
+                }),
+            );
         }
         #[cfg(feature = "steam")]
         generate_user_list(&node, &state.steam, &mut state.renderer);
@@ -162,7 +181,11 @@ impl state::State for MenuState {
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         if self.last_refresh.elapsed() > time::Duration::from_secs(5) {
             let ui = assume!(state.global_logger, self.ui.clone());
             self.last_refresh = time::Instant::now();
@@ -172,7 +195,12 @@ impl state::State for MenuState {
         state::Action::Nothing
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, _state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         use std::thread;
         let mut action = state::Action::Nothing;
         evt.handle_event::<ModeDedicatedServer, _>(|_| {
@@ -186,24 +214,38 @@ impl state::State for MenuState {
                     let (socket_send, socket_recv) = mpsc::channel();
                     let assets = state.asset_manager.clone();
 
-                    let server_log = state.global_logger.new(o!("server" => true, "local" => true));
+                    let server_log = state
+                        .global_logger
+                        .new(o!("server" => true, "local" => true));
                     let steam = state.steam.clone();
                     let name = name.to_owned();
                     let _server_thread = thread::spawn(move || {
-                        let fs = crate::make_filesystem(#[cfg(feature = "steam")] &steam);
+                        let fs = crate::make_filesystem(
+                            #[cfg(feature = "steam")]
+                            &steam,
+                        );
                         let fs = fs.into_boxed();
-                        let (mut server, shutdown) = server::Server::<SteamSocketListener, _>::new(server_log, assets, steam.clone(), fs, steam, server::ServerConfig {
-                            save_type: server::saving::SaveType::ServerFreePlay,
-                            save_name: name,
-                            min_players: 1,
-                            max_players: 32,
-                            autostart: false,
-                            player_area_size: 100,
-                            locked_players: false,
-                            mission: None,
-                            tick_rate: std::cell::Cell::new(20),
-                        }, None, None)
-                            .expect("Failed to start local server");
+                        let (mut server, shutdown) = server::Server::<SteamSocketListener, _>::new(
+                            server_log,
+                            assets,
+                            steam.clone(),
+                            fs,
+                            steam,
+                            server::ServerConfig {
+                                save_type: server::saving::SaveType::ServerFreePlay,
+                                save_name: name,
+                                min_players: 1,
+                                max_players: 32,
+                                autostart: false,
+                                player_area_size: 100,
+                                locked_players: false,
+                                mission: None,
+                                tick_rate: std::cell::Cell::new(20),
+                            },
+                            None,
+                            None,
+                        )
+                        .expect("Failed to start local server");
                         let socket = server.client_localsocket();
                         assume!(server.log, socket_send.send((socket, shutdown)));
                         server.run();
@@ -211,18 +253,28 @@ impl state::State for MenuState {
                     // TODO: Handle the shutdown waiter
                     Box::new(ConnectingState::<MenuState, network::SteamSocket, _>::new(
                         move |state| {
-                            let (socket, _shutdown) = assume!(state.global_logger, socket_recv.recv());
+                            let (socket, _shutdown) =
+                                assume!(state.global_logger, socket_recv.recv());
                             Ok(socket)
-                        }
+                        },
                     ))
-                }
+                },
             )))
         });
         #[cfg(feature = "steam")]
         evt.handle_event::<JoinSteam, _>(|JoinSteam(lobby)| {
-            action = state::Action::Switch(Box::new(ConnectingState::<MenuState, network::SteamClientSocket, _>::new(
-                move |state| SteamClientSocket::connect(&state.global_logger, state.steam.clone(), &state.steam_single, lobby)
-            )))
+            action = state::Action::Switch(Box::new(ConnectingState::<
+                MenuState,
+                network::SteamClientSocket,
+                _,
+            >::new(move |state| {
+                SteamClientSocket::connect(
+                    &state.global_logger,
+                    state.steam.clone(),
+                    &state.steam_single,
+                    lobby,
+                )
+            })))
         });
         action
     }
@@ -250,9 +302,10 @@ pub(crate) struct ConnectingState<R, S, F> {
     info: Option<ConnectInfo>,
 }
 
-impl <R, S, F> ConnectingState<R, S, F>
-    where S: network::Socket + 'static,
-          F:  Fn(&mut crate::GameState) -> server::UResult<S> + 'static
+impl<R, S, F> ConnectingState<R, S, F>
+where
+    S: network::Socket + 'static,
+    F: Fn(&mut crate::GameState) -> server::UResult<S> + 'static,
 {
     pub(crate) fn new(connect: F) -> ConnectingState<R, S, F> {
         ConnectingState {
@@ -267,10 +320,11 @@ impl <R, S, F> ConnectingState<R, S, F>
     }
 }
 
-impl <R, S, F> state::State for ConnectingState<R, S, F>
-    where R: MultiplayerReturn,
-          S: network::Socket + 'static,
-          F: Fn(&mut crate::GameState) -> server::UResult<S> + 'static
+impl<R, S, F> state::State for ConnectingState<R, S, F>
+where
+    R: MultiplayerReturn,
+    S: network::Socket + 'static,
+    F: Fn(&mut crate::GameState) -> server::UResult<S> + 'static,
 {
     fn copy(&self) -> Box<dyn state::State> {
         Box::new(ConnectingState {
@@ -284,15 +338,26 @@ impl <R, S, F> state::State for ConnectingState<R, S, F>
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(assets::ResourceKey::new("base", "menus/multiplayer_connecting"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state.ui_manager.create_node(assets::ResourceKey::new(
+            "base",
+            "menus/multiplayer_connecting",
+        ));
         self.ui = Some(node.clone());
 
         let socket = match (self.connect_func)(state) {
             Ok(val) => val,
-            Err(err) => return state::Action::Switch(Box::new(R::return_error(format!("{}", err)))),
+            Err(err) => {
+                return state::Action::Switch(Box::new(R::return_error(format!("{}", err))))
+            }
         };
 
         let (mut sender, receiver) = socket.split(&state.global_logger);
@@ -327,55 +392,82 @@ impl <R, S, F> state::State for ConnectingState<R, S, F>
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         if let Some(mut info) = self.info.take() {
             match info.receiver.try_recv() {
                 Ok(packet::Packet::ServerConnectionStart(pck)) => {
-                    return state::Action::Switch(Box::new(
-                        LobbyState::<R>::new(pck.uid, info)
-                    ))
+                    return state::Action::Switch(Box::new(LobbyState::<R>::new(pck.uid, info)))
                 }
                 Ok(packet::Packet::ServerConnectionFail(pck)) => {
                     return state::Action::Switch(Box::new(R::return_error(pck.reason)));
                 }
                 Ok(packet::Packet::GameBegin(pck)) => {
-                    match GameInstance::multi_player(&state.global_logger, &state.asset_manager, #[cfg(feature = "steam")] state.steam.clone(), pck, info.sender, info.receiver) {
+                    match GameInstance::multi_player(
+                        &state.global_logger,
+                        &state.asset_manager,
+                        #[cfg(feature = "steam")]
+                        state.steam.clone(),
+                        pck,
+                        info.sender,
+                        info.receiver,
+                    ) {
                         Ok(mut instance) => {
                             #[cfg(feature = "steam")]
                             {
                                 instance.auth_ticket = info.auth_ticket;
                             }
-                            return state::Action::Switch(Box::new(instance::BaseState::new(instance)))
-                        },
-                        Err(err) =>
-                            return state::Action::Switch(Box::new(R::return_error(format!("{}", err)))),
+                            return state::Action::Switch(Box::new(instance::BaseState::new(
+                                instance,
+                            )));
+                        }
+                        Err(err) => {
+                            return state::Action::Switch(Box::new(R::return_error(format!(
+                                "{}",
+                                err
+                            ))))
+                        }
                     }
                 }
-                Ok(_) =>
-                    return state::Action::Switch(Box::new(R::return_error("Incorrect packet".to_owned()))),
-                Err(server::errors::Error(server::errors::ErrorKind::NoData, _)) => {},
-                Err(err) =>
-                    return state::Action::Switch(Box::new(R::return_error(format!("{}", err)))),
+                Ok(_) => {
+                    return state::Action::Switch(Box::new(R::return_error(
+                        "Incorrect packet".to_owned(),
+                    )))
+                }
+                Err(server::errors::Error(server::errors::ErrorKind::NoData, _)) => {}
+                Err(err) => {
+                    return state::Action::Switch(Box::new(R::return_error(format!("{}", err))))
+                }
             }
             self.info = Some(info);
         }
         if self.start_time.elapsed() > time::Duration::from_secs(15) {
-            state::Action::Switch(Box::new(R::return_error("Timed out connecting to server".to_owned())))
+            state::Action::Switch(Box::new(R::return_error(
+                "Timed out connecting to server".to_owned(),
+            )))
         } else {
             state::Action::Nothing
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<crate::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Switch(Box::new(R::return_ok()))
-        });
+        evt.handle_event_if::<crate::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| action = state::Action::Switch(Box::new(R::return_ok())),
+        );
         action
     }
 }
-
 
 struct LobbyState<R> {
     _return: PhantomData<R>,
@@ -389,7 +481,7 @@ struct LobbyState<R> {
     info: Option<ConnectInfo>,
 }
 
-impl <R> LobbyState<R> {
+impl<R> LobbyState<R> {
     fn new(uid: i16, info: ConnectInfo) -> LobbyState<R> {
         LobbyState {
             _return: PhantomData,
@@ -404,27 +496,36 @@ impl <R> LobbyState<R> {
         }
     }
 
-    fn rebuild_player_list(&mut self, #[cfg(feature = "steam")] steam: &steamworks::Client, renderer: &mut render::Renderer) {
+    fn rebuild_player_list(
+        &mut self,
+        #[cfg(feature = "steam")] steam: &steamworks::Client,
+        renderer: &mut render::Renderer,
+    ) {
         let ui = self.ui.as_ref().expect("UI not created");
         #[cfg(feature = "steam")]
         let friends = steam.friends();
         #[cfg(feature = "steam")]
         {
-            let lobby = friends.get_friend(steam.user().steam_id()).game_played()
+            let lobby = friends
+                .get_friend(steam.user().steam_id())
+                .game_played()
                 .map(|v| v.lobby)
                 .filter(|v| v.is_valid());
             if let Some(lobby) = lobby {
-                if let Some(btn) = query!(ui, button(id="invite_button")).next() {
+                if let Some(btn) = query!(ui, button(id = "invite_button")).next() {
                     btn.set_property("disabled", false);
                     let steam = steam.clone();
-                    btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |_evt, _, _| {
-                        steam.friends().activate_invite_dialog(lobby);
-                        true
-                    }));
+                    btn.set_property(
+                        "on_click",
+                        ui::MethodDesc::<ui::MouseUpEvent>::native(move |_evt, _, _| {
+                            steam.friends().activate_invite_dialog(lobby);
+                            true
+                        }),
+                    );
                 }
             }
         }
-        if let Some(lobby_list) = query!(ui, content(lobby_list=true)).next() {
+        if let Some(lobby_list) = query!(ui, content(lobby_list = true)).next() {
             for c in lobby_list.children() {
                 lobby_list.remove_child(c);
             }
@@ -451,7 +552,6 @@ impl <R> LobbyState<R> {
                 }
                 #[cfg(not(feature = "steam"))]
                 {
-
                     lobby_list.add_child(node! {
                         entry(ready = player.ready) {
                             player_icon(icon = "solid".to_owned())
@@ -466,8 +566,9 @@ impl <R> LobbyState<R> {
     }
 }
 
-impl <R> state::State for LobbyState<R>
-    where R: MultiplayerReturn,
+impl<R> state::State for LobbyState<R>
+where
+    R: MultiplayerReturn,
 {
     fn copy(&self) -> Box<dyn state::State> {
         Box::new(LobbyState {
@@ -483,12 +584,20 @@ impl <R> state::State for LobbyState<R>
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", "menus/multiplayer_lobby"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(assets::ResourceKey::new("base", "menus/multiplayer_lobby"));
         if let Some(info) = self.info.as_mut() {
-            if let Err(err) = info.sender.ensure_send(packet::EnterLobby{}) {
+            if let Err(err) = info.sender.ensure_send(packet::EnterLobby {}) {
                 return state::Action::Switch(Box::new(R::return_error(format!("{}", err))));
             }
         }
@@ -503,42 +612,69 @@ impl <R> state::State for LobbyState<R>
         }
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         use crate::server::network::packet::Packet;
         let ui = self.ui.clone().expect("UI not created");
         if let Some(mut info) = self.info.take() {
             match info.receiver.try_recv() {
                 Ok(Packet::UpdateLobby(pck)) => {
                     self.current_players = pck.players.0;
-                    self.rebuild_player_list(#[cfg(feature = "steam")] &state.steam, &mut state.renderer);
+                    self.rebuild_player_list(
+                        #[cfg(feature = "steam")]
+                        &state.steam,
+                        &mut state.renderer,
+                    );
                     self.can_start = pck.can_start;
-                    if let Some(btn) = query!(ui, button(id="start_button")).next()
-                    {
+                    if let Some(btn) = query!(ui, button(id = "start_button")).next() {
                         btn.set_property("disabled", !self.can_start);
                     }
                 }
                 Ok(Packet::GameBegin(pck)) => {
-                    match GameInstance::multi_player(&state.global_logger, &state.asset_manager, #[cfg(feature = "steam")] state.steam.clone(), pck, info.sender, info.receiver) {
+                    match GameInstance::multi_player(
+                        &state.global_logger,
+                        &state.asset_manager,
+                        #[cfg(feature = "steam")]
+                        state.steam.clone(),
+                        pck,
+                        info.sender,
+                        info.receiver,
+                    ) {
                         Ok(mut instance) => {
                             #[cfg(feature = "steam")]
                             {
                                 instance.auth_ticket = info.auth_ticket;
                             }
-                            return state::Action::Switch(Box::new(instance::BaseState::new(instance)))
-                        },
-                        Err(err) =>
-                            return state::Action::Switch(Box::new(R::return_error(format!("{}", err)))),
+                            return state::Action::Switch(Box::new(instance::BaseState::new(
+                                instance,
+                            )));
+                        }
+                        Err(err) => {
+                            return state::Action::Switch(Box::new(R::return_error(format!(
+                                "{}",
+                                err
+                            ))))
+                        }
                     }
                 }
-                Ok(Packet::KeepAlive(..)) | Err(server::errors::Error(server::errors::ErrorKind::NoData, _)) => {},
+                Ok(Packet::KeepAlive(..))
+                | Err(server::errors::Error(server::errors::ErrorKind::NoData, _)) => {}
                 Ok(pck) => warn!(state.global_logger, "Incorrect packet: {:?}", pck),
-                Err(err) =>
-                    return state::Action::Switch(Box::new(R::return_error(format!("{}", err)))),
+                Err(err) => {
+                    return state::Action::Switch(Box::new(R::return_error(format!("{}", err))))
+                }
             }
             if self.last_ping.elapsed() > time::Duration::from_secs(3) {
                 self.last_ping = time::Instant::now();
-                self.rebuild_player_list(#[cfg(feature = "steam")] &state.steam, &mut state.renderer);
-                if let Err(err) = info.sender.send(packet::KeepAlive{}){
+                self.rebuild_player_list(
+                    #[cfg(feature = "steam")]
+                    &state.steam,
+                    &mut state.renderer,
+                );
+                if let Err(err) = info.sender.send(packet::KeepAlive {}) {
                     return state::Action::Switch(Box::new(R::return_error(format!("{}", err))));
                 }
             }
@@ -548,20 +684,29 @@ impl <R> state::State for LobbyState<R>
         state::Action::Nothing
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<crate::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Switch(Box::new(R::return_ok()))
-        });
+        evt.handle_event_if::<crate::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| action = state::Action::Switch(Box::new(R::return_ok())),
+        );
         let mut info = self.info.take();
-        evt.handle_event_if::<crate::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            if self.can_start {
-                if let Some(info) = info.as_mut() {
-                    let _ = info.sender.ensure_send(packet::RequestGameBegin{});
+        evt.handle_event_if::<crate::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                if self.can_start {
+                    if let Some(info) = info.as_mut() {
+                        let _ = info.sender.ensure_send(packet::RequestGameBegin {});
+                    }
                 }
-            }
-        });
+            },
+        );
         self.info = info;
         action
     }

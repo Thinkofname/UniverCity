@@ -21,7 +21,9 @@ fn test_bitset() {
 impl BitSet {
     #[inline]
     pub fn new(size: usize) -> BitSet {
-        BitSet { data: vec![0; (size + 63) / 64] }
+        BitSet {
+            data: vec![0; (size + 63) / 64],
+        }
     }
 
     #[inline]
@@ -37,7 +39,9 @@ impl BitSet {
 
     #[inline]
     pub fn get(&self, i: usize) -> bool {
-        self.data.get(i >> 6).map_or(false, |&b| (b & (1 << (i & 0x3F))) != 0)
+        self.data
+            .get(i >> 6)
+            .map_or(false, |&b| (b & (1 << (i & 0x3F))) != 0)
     }
 
     #[inline]

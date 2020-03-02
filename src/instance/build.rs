@@ -1,19 +1,18 @@
-
 use std::sync::mpsc;
 
 use super::*;
-use crate::state;
-use crate::keybinds;
-use crate::server::event;
-use crate::util::*;
-use crate::server::command;
-use crate::server::level::tile;
-use crate::server::level::object::{self, PlacementStyle};
-use crate::server::assets;
-use crate::server::player::State;
-use crate::ui;
 use crate::entity;
+use crate::keybinds;
 use crate::render;
+use crate::server::assets;
+use crate::server::command;
+use crate::server::event;
+use crate::server::level::object::{self, PlacementStyle};
+use crate::server::level::tile;
+use crate::server::player::State;
+use crate::state;
+use crate::ui;
+use crate::util::*;
 
 use cgmath::Vector3;
 
@@ -30,7 +29,7 @@ struct Selection {
     tooltip: ui::Node,
 }
 
-bitflags!{
+bitflags! {
     struct PanEdge: u8 {
         const LEFT  = 0b0001;
         const RIGHT = 0b0010;
@@ -68,17 +67,28 @@ impl BuildState {
 ///
 /// This does not cover the case where rooms use scripts
 /// to style the floor.
-fn preload_room_textures(renderer: &mut render::Renderer, level: &mut Level, room: assets::ResourceKey<'_>) {
+fn preload_room_textures(
+    renderer: &mut render::Renderer,
+    level: &mut Level,
+    room: assets::ResourceKey<'_>,
+) {
     use std::iter;
-    let room = assume!(renderer.log, level.asset_manager.loader_open::<room::Loader>(room));
+    let room = assume!(
+        renderer.log,
+        level.asset_manager.loader_open::<room::Loader>(room)
+    );
 
     // The floor tile and border if the room
     // has one.
-    let tiles = iter::once(room.tile.borrow())
-        .chain(room.border_tile.as_ref().map(|v| v.borrow()));
+    let tiles = iter::once(room.tile.borrow()).chain(room.border_tile.as_ref().map(|v| v.borrow()));
 
     for tile in tiles {
-        let tile = assume!(renderer.log, level.asset_manager.loader_open::<tile::Loader>(tile.borrow()));
+        let tile = assume!(
+            renderer.log,
+            level
+                .asset_manager
+                .loader_open::<tile::Loader>(tile.borrow())
+        );
         for tex in tile.get_possible_textures() {
             renderer.preload_texture(tex.borrow());
         }
@@ -86,7 +96,8 @@ fn preload_room_textures(renderer: &mut render::Renderer, level: &mut Level, roo
 
     if let Some(wall) = room.wall.as_ref() {
         renderer.preload_texture(wall.texture.borrow());
-        wall.texture_top.as_ref()
+        wall.texture_top
+            .as_ref()
             .map(|v| renderer.preload_texture(v.borrow()));
     }
 }
@@ -102,24 +113,42 @@ impl state::State for BuildState {
         })
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         // Bind placement controls
-        state.keybinds.add_collection(keybinds::KeyCollection::RoomPlacement);
+        state
+            .keybinds
+            .add_collection(keybinds::KeyCollection::RoomPlacement);
         state.renderer.cursor_visible = true;
 
         // Spawn the room placement ui so that
         // placement can be canceled.
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", "room/select_room"));
+        let ui = state
+            .ui_manager
+            .create_node(assets::ResourceKey::new("base", "room/select_room"));
         self.ui = Some(ui.clone());
 
         // Update the room name text on the ui
-        let room = assume!(state.global_logger, instance.level.asset_manager.loader_open::<room::Loader>(self.room.borrow()));
+        let room = assume!(
+            state.global_logger,
+            instance
+                .level
+                .asset_manager
+                .loader_open::<room::Loader>(self.room.borrow())
+        );
         if let Some(txt) = query!(ui, room_name > @text).next() {
             txt.set_text(room.name.as_str());
         }
         if let Some(txt) = query!(ui, requirements > @text).next() {
-            txt.set_text(format!("Requires at least {x} by {y} tiles of space", x = room.min_size.0, y = room.min_size.1));
+            txt.set_text(format!(
+                "Requires at least {x} by {y} tiles of space",
+                x = room.min_size.0,
+                y = room.min_size.1
+            ));
         }
         if let Some(price_tag) = query!(ui, price_tag).next() {
             let cost = room.base_cost.unwrap_or(UniDollar(0));
@@ -133,13 +162,19 @@ impl state::State for BuildState {
         // by loading textures beforehand
         preload_room_textures(&mut state.renderer, &mut instance.level, self.room.borrow());
 
-        state.renderer.set_lowered_region(instance.level.level_bounds);
+        state
+            .renderer
+            .set_lowered_region(instance.level.level_bounds);
         instance.level.tiles.borrow_mut().flag_all_dirty();
 
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let mut x = 0.0;
         let mut y = 0.0;
         if self.pan_edge.contains(PanEdge::LEFT) {
@@ -172,35 +207,54 @@ impl state::State for BuildState {
         let instance = assume!(state.global_logger, instance.as_mut());
         // Close the placement ui
         if let Some(ui) = self.ui.take() {
-            state.ui_manager.remove_node( ui);
+            state.ui_manager.remove_node(ui);
         }
 
         // Revert the cursor and keybinds back to normal
         state.renderer.cursor_visible = false;
-        state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
-        state.keybinds.remove_collection(keybinds::KeyCollection::RoomPlacement);
+        state
+            .renderer
+            .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
+        state
+            .keybinds
+            .remove_collection(keybinds::KeyCollection::RoomPlacement);
         state.renderer.clear_lowered_region();
         instance.level.tiles.borrow_mut().flag_all_dirty();
 
         // End any active selections
         if let Some(sel) = self.selection.take() {
-            state.renderer.stop_selection(&mut instance.level, sel.end.x, sel.end.y);
+            state
+                .renderer
+                .stop_selection(&mut instance.level, sel.end.x, sel.end.y);
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
 
         let ui = assume!(state.global_logger, self.ui.clone());
         // Cancel button
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-        });
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Pop;
+            },
+        );
 
         action
     }
 
-    fn mouse_move(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState, mouse_pos: (i32, i32)) -> state::Action {
+    fn mouse_move(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         self.last_mouse = mouse_pos;
         let instance = assume!(state.global_logger, instance.as_mut());
         let (lx, ly) = state.renderer.mouse_to_level(mouse_pos.0, mouse_pos.1);
@@ -211,8 +265,16 @@ impl state::State for BuildState {
         self.pan_edge = PanEdge::empty();
         if let Some(sel) = self.selection.as_mut() {
             sel.end = mouse_loc;
-            state.renderer.move_selection(instance.player.id, &mut instance.level, self.room.borrow(), sel.end.x, sel.end.y);
-            state.ui_manager.move_tooltip("current_size", mouse_pos.0, mouse_pos.1);
+            state.renderer.move_selection(
+                instance.player.id,
+                &mut instance.level,
+                self.room.borrow(),
+                sel.end.x,
+                sel.end.y,
+            );
+            state
+                .ui_manager
+                .move_tooltip("current_size", mouse_pos.0, mouse_pos.1);
 
             // Pan the camera for the player if they are near to the edge of the screen
             if mouse_pos.0 <= EDGE_DISTANCE {
@@ -227,10 +289,19 @@ impl state::State for BuildState {
             }
 
             let area = Bound::new(sel.start, sel.end);
-            sel.tooltip.set_text(format!("{}x{}", area.width(), area.height()));
+            sel.tooltip
+                .set_text(format!("{}x{}", area.width(), area.height()));
 
-            let room = assume!(state.global_logger, instance.level.asset_manager.loader_open::<room::Loader>(self.room.borrow()));
-            if let Some(price_tag) = query!(assume!(state.global_logger, self.ui.as_ref()), price_tag).next() {
+            let room = assume!(
+                state.global_logger,
+                instance
+                    .level
+                    .asset_manager
+                    .loader_open::<room::Loader>(self.room.borrow())
+            );
+            if let Some(price_tag) =
+                query!(assume!(state.global_logger, self.ui.as_ref()), price_tag).next()
+            {
                 let cost = room.cost_for_area(area);
                 price_tag.set_property("can_afford", instance.player.get_money() >= cost);
                 if let Some(txt) = query!(price_tag, @text).next() {
@@ -242,7 +313,14 @@ impl state::State for BuildState {
         state::Action::Nothing
     }
 
-    fn key_action_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, action: keybinds::KeyAction, mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
 
         let instance = assume!(state.global_logger, instance.as_mut());
@@ -261,7 +339,12 @@ impl state::State for BuildState {
                         }
                     };
                     let text = assume!(state.global_logger, query!(content, @text).next());
-                    state.ui_manager.show_tooltip("current_size", content, mouse_pos.0, mouse_pos.1);
+                    state.ui_manager.show_tooltip(
+                        "current_size",
+                        content,
+                        mouse_pos.0,
+                        mouse_pos.1,
+                    );
                     let sel = Selection {
                         start: Location::new(lx, ly),
                         end: Location::new(lx, ly),
@@ -269,11 +352,19 @@ impl state::State for BuildState {
                     };
                     // Being rendering the selection grid and set the
                     // cursor to notify the player
-                    state.renderer.start_selection(instance.player.id, &mut instance.level, self.room.borrow(), sel.start.x, sel.start.y);
-                    state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/selection"));
+                    state.renderer.start_selection(
+                        instance.player.id,
+                        &mut instance.level,
+                        self.room.borrow(),
+                        sel.start.x,
+                        sel.start.y,
+                    );
+                    state
+                        .renderer
+                        .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/selection"));
                     self.selection = Some(sel);
                 }
-            },
+            }
 
             RoomFinishAreaSelect => {
                 // If there is a selection in progress end it
@@ -286,31 +377,46 @@ impl state::State for BuildState {
                     // Stop rendering the current selection now as
                     // it needs to stop whether the selection is
                     // successful or not.
-                    state.renderer.stop_selection(&mut instance.level, sel.end.x, sel.end.y);
+                    state
+                        .renderer
+                        .stop_selection(&mut instance.level, sel.end.x, sel.end.y);
 
                     // Attempt to place a room with the given bounds
                     let mut cmd: command::Command = command::PlaceSelection::new(
                         self.room.borrow(),
-                        sel.start, Location::new(lx, ly)
-                    ).into();
+                        sel.start,
+                        Location::new(lx, ly),
+                    )
+                    .into();
                     let mut proxy = super::GameProxy::proxy(state);
 
-                    try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                        log: &instance.log,
-                        level: &mut instance.level,
-                        engine: &instance.scripting,
-                        entities: &mut instance.entities,
-                        snapshots: &instance.snapshots,
-                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                    }), {
-                        // Success, preform the same command on the
-                        // the server and move to the next screen
-                        instance.push_command(cmd, req);
-                        return state::Action::Switch(Box::new(FinalizePlacement::new()))
-                    });
+                    try_cmd!(
+                        instance.log,
+                        cmd.execute(
+                            &mut proxy,
+                            &mut instance.player,
+                            command::CommandParams {
+                                log: &instance.log,
+                                level: &mut instance.level,
+                                engine: &instance.scripting,
+                                entities: &mut instance.entities,
+                                snapshots: &instance.snapshots,
+                                mission_handler: instance
+                                    .mission_handler
+                                    .as_ref()
+                                    .map(|v| v.borrow()),
+                            }
+                        ),
+                        {
+                            // Success, preform the same command on the
+                            // the server and move to the next screen
+                            instance.push_command(cmd, req);
+                            return state::Action::Switch(Box::new(FinalizePlacement::new()));
+                        }
+                    );
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
         state::Action::Nothing
     }
@@ -358,21 +464,29 @@ impl state::State for FinalizePlacement {
         })
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         // Ensure the player has an active room.
         // It shouldn't be possible to be in this state
         // without one.
         let room_id = match instance.player.state {
-            State::BuildRoom{active_room} => active_room,
+            State::BuildRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
         // Update the cursor and spawn the planning ui
-        state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
+        state
+            .renderer
+            .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
 
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", "room/plan_room"));
+        let ui = state
+            .ui_manager
+            .create_node(assets::ResourceKey::new("base", "room/plan_room"));
         self.ui = Some(ui.clone());
 
         // Update the room name text on the ui
@@ -381,12 +495,23 @@ impl state::State for FinalizePlacement {
                 let info = instance.level.get_room_info(room_id);
                 info.key.clone()
             };
-            let room = assume!(state.global_logger, instance.level.asset_manager.loader_open::<room::Loader>(key));
+            let room = assume!(
+                state.global_logger,
+                instance
+                    .level
+                    .asset_manager
+                    .loader_open::<room::Loader>(key)
+            );
             txt.set_text(room.name.clone());
         }
 
         let room = instance.level.get_room_info(room_id);
-        let room_info = assume!(state.global_logger, instance.asset_manager.loader_open::<room::Loader>(room.key.borrow()));
+        let room_info = assume!(
+            state.global_logger,
+            instance
+                .asset_manager
+                .loader_open::<room::Loader>(room.key.borrow())
+        );
 
         if let Some(price_tag) = query!(ui, price_tag).next() {
             let cost = room_info.cost_for_area(room.area) - room.placement_cost;
@@ -400,7 +525,9 @@ impl state::State for FinalizePlacement {
                 txt.set_text(format!("Cost: {}", cost));
             }
         }
-        state.renderer.set_lowered_region(instance.level.level_bounds);
+        state
+            .renderer
+            .set_lowered_region(instance.level.level_bounds);
         instance.level.tiles.borrow_mut().flag_all_dirty();
 
         state::Action::Nothing
@@ -412,15 +539,24 @@ impl state::State for FinalizePlacement {
         if let Some(cid) = self.ui.take() {
             state.ui_manager.remove_node(cid);
         }
-        state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
+        state
+            .renderer
+            .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
         state.renderer.clear_lowered_region();
         instance.level.tiles.borrow_mut().flag_all_dirty();
         // If the resize keybinds are bound remove
         // them.
-        state.keybinds.remove_collection(keybinds::KeyCollection::RoomResize);
+        state
+            .keybinds
+            .remove_collection(keybinds::KeyCollection::RoomResize);
     }
 
-    fn tick_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let mut x = 0.0;
         let mut y = 0.0;
         if self.pan_edge.contains(PanEdge::LEFT) {
@@ -442,12 +578,18 @@ impl state::State for FinalizePlacement {
         state::Action::Nothing
     }
 
-    fn mouse_move_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, mouse_pos: (i32, i32)) -> state::Action {
+    fn mouse_move_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         self.last_mouse = mouse_pos;
         let instance = assume!(state.global_logger, instance.as_mut());
 
         let room = match instance.player.state {
-            State::BuildRoom{active_room} => active_room,
+            State::BuildRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
@@ -457,7 +599,6 @@ impl state::State for FinalizePlacement {
         let bounds = instance.level.get_room_info(room).area;
         self.pan_edge = PanEdge::empty();
         if let Some(edges) = self.resize_edges {
-
             // Pan the camera for the player if they are near to the edge of the screen
             if mouse_pos.0 <= EDGE_DISTANCE {
                 self.pan_edge |= PanEdge::LEFT;
@@ -490,37 +631,58 @@ impl state::State for FinalizePlacement {
                 self.last_bounds_try = new_bounds;
                 let mut cmd: command::Command = command::ResizeRoom::new(new_bounds).into();
                 let mut proxy = super::GameProxy::proxy(state);
-                try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                    log: &instance.log,
-                    level: &mut instance.level,
-                    engine: &instance.scripting,
-                    entities: &mut instance.entities,
-                    snapshots: &instance.snapshots,
-                    mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                }), {
-                    instance.push_command(cmd, req);
+                try_cmd!(
+                    instance.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        command::CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        instance.push_command(cmd, req);
 
-                    let room = instance.level.get_room_info(room);
-                    let room_info = assume!(proxy.state.global_logger, instance.asset_manager.loader_open::<room::Loader>(room.key.borrow()));
-                    if let Some(price_tag) = query!(assume!(proxy.state.global_logger, self.ui.as_ref()), price_tag).next() {
-                        let cost = room_info.cost_for_area(room.area) - room.placement_cost;
-                        let cost = if cost < UniDollar(0) {
-                            UniDollar(0)
-                        } else {
-                            cost
-                        };
-                        price_tag.set_property("can_afford", instance.player.get_money() >= cost);
-                        if let Some(txt) = query!(price_tag, @text).next() {
-                            txt.set_text(format!("Cost: {}", cost));
+                        let room = instance.level.get_room_info(room);
+                        let room_info = assume!(
+                            proxy.state.global_logger,
+                            instance
+                                .asset_manager
+                                .loader_open::<room::Loader>(room.key.borrow())
+                        );
+                        if let Some(price_tag) = query!(
+                            assume!(proxy.state.global_logger, self.ui.as_ref()),
+                            price_tag
+                        )
+                        .next()
+                        {
+                            let cost = room_info.cost_for_area(room.area) - room.placement_cost;
+                            let cost = if cost < UniDollar(0) {
+                                UniDollar(0)
+                            } else {
+                                cost
+                            };
+                            price_tag
+                                .set_property("can_afford", instance.player.get_money() >= cost);
+                            if let Some(txt) = query!(price_tag, @text).next() {
+                                txt.set_text(format!("Cost: {}", cost));
+                            }
                         }
                     }
-                });
+                );
             }
         } else {
             let room = instance.level.get_room_info(room);
             let ray = state.renderer.get_mouse_ray(mouse_pos.0, mouse_pos.1);
 
-            if let Some((loc, dir)) = room.building_level.as_ref()
+            if let Some((loc, dir)) = room
+                .building_level
+                .as_ref()
                 .and_then(|v| intersect_wall(v, ray, (lx, ly)))
             {
                 if bounds.in_bounds(loc) {
@@ -533,19 +695,33 @@ impl state::State for FinalizePlacement {
             }
             // Change the cursor on grabbable edges
             let inner_bounds = bounds.inset(1);
-            state.keybinds.remove_collection(keybinds::KeyCollection::RoomResize);
+            state
+                .keybinds
+                .remove_collection(keybinds::KeyCollection::RoomResize);
             if bounds.in_bounds(mouse_loc) && !inner_bounds.in_bounds(mouse_loc) {
-                state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize"));
-                state.keybinds.add_collection(keybinds::KeyCollection::RoomResize);
+                state
+                    .renderer
+                    .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize"));
+                state
+                    .keybinds
+                    .add_collection(keybinds::KeyCollection::RoomResize);
             } else {
-                state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
+                state
+                    .renderer
+                    .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
             }
         }
 
         state::Action::Nothing
     }
 
-    fn key_action(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState, action: keybinds::KeyAction, mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
         let instance = assume!(state.global_logger, instance.as_mut());
         match action {
@@ -554,9 +730,11 @@ impl state::State for FinalizePlacement {
                 if self.resize_edges.is_some() {
                     return state::Action::Nothing;
                 }
-                state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize_active"));
+                state
+                    .renderer
+                    .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize_active"));
 
-                let room = if let State::BuildRoom{active_room} = instance.player.state {
+                let room = if let State::BuildRoom { active_room } = instance.player.state {
                     active_room
                 } else {
                     return state::Action::Nothing;
@@ -568,7 +746,9 @@ impl state::State for FinalizePlacement {
                 let room = instance.level.get_room_info(room);
                 let bounds = room.area;
 
-                if let Some((loc, dir)) = room.building_level.as_ref()
+                if let Some((loc, dir)) = room
+                    .building_level
+                    .as_ref()
                     .and_then(|v| intersect_wall(v, ray, (lx, ly)))
                 {
                     if bounds.in_bounds(loc) {
@@ -598,55 +778,85 @@ impl state::State for FinalizePlacement {
                 if !edges.is_empty() {
                     self.resize_edges = Some(edges);
                 }
-            },
+            }
 
             RoomFinishRoomResize => {
-                state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize"));
+                state
+                    .renderer
+                    .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/resize"));
                 self.resize_edges = None;
-            },
-            _ => {},
+            }
+            _ => {}
         }
         state::Action::Nothing
     }
 
-    fn ui_event_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let instance = assume!(state.global_logger, instance.as_mut());
         let ui = assume!(state.global_logger, self.ui.clone());
 
         // Cancel placement
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            let mut cmd: command::Command = command::CancelRoomPlacement::default().into();
-            let mut proxy = super::GameProxy::proxy(state);
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                action = state::Action::Pop;
-            });
-        });
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                let mut cmd: command::Command = command::CancelRoomPlacement::default().into();
+                let mut proxy = super::GameProxy::proxy(state);
+                try_cmd!(
+                    instance.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        command::CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        instance.push_command(cmd, req);
+                        action = state::Action::Pop;
+                    }
+                );
+            },
+        );
 
         // Attempt placement and continue to the next state
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            let mut cmd: command::Command = command::FinalizeRoomPlacement::default().into();
-            let mut proxy = super::GameProxy::proxy(state);
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                action = state::Action::Switch(Box::new(BuildRoom::new(false)));
-            });
-        });
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                let mut cmd: command::Command = command::FinalizeRoomPlacement::default().into();
+                let mut proxy = super::GameProxy::proxy(state);
+                try_cmd!(
+                    instance.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        command::CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        instance.push_command(cmd, req);
+                        action = state::Action::Switch(Box::new(BuildRoom::new(false)));
+                    }
+                );
+            },
+        );
         action
     }
 }
@@ -670,9 +880,7 @@ pub struct BuildRoom {
 
 #[derive(Clone, Copy)]
 enum PlacementStyleData {
-    TileRepeat {
-        last: Location,
-    }
+    TileRepeat { last: Location },
 }
 
 struct SetObject(assets::ResourceKey<'static>, bool, i16);
@@ -699,26 +907,40 @@ impl BuildRoom {
 
     /// Cancels the current object placement and updates
     /// the ui.
-    fn cancel_object_placement(&mut self, instance: &mut GameInstance, state: &mut crate::GameState) {
+    fn cancel_object_placement(
+        &mut self,
+        instance: &mut GameInstance,
+        state: &mut crate::GameState,
+    ) {
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
-        instance.level.cancel_object_placement::<entity::ClientEntityCreator>(room_id, &mut instance.entities);
+        instance
+            .level
+            .cancel_object_placement::<entity::ClientEntityCreator>(
+                room_id,
+                &mut instance.entities,
+            );
 
         // Remove the object placement controls
-        state.keybinds.remove_collection(keybinds::KeyCollection::PlaceObject);
+        state
+            .keybinds
+            .remove_collection(keybinds::KeyCollection::PlaceObject);
         self.placement_obj = None;
 
         // Re-enable the buttons (if the room if valid)
         let ui = assume!(state.global_logger, self.ui.as_ref());
         let valid = self.is_room_valid(instance, &mut state.ui_manager);
-        if let Some(btn) = query!(ui, button(id="accept")).next() {
+        if let Some(btn) = query!(ui, button(id = "accept")).next() {
             btn.set_property("disabled", !valid);
         }
-        if let Some(btn) = query!(ui, button(id="cancel")).next() {
-            btn.set_property("disabled", self.is_room_waiting(instance) || self.limited_mode);
+        if let Some(btn) = query!(ui, button(id = "cancel")).next() {
+            btn.set_property(
+                "disabled",
+                self.is_room_waiting(instance) || self.limited_mode,
+            );
         }
         // Close the placement UI window
         if let Some(place) = self.place_ui.take() {
@@ -731,17 +953,15 @@ impl BuildRoom {
             return false;
         }
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
-        instance.entities.with(|
-            em: EntityManager<'_>,
-            living: ecs::Read<Living>,
-            ro: ecs::Read<RoomOwned>,
-        | {
-            em.group_mask(&ro, |m| m.and(&living))
-                .any(|(_e, ro)| ro.room_id == room_id)
-        })
+        instance.entities.with(
+            |em: EntityManager<'_>, living: ecs::Read<Living>, ro: ecs::Read<RoomOwned>| {
+                em.group_mask(&ro, |m| m.and(&living))
+                    .any(|(_e, ro)| ro.room_id == room_id)
+            },
+        )
     }
 
     /// Returns whether the active room can be finalized in
@@ -752,13 +972,18 @@ impl BuildRoom {
             return false;
         }
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
         let room = {
             let info = instance.level.get_room_info(room_id);
-            assume!(instance.log, instance.asset_manager.loader_open::<room::Loader>(info.key.borrow()))
+            assume!(
+                instance.log,
+                instance
+                    .asset_manager
+                    .loader_open::<room::Loader>(info.key.borrow())
+            )
         };
 
         let ui = assume!(instance.log, self.ui.as_ref());
@@ -768,13 +993,18 @@ impl BuildRoom {
                 "Show all".to_owned()
             } else {
                 let room_id = match instance.player.state {
-                    State::EditRoom{active_room} => active_room,
+                    State::EditRoom { active_room } => active_room,
                     _ => panic!("Player is in the incorrect state"),
                 };
 
                 let room = {
                     let info = instance.level.get_room_info(room_id);
-                    assume!(instance.log, instance.asset_manager.loader_open::<room::Loader>(info.key.borrow()))
+                    assume!(
+                        instance.log,
+                        instance
+                            .asset_manager
+                            .loader_open::<room::Loader>(info.key.borrow())
+                    )
                 };
                 let mut total_required = 0;
                 room.check_valid_placement(&instance.level, room_id, |_id, count| {
@@ -785,7 +1015,9 @@ impl BuildRoom {
         }
 
         let mut valid = room.check_valid_placement(&instance.level, room_id, |id, count| {
-            if let Some(req) = query!(ui, object_entry(id=id as i32) > name > @text(requirement=true)).next() {
+            if let Some(req) =
+                query!(ui, object_entry(id=id as i32) > name > @text(requirement=true)).next()
+            {
                 req.set_text(format!(" (Required {})", ::std::cmp::max(0, count)));
             }
         });
@@ -801,7 +1033,10 @@ impl BuildRoom {
         };
 
         if let Some(price_tag) = query!(ui, window > price_tag).next() {
-            price_tag.set_property("can_afford", instance.player.get_money() >= cost || cost == UniDollar(0));
+            price_tag.set_property(
+                "can_afford",
+                instance.player.get_money() >= cost || cost == UniDollar(0),
+            );
             if let Some(txt) = query!(price_tag, @text).next() {
                 txt.set_text(format!("Cost: {}", cost));
             }
@@ -814,28 +1049,40 @@ impl BuildRoom {
         valid
     }
 
-    fn build_object_list(instance: &crate::GameInstance, ui: &ui::Node, room: &room::Room, required_only: bool) {
-        use std::hash::{Hasher, Hash};
+    fn build_object_list(
+        instance: &crate::GameInstance,
+        ui: &ui::Node,
+        room: &room::Room,
+        required_only: bool,
+    ) {
+        use std::hash::{Hash, Hasher};
         // Create the icons for objects that can be placed
         // in the room
         if let Some(content) = query!(ui, scroll_panel > content).next() {
-
             for c in content.children() {
                 content.remove_child(c);
             }
 
             let mut groups = FNVMap::default();
             for (id, object) in room.valid_objects.iter().enumerate() {
-                let obj = assume!(instance.log, instance.asset_manager.loader_open::<object::Loader>(object.borrow()));
-                if required_only && !room.required_objects.iter().any(|(k, _)| k.weak_match(&obj.key)) {
+                let obj = assume!(
+                    instance.log,
+                    instance
+                        .asset_manager
+                        .loader_open::<object::Loader>(object.borrow())
+                );
+                if required_only
+                    && !room
+                        .required_objects
+                        .iter()
+                        .any(|(k, _)| k.weak_match(&obj.key))
+                {
                     continue;
                 }
-                let group = groups.entry(obj.group.clone())
-                    .or_insert_with(Vec::new);
+                let group = groups.entry(obj.group.clone()).or_insert_with(Vec::new);
                 group.push((id, obj));
             }
-            let mut groups = groups.into_iter()
-                .collect::<Vec<_>>();
+            let mut groups = groups.into_iter().collect::<Vec<_>>();
             groups.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
             for (group, mut objs) in groups {
@@ -856,7 +1103,10 @@ impl BuildRoom {
                 };
                 if let Some(objects) = query!(group_node, objects).next() {
                     for (id, obj) in objs {
-                        let required = room.required_objects.iter().any(|(k, _)| k.weak_match(&obj.key));
+                        let required = room
+                            .required_objects
+                            .iter()
+                            .any(|(k, _)| k.weak_match(&obj.key));
                         let node = node! {
                             object_entry(id = id as i32) {
                                 name {
@@ -875,10 +1125,13 @@ impl BuildRoom {
                             }
                         }
                         let object = obj.key.clone();
-                        node.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                            evt.emit(SetObject(object.clone(), false, 0));
-                            true
-                        }));
+                        node.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                                evt.emit(SetObject(object.clone(), false, 0));
+                                true
+                            }),
+                        );
 
                         objects.add_child(node);
                     }
@@ -889,7 +1142,12 @@ impl BuildRoom {
     }
 }
 
-fn display_error<T>(ui_manager: &mut ui::Manager,err: server::errors::Result<T>, last_error: &mut Option<String>, mouse_pos: (i32, i32)) -> Option<T> {
+fn display_error<T>(
+    ui_manager: &mut ui::Manager,
+    err: server::errors::Result<T>,
+    last_error: &mut Option<String>,
+    mouse_pos: (i32, i32),
+) -> Option<T> {
     match err {
         Ok(val) => {
             if let Some(last) = last_error.take() {
@@ -933,51 +1191,74 @@ impl state::State for BuildRoom {
         })
     }
 
-    fn active_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn active_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         // Setup keybinds
-        state.keybinds.add_collection(keybinds::KeyCollection::BuildRoom);
+        state
+            .keybinds
+            .add_collection(keybinds::KeyCollection::BuildRoom);
 
         let instance = assume!(state.global_logger, instance.as_mut());
 
         // Handle the reply from a prompt if any
-        if let Some(ui::prompt::ConfirmResponse::Accept) = self.cancel_event.take()
-            .and_then(|v| v.recv().ok())
+        if let Some(ui::prompt::ConfirmResponse::Accept) =
+            self.cancel_event.take().and_then(|v| v.recv().ok())
         {
             // Inform the server and roll back to the previous screen
             let mut cmd: command::Command = command::CancelRoom::default().into();
             let mut proxy = super::GameProxy::proxy(state);
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                return state::Action::Switch(Box::new(FinalizePlacement::new()));
-            });
+            try_cmd!(
+                instance.log,
+                cmd.execute(
+                    &mut proxy,
+                    &mut instance.player,
+                    command::CommandParams {
+                        log: &instance.log,
+                        level: &mut instance.level,
+                        engine: &instance.scripting,
+                        entities: &mut instance.entities,
+                        snapshots: &instance.snapshots,
+                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                    }
+                ),
+                {
+                    instance.push_command(cmd, req);
+                    return state::Action::Switch(Box::new(FinalizePlacement::new()));
+                }
+            );
         }
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
         // Spawn the building ui and enable the
         // toggle walls button
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", "room/build_room"));
+        let ui = state
+            .ui_manager
+            .create_node(assets::ResourceKey::new("base", "room/build_room"));
         self.ui = Some(ui.clone());
-        if let Some(btn) = query!(ui, button(id="toggle_walls")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(ToggleWallsEvent);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(id = "toggle_walls")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(ToggleWallsEvent);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(id="show_required")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(ShowRequiredEvent);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(id = "show_required")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(ShowRequiredEvent);
+                    true
+                }),
+            );
         }
 
         let key = {
@@ -985,7 +1266,13 @@ impl state::State for BuildRoom {
             state.renderer.set_focused_region(info.area);
             info.key.clone()
         };
-        let room = assume!(state.global_logger, instance.level.asset_manager.loader_open::<room::Loader>(key.borrow()));
+        let room = assume!(
+            state.global_logger,
+            instance
+                .level
+                .asset_manager
+                .loader_open::<room::Loader>(key.borrow())
+        );
 
         // Set the name of the room on the ui window
         if let Some(txt) = query!(ui, room_name > @text).next() {
@@ -998,16 +1285,21 @@ impl state::State for BuildRoom {
         // needs objects first
         let valid = self.is_room_valid(instance, &mut state.ui_manager);
         self.waiting_for_empty = self.is_room_waiting(instance);
-        if let Some(btn) = query!(ui, button(id="accept")).next() {
+        if let Some(btn) = query!(ui, button(id = "accept")).next() {
             btn.set_property("disabled", !valid);
         }
-        if let Some(btn) = query!(ui, button(id="cancel")).next() {
+        if let Some(btn) = query!(ui, button(id = "cancel")).next() {
             btn.set_property("disabled", self.waiting_for_empty || self.limited_mode);
             if self.limited_mode {
                 let info = instance.level.get_room_info(room_id);
                 let reason = if let Err(reason) = instance.level.is_blocked_edit(room_id) {
                     reason.to_owned()
-                } else if !info.controller.is_invalid() && instance.entities.get_component::<entity::ClientBooked>(info.controller).is_some() {
+                } else if !info.controller.is_invalid()
+                    && instance
+                        .entities
+                        .get_component::<entity::ClientBooked>(info.controller)
+                        .is_some()
+                {
                     "Room is booked for courses".to_owned()
                 } else {
                     "".to_owned()
@@ -1020,13 +1312,17 @@ impl state::State for BuildRoom {
 
     fn inactive(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) {
         // Disable keybinds for building
-        state.keybinds.remove_collection(keybinds::KeyCollection::BuildRoom);
+        state
+            .keybinds
+            .remove_collection(keybinds::KeyCollection::BuildRoom);
         state.renderer.clear_focused_region();
 
         let instance = assume!(state.global_logger, instance.as_mut());
         if let Some(entities) = self.highlighted_entities.take() {
             for entity in entities {
-                instance.entities.remove_component::<entity::Highlighted>(entity);
+                instance
+                    .entities
+                    .remove_component::<entity::Highlighted>(entity);
             }
         }
 
@@ -1039,31 +1335,44 @@ impl state::State for BuildRoom {
                 state.ui_manager.remove_node(place);
             }
         }
-        state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
+        state
+            .renderer
+            .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         let ui = assume!(state.global_logger, self.ui.as_ref());
 
         if self.is_room_waiting(instance) {
-            state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
+            state
+                .renderer
+                .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/question"));
         } else if self.waiting_for_empty {
             self.waiting_for_empty = false;
-            state.renderer.set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
-            if let Some(btn) = query!(ui, button(id="cancel")).next() {
-                btn.set_property("disabled", self.is_room_waiting(instance) || self.limited_mode);
+            state
+                .renderer
+                .set_mouse_sprite(ResourceKey::new("base", "ui/cursor/normal"));
+            if let Some(btn) = query!(ui, button(id = "cancel")).next() {
+                btn.set_property(
+                    "disabled",
+                    self.is_room_waiting(instance) || self.limited_mode,
+                );
             }
         }
         let valid = self.is_room_valid(instance, &mut state.ui_manager);
-        if let Some(btn) = query!(ui, button(id="accept")).next() {
+        if let Some(btn) = query!(ui, button(id = "accept")).next() {
             if btn.get_property("disabled").unwrap_or(false) != !valid {
                 btn.set_property("disabled", !valid);
             }
         }
 
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
         let area = {
@@ -1093,7 +1402,13 @@ impl state::State for BuildRoom {
         state::Action::Nothing
     }
 
-    fn mouse_move_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, mouse_pos: (i32, i32)) -> state::Action {
+    fn mouse_move_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         if self.is_room_waiting(instance) {
@@ -1103,7 +1418,7 @@ impl state::State for BuildRoom {
         let world_pos = state.renderer.mouse_to_level(mouse_pos.0, mouse_pos.1);
 
         let room_id = match instance.player.state {
-            State::EditRoom{active_room} => active_room,
+            State::EditRoom { active_room } => active_room,
             _ => panic!("Player is in the incorrect state"),
         };
 
@@ -1111,65 +1426,103 @@ impl state::State for BuildRoom {
         // position and then update the error message if it failed
         if self.place_ui.is_some() {
             let place = assume!(state.global_logger, self.placement_obj.as_ref());
-            let err = instance.level.move_active_object::<_, entity::ClientEntityCreator>(
-                room_id, &instance.scripting,
-                &mut instance.entities,
-                world_pos, None, place.1
-            );
+            let err = instance
+                .level
+                .move_active_object::<_, entity::ClientEntityCreator>(
+                    room_id,
+                    &instance.scripting,
+                    &mut instance.entities,
+                    world_pos,
+                    None,
+                    place.1,
+                );
             display_error(&mut state.ui_manager, err, &mut self.last_error, mouse_pos);
 
             if let Some(style) = self.placement_style {
                 let do_place = match style {
-                    PlacementStyleData::TileRepeat{last} => {
+                    PlacementStyleData::TileRepeat { last } => {
                         let cur = Location::new(world_pos.0 as i32, world_pos.1 as i32);
                         if cur != last {
-                            self.placement_style = Some(PlacementStyleData::TileRepeat{last: cur});
+                            self.placement_style =
+                                Some(PlacementStyleData::TileRepeat { last: cur });
                             true
                         } else {
                             false
                         }
-                    },
+                    }
                 };
                 if do_place {
                     // Attempt to place an object and sync that placement
                     // with the server
-                    let mut cmd: command::Command = command::PlaceObject::new(place.0.clone(), world_pos, place.1).into();
+                    let mut cmd: command::Command =
+                        command::PlaceObject::new(place.0.clone(), world_pos, place.1).into();
                     let mut proxy = super::GameProxy::proxy(state);
-                    match cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                        log: &instance.log,
-                        level: &mut instance.level,
-                        engine: &instance.scripting,
-                        entities: &mut instance.entities,
-                        snapshots: &instance.snapshots,
-                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                    }) {
+                    match cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        command::CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        },
+                    ) {
                         Ok(_) => {
                             instance.push_command(cmd, req);
                             // Update the requirements list
                             self.is_room_valid(instance, &mut proxy.state.ui_manager);
 
-                            proxy.state.audio.controller
+                            proxy
+                                .state
+                                .audio
+                                .controller
                                 .borrow_mut()
                                 .play_sound(ResourceKey::new("base", "place"));
 
                             // Checked below
-                            assume!(proxy.state.global_logger, instance.level.begin_object_placement::<_, entity::ClientEntityCreator>(
-                                room_id,
-                                &instance.scripting,
-                                &mut instance.entities, place.0.borrow(),
-                                None
-                            ));
-                            let err = instance.level.move_active_object::<_, entity::ClientEntityCreator>(
-                                room_id, &instance.scripting,
-                                &mut instance.entities,
-                                world_pos, None, place.1
+                            assume!(
+                                proxy.state.global_logger,
+                                instance
+                                    .level
+                                    .begin_object_placement::<_, entity::ClientEntityCreator>(
+                                        room_id,
+                                        &instance.scripting,
+                                        &mut instance.entities,
+                                        place.0.borrow(),
+                                        None
+                                    )
                             );
-                            display_error(&mut proxy.state.ui_manager, err, &mut self.last_error, mouse_pos);
+                            let err = instance
+                                .level
+                                .move_active_object::<_, entity::ClientEntityCreator>(
+                                    room_id,
+                                    &instance.scripting,
+                                    &mut instance.entities,
+                                    world_pos,
+                                    None,
+                                    place.1,
+                                );
+                            display_error(
+                                &mut proxy.state.ui_manager,
+                                err,
+                                &mut self.last_error,
+                                mouse_pos,
+                            );
                         }
                         Err(err) => {
-                            display_error::<()>(&mut proxy.state.ui_manager, Err(err), &mut self.last_error, mouse_pos);
+                            display_error::<()>(
+                                &mut proxy.state.ui_manager,
+                                Err(err),
+                                &mut self.last_error,
+                                mouse_pos,
+                            );
 
-                            proxy.state.audio.controller
+                            proxy
+                                .state
+                                .audio
+                                .controller
                                 .borrow_mut()
                                 .play_sound(ResourceKey::new("base", "place_fail"));
                         }
@@ -1183,22 +1536,30 @@ impl state::State for BuildRoom {
 
         if let Some(entities) = self.highlighted_entities.take() {
             for entity in entities {
-                instance.entities.remove_component::<entity::Highlighted>(entity);
+                instance
+                    .entities
+                    .remove_component::<entity::Highlighted>(entity);
             }
         }
 
         if self.place_ui.is_none() {
-            if let Some(obj) = find_object_at(&state.renderer, &instance.level, room_id, mouse_pos) {
-                if let Some(entities) = instance.level.get_room_objects(room_id)
+            if let Some(obj) = find_object_at(&state.renderer, &instance.level, room_id, mouse_pos)
+            {
+                if let Some(entities) = instance
+                    .level
+                    .get_room_objects(room_id)
                     .iter()
                     .nth(obj)
                     .and_then(|v| v.as_ref())
                     .map(|v| v.1.get_entities())
                 {
                     for e in &entities {
-                        instance.entities.add_component(*e, entity::Highlighted {
-                            color: (0, 255, 255)
-                        });
+                        instance.entities.add_component(
+                            *e,
+                            entity::Highlighted {
+                                color: (0, 255, 255),
+                            },
+                        );
                     }
                     self.highlighted_entities = Some(entities);
                 }
@@ -1207,7 +1568,9 @@ impl state::State for BuildRoom {
                         state.ui_manager.hide_tooltip(&format!("object_{}", obj));
                     }
                     let content = node!(content);
-                    let buttons = state.keybinds.keys_for_action(keybinds::KeyAction::PlacementMove)
+                    let buttons = state
+                        .keybinds
+                        .keys_for_action(keybinds::KeyAction::PlacementMove)
                         .map(|(_, btn)| format!("<{}>", btn.as_string()))
                         .collect::<Vec<_>>();
                     let btn = ui::Node::new_text(buttons.join(", "));
@@ -1215,7 +1578,9 @@ impl state::State for BuildRoom {
                     content.add_child(btn);
                     content.add_child(ui::Node::new_text(" - Move"));
                     content.add_child(ui::Node::new_text("\n"));
-                    let buttons = state.keybinds.keys_for_action(keybinds::KeyAction::PlacementRemove)
+                    let buttons = state
+                        .keybinds
+                        .keys_for_action(keybinds::KeyAction::PlacementRemove)
                         .map(|(_, btn)| format!("<{}>", btn.as_string()))
                         .collect::<Vec<_>>();
                     let btn = ui::Node::new_text(buttons.join(", "));
@@ -1223,9 +1588,16 @@ impl state::State for BuildRoom {
                     content.add_child(btn);
                     content.add_child(ui::Node::new_text(" - Remove"));
 
-                    state.ui_manager.show_tooltip(&format!("object_{}", obj), content, mouse_pos.0, mouse_pos.1);
+                    state.ui_manager.show_tooltip(
+                        &format!("object_{}", obj),
+                        content,
+                        mouse_pos.0,
+                        mouse_pos.1,
+                    );
                 }
-                state.ui_manager.move_tooltip(&format!("object_{}", obj), mouse_pos.0, mouse_pos.1);
+                state
+                    .ui_manager
+                    .move_tooltip(&format!("object_{}", obj), mouse_pos.0, mouse_pos.1);
 
                 self.highlighted_object = Some(obj);
             } else {
@@ -1242,7 +1614,14 @@ impl state::State for BuildRoom {
         state::Action::Nothing
     }
 
-    fn key_action_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, action: keybinds::KeyAction, mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
         let instance = assume!(state.global_logger, instance.as_mut());
 
@@ -1259,23 +1638,33 @@ impl state::State for BuildRoom {
 
                     let world_pos = state.renderer.mouse_to_level(mouse_pos.0, mouse_pos.1);
                     let room_id = match instance.player.state {
-                        State::EditRoom{active_room} => active_room,
+                        State::EditRoom { active_room } => active_room,
                         _ => panic!("Player is in the incorrect state"),
                     };
 
                     // Attempt to rotate the object and update the error if it fails
 
-                    let err = instance.level.move_active_object::<_, entity::ClientEntityCreator>(
-                        room_id, &instance.scripting,
-                        &mut instance.entities,
-                        world_pos, None, obj.1
-                    );
+                    let err = instance
+                        .level
+                        .move_active_object::<_, entity::ClientEntityCreator>(
+                            room_id,
+                            &instance.scripting,
+                            &mut instance.entities,
+                            world_pos,
+                            None,
+                            obj.1,
+                        );
                     display_error(&mut state.ui_manager, err, &mut self.last_error, mouse_pos);
                 }
-            },
+            }
             ty @ PlacementDragStart | ty @ PlacementFinish => {
                 if let Some(obj) = self.placement_obj.as_ref() {
-                    let info = assume!(state.global_logger, instance.asset_manager.loader_open::<object::Loader>(obj.0.borrow()));
+                    let info = assume!(
+                        state.global_logger,
+                        instance
+                            .asset_manager
+                            .loader_open::<object::Loader>(obj.0.borrow())
+                    );
                     if ty == PlacementDragStart && self.close_after_place {
                         return state::Action::Nothing;
                     }
@@ -1289,55 +1678,86 @@ impl state::State for BuildRoom {
                     }
                     let world_pos = state.renderer.mouse_to_level(mouse_pos.0, mouse_pos.1);
                     let room_id = match instance.player.state {
-                        State::EditRoom{active_room} => active_room,
+                        State::EditRoom { active_room } => active_room,
                         _ => panic!("Player is in the incorrect state"),
                     };
 
                     // Attempt to place an object and sync that placement
                     // with the server
-                    let mut cmd: command::Command = command::PlaceObject::new(obj.0.clone(), world_pos, obj.1).into();
+                    let mut cmd: command::Command =
+                        command::PlaceObject::new(obj.0.clone(), world_pos, obj.1).into();
                     let mut proxy = super::GameProxy::proxy(state);
-                    match cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                        log: &instance.log,
-                        level: &mut instance.level,
-                        engine: &instance.scripting,
-                        entities: &mut instance.entities,
-                        snapshots: &instance.snapshots,
-                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                    }) {
+                    match cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        command::CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        },
+                    ) {
                         Ok(_) => {
                             instance.push_command(cmd, req);
                             // Update the requirements list
                             self.is_room_valid(instance, &mut proxy.state.ui_manager);
 
-                            proxy.state.audio.controller
+                            proxy
+                                .state
+                                .audio
+                                .controller
                                 .borrow_mut()
                                 .play_sound(ResourceKey::new("base", "place"));
 
                             // If this wasn't a object move restart the placement again
                             // with the same object type
                             if !self.close_after_place {
-
                                 // Checked below
-                                assume!(proxy.state.global_logger, instance.level.begin_object_placement::<_, entity::ClientEntityCreator>(
-                                    room_id,
-                                    &instance.scripting,
-                                    &mut instance.entities, obj.0.borrow(),
-                                    None
-                                ));
-
-                                let err = instance.level.move_active_object::<_, entity::ClientEntityCreator>(
-                                    room_id, &instance.scripting,
-                                    &mut instance.entities,
-                                    world_pos, None, obj.1
+                                assume!(
+                                    proxy.state.global_logger,
+                                    instance
+                                        .level
+                                        .begin_object_placement::<_, entity::ClientEntityCreator>(
+                                            room_id,
+                                            &instance.scripting,
+                                            &mut instance.entities,
+                                            obj.0.borrow(),
+                                            None
+                                        )
                                 );
-                                display_error(&mut proxy.state.ui_manager, err, &mut self.last_error, mouse_pos);
+
+                                let err = instance
+                                    .level
+                                    .move_active_object::<_, entity::ClientEntityCreator>(
+                                        room_id,
+                                        &instance.scripting,
+                                        &mut instance.entities,
+                                        world_pos,
+                                        None,
+                                        obj.1,
+                                    );
+                                display_error(
+                                    &mut proxy.state.ui_manager,
+                                    err,
+                                    &mut self.last_error,
+                                    mouse_pos,
+                                );
                             }
                         }
                         Err(err) => {
-                            display_error::<()>(&mut proxy.state.ui_manager, Err(err), &mut self.last_error, mouse_pos);
+                            display_error::<()>(
+                                &mut proxy.state.ui_manager,
+                                Err(err),
+                                &mut self.last_error,
+                                mouse_pos,
+                            );
 
-                            proxy.state.audio.controller
+                            proxy
+                                .state
+                                .audio
+                                .controller
                                 .borrow_mut()
                                 .play_sound(ResourceKey::new("base", "place_fail"));
 
@@ -1349,9 +1769,11 @@ impl state::State for BuildRoom {
                     // ui after a placement
                     if !self.close_after_place && ty == PlacementDragStart {
                         self.placement_style = match info.placement_style {
-                            Some(PlacementStyle::TileRepeat) => Some(PlacementStyleData::TileRepeat {
-                                last: Location::new(world_pos.0 as i32, world_pos.1 as i32),
-                            }),
+                            Some(PlacementStyle::TileRepeat) => {
+                                Some(PlacementStyleData::TileRepeat {
+                                    last: Location::new(world_pos.0 as i32, world_pos.1 as i32),
+                                })
+                            }
                             None => None,
                         };
                     }
@@ -1363,25 +1785,32 @@ impl state::State for BuildRoom {
                     self.close_after_place = false;
                     self.cancel_object_placement(instance, state);
                 }
-            },
+            }
             evt @ PlacementRemove | evt @ PlacementMove => {
                 {
                     // Find the object under the mouse (if any)
                     let obj = {
                         let room_id = match instance.player.state {
-                            State::EditRoom{active_room} => active_room,
+                            State::EditRoom { active_room } => active_room,
                             _ => panic!("Player is in the incorrect state"),
                         };
 
-                        if let Some(obj) = find_object_at(&state.renderer, &instance.level, room_id, mouse_pos) {
+                        if let Some(obj) =
+                            find_object_at(&state.renderer, &instance.level, room_id, mouse_pos)
+                        {
                             // If 'moving' the object start a placement again after
                             // removing it
                             if evt == PlacementMove {
-                                let (obj, rot) = assume!(state.global_logger, instance.level.get_room_objects(room_id)
-                                    .iter()
-                                    .nth(obj)
-                                    .and_then(|v| v.as_ref())
-                                    .map(|v| (v.0.key.clone(), v.0.rotation)));
+                                let (obj, rot) = assume!(
+                                    state.global_logger,
+                                    instance
+                                        .level
+                                        .get_room_objects(room_id)
+                                        .iter()
+                                        .nth(obj)
+                                        .and_then(|v| v.as_ref())
+                                        .map(|v| (v.0.key.clone(), v.0.rotation))
+                                );
                                 state.ui_manager.events().emit(SetObject(obj, true, rot));
                             }
                             Some(obj)
@@ -1391,37 +1820,61 @@ impl state::State for BuildRoom {
                     };
 
                     if let Some(obj) = obj {
-                        state.audio.controller
+                        state
+                            .audio
+                            .controller
                             .borrow_mut()
                             .play_sound(ResourceKey::new("base", "whoosh"));
 
                         // Inform the server of its removal if it can be removed
                         let mut cmd: command::Command = command::RemoveObject::new(obj).into();
                         let mut proxy = super::GameProxy::proxy(state);
-                        try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                            log: &instance.log,
-                            level: &mut instance.level,
-                            engine: &instance.scripting,
-                            entities: &mut instance.entities,
-                            snapshots: &instance.snapshots,
-                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                        }), {
-                            instance.push_command(cmd, req);
-                        });
+                        try_cmd!(
+                            instance.log,
+                            cmd.execute(
+                                &mut proxy,
+                                &mut instance.player,
+                                command::CommandParams {
+                                    log: &instance.log,
+                                    level: &mut instance.level,
+                                    engine: &instance.scripting,
+                                    entities: &mut instance.entities,
+                                    snapshots: &instance.snapshots,
+                                    mission_handler: instance
+                                        .mission_handler
+                                        .as_ref()
+                                        .map(|v| v.borrow()),
+                                }
+                            ),
+                            {
+                                instance.push_command(cmd, req);
+                            }
+                        );
                     }
                 }
                 // Update the requirements
                 let valid = self.is_room_valid(instance, &mut state.ui_manager);
-                if let Some(btn) = query!(assume!(state.global_logger, self.ui.as_ref()), button(id="accept")).next() {
+                if let Some(btn) = query!(
+                    assume!(state.global_logger, self.ui.as_ref()),
+                    button(id = "accept")
+                )
+                .next()
+                {
                     btn.set_property("disabled", !valid);
                 }
             }
-            _ => {},
+            _ => {}
         }
         state::Action::Nothing
     }
 
-    fn ui_event_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
 
         let instance = assume!(state.global_logger, instance.as_mut());
@@ -1430,12 +1883,18 @@ impl state::State for BuildRoom {
             return state::Action::Nothing;
         }
 
-        let (place_ui, ui) = (self.place_ui.clone(), assume!(state.global_logger, self.ui.clone()));
+        let (place_ui, ui) = (
+            self.place_ui.clone(),
+            assume!(state.global_logger, self.ui.clone()),
+        );
 
         // Cancel button for both the placement ui and the object list
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| place_ui.map_or(false, |v| v.is_same(&evt.0)), |_| {
-            self.cancel_object_placement(instance, state);
-        });
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| place_ui.map_or(false, |v| v.is_same(&evt.0)),
+            |_| {
+                self.cancel_object_placement(instance, state);
+            },
+        );
         evt.handle_event_if::<super::CancelEvent, _, _>(|evt| ui.is_same(&evt.0), |_| {
             if self.place_ui.is_none() && !self.is_room_waiting(instance) && !self.limited_mode {
                 let room_id = match instance.player.state {
@@ -1476,60 +1935,86 @@ impl state::State for BuildRoom {
         });
 
         // Done button, only enabled if the room is valid
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| ui.is_same(&evt.0), |_| {
-            if self.is_room_valid(instance, &mut state.ui_manager) {
-                self.cancel_object_placement(instance, state);
-                // Inform the server and close the ui
-                let mut proxy = super::GameProxy::proxy(state);
-                if self.limited_mode {
-                    let area = {
-                        let room_id = match instance.player.state {
-                            State::EditRoom{active_room} => active_room,
-                            _ => panic!("Player is in the incorrect state"),
-                        };
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| ui.is_same(&evt.0),
+            |_| {
+                if self.is_room_valid(instance, &mut state.ui_manager) {
+                    self.cancel_object_placement(instance, state);
+                    // Inform the server and close the ui
+                    let mut proxy = super::GameProxy::proxy(state);
+                    if self.limited_mode {
+                        let area = {
+                            let room_id = match instance.player.state {
+                                State::EditRoom { active_room } => active_room,
+                                _ => panic!("Player is in the incorrect state"),
+                            };
 
-                        let info = instance.level.get_room_info_mut(room_id);
-                        if info.building_level.as_ref().is_some() {
-                            None
-                        } else {
-                            let area = info.area;
-                            Some(area)
-                        }
-                    };
-                    let mut cmd: command::Command = command::FinalizeLimitedEdit::default().into();
-                    try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                        log: &instance.log,
-                        level: &mut instance.level,
-                        engine: &instance.scripting,
-                        entities: &mut instance.entities,
-                        snapshots: &instance.snapshots,
-                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                    }), {
-                        if let Some(area) = area {
-                            proxy.state.renderer.clear_lowered_region();
-                            for loc in area {
-                                instance.level.flag_dirty(loc.x, loc.y);
+                            let info = instance.level.get_room_info_mut(room_id);
+                            if info.building_level.as_ref().is_some() {
+                                None
+                            } else {
+                                let area = info.area;
+                                Some(area)
                             }
-                        }
-                        instance.push_command(cmd, req);
-                        action = state::Action::Pop;
-                    });
-                } else {
-                    let mut cmd: command::Command = command::FinalizeRoom::default().into();
-                    try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, command::CommandParams {
-                        log: &instance.log,
-                        level: &mut instance.level,
-                        engine: &instance.scripting,
-                        entities: &mut instance.entities,
-                        snapshots: &instance.snapshots,
-                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                    }), {
-                        instance.push_command(cmd, req);
-                        action = state::Action::Pop;
-                    });
+                        };
+                        let mut cmd: command::Command =
+                            command::FinalizeLimitedEdit::default().into();
+                        try_cmd!(
+                            instance.log,
+                            cmd.execute(
+                                &mut proxy,
+                                &mut instance.player,
+                                command::CommandParams {
+                                    log: &instance.log,
+                                    level: &mut instance.level,
+                                    engine: &instance.scripting,
+                                    entities: &mut instance.entities,
+                                    snapshots: &instance.snapshots,
+                                    mission_handler: instance
+                                        .mission_handler
+                                        .as_ref()
+                                        .map(|v| v.borrow()),
+                                }
+                            ),
+                            {
+                                if let Some(area) = area {
+                                    proxy.state.renderer.clear_lowered_region();
+                                    for loc in area {
+                                        instance.level.flag_dirty(loc.x, loc.y);
+                                    }
+                                }
+                                instance.push_command(cmd, req);
+                                action = state::Action::Pop;
+                            }
+                        );
+                    } else {
+                        let mut cmd: command::Command = command::FinalizeRoom::default().into();
+                        try_cmd!(
+                            instance.log,
+                            cmd.execute(
+                                &mut proxy,
+                                &mut instance.player,
+                                command::CommandParams {
+                                    log: &instance.log,
+                                    level: &mut instance.level,
+                                    engine: &instance.scripting,
+                                    entities: &mut instance.entities,
+                                    snapshots: &instance.snapshots,
+                                    mission_handler: instance
+                                        .mission_handler
+                                        .as_ref()
+                                        .map(|v| v.borrow()),
+                                }
+                            ),
+                            {
+                                instance.push_command(cmd, req);
+                                action = state::Action::Pop;
+                            }
+                        );
+                    }
                 }
-            }
-        });
+            },
+        );
 
         // Clicking a object in the list or when moving an object
         evt.handle_event::<SetObject, _>(|SetObject(obj, close, rotation)| {
@@ -1539,39 +2024,60 @@ impl state::State for BuildRoom {
             }
 
             let room_id = match instance.player.state {
-                State::EditRoom{active_room} => active_room,
+                State::EditRoom { active_room } => active_room,
                 _ => panic!("Player is in the incorrect state"),
             };
 
             // Start a new placement with the selected object
             {
-                instance.level.cancel_object_placement::<entity::ClientEntityCreator>(room_id, &mut instance.entities);
+                instance
+                    .level
+                    .cancel_object_placement::<entity::ClientEntityCreator>(
+                        room_id,
+                        &mut instance.entities,
+                    );
                 // Handled below
-                assume!(state.global_logger, instance.level.begin_object_placement::<_, entity::ClientEntityCreator>(
-                    room_id, &instance.scripting,
-                    &mut instance.entities,
-                    obj.borrow(), None
-                ));
+                assume!(
+                    state.global_logger,
+                    instance
+                        .level
+                        .begin_object_placement::<_, entity::ClientEntityCreator>(
+                            room_id,
+                            &instance.scripting,
+                            &mut instance.entities,
+                            obj.borrow(),
+                            None
+                        )
+                );
             }
 
             self.close_after_place = close;
 
             if self.placement_obj.is_none() {
                 // Setup the placement keybinds and ui
-                state.keybinds.add_collection(keybinds::KeyCollection::PlaceObject);
+                state
+                    .keybinds
+                    .add_collection(keybinds::KeyCollection::PlaceObject);
 
                 let ui = assume!(state.global_logger, self.ui.as_ref());
-                if let Some(btn) = query!(ui, button(id="accept")).next() {
+                if let Some(btn) = query!(ui, button(id = "accept")).next() {
                     btn.set_property("disabled", true);
                 }
-                if let Some(btn) = query!(ui, button(id="cancel")).next() {
+                if let Some(btn) = query!(ui, button(id = "cancel")).next() {
                     btn.set_property("disabled", true);
                 }
 
-                let place = state.ui_manager.create_node(assets::ResourceKey::new("base", "room/place_object"));
+                let place = state
+                    .ui_manager
+                    .create_node(assets::ResourceKey::new("base", "room/place_object"));
                 self.place_ui = Some(place.clone());
                 if let Some(title) = query!(place, title > @text).next() {
-                    let info = assume!(state.global_logger, instance.asset_manager.loader_open::<object::Loader>(obj.borrow()));
+                    let info = assume!(
+                        state.global_logger,
+                        instance
+                            .asset_manager
+                            .loader_open::<object::Loader>(obj.borrow())
+                    );
                     title.set_text(format!("Place {}", info.display_name));
                 }
 
@@ -1585,18 +2091,23 @@ impl state::State for BuildRoom {
                     instance.last_cursor_position.x,
                     instance.last_cursor_position.y,
                 );
-                let _err = instance.level.move_active_object::<_, entity::ClientEntityCreator>(
-                    room_id, &instance.scripting,
-                    &mut instance.entities,
-                    world_pos, None, place.1
-                );
+                let _err = instance
+                    .level
+                    .move_active_object::<_, entity::ClientEntityCreator>(
+                        room_id,
+                        &instance.scripting,
+                        &mut instance.entities,
+                        world_pos,
+                        None,
+                        place.1,
+                    );
             }
         });
 
         // Lowers the walls to make placing/moving easier
         evt.handle_event::<ToggleWallsEvent, _>(|_| {
             let room_id = match instance.player.state {
-                State::EditRoom{active_room} => active_room,
+                State::EditRoom { active_room } => active_room,
                 _ => panic!("Player is in the incorrect state"),
             };
             let info: &mut RoomPlacement = &mut *instance.level.get_room_info_mut(room_id);
@@ -1614,13 +2125,18 @@ impl state::State for BuildRoom {
                     "Show all".to_owned()
                 } else {
                     let room_id = match instance.player.state {
-                        State::EditRoom{active_room} => active_room,
+                        State::EditRoom { active_room } => active_room,
                         _ => panic!("Player is in the incorrect state"),
                     };
 
                     let room = {
                         let info = instance.level.get_room_info(room_id);
-                        assume!(instance.log, instance.asset_manager.loader_open::<room::Loader>(info.key.borrow()))
+                        assume!(
+                            instance.log,
+                            instance
+                                .asset_manager
+                                .loader_open::<room::Loader>(info.key.borrow())
+                        )
                     };
                     let mut total_required = 0;
                     room.check_valid_placement(&instance.level, room_id, |_id, count| {
@@ -1636,7 +2152,7 @@ impl state::State for BuildRoom {
                 }
             }
             let room_id = match instance.player.state {
-                State::EditRoom{active_room} => active_room,
+                State::EditRoom { active_room } => active_room,
                 _ => panic!("Player is in the incorrect state"),
             };
 
@@ -1644,7 +2160,13 @@ impl state::State for BuildRoom {
                 let info = instance.level.get_room_info(room_id);
                 info.key.clone()
             };
-            let room = assume!(state.global_logger, instance.level.asset_manager.loader_open::<room::Loader>(key.borrow()));
+            let room = assume!(
+                state.global_logger,
+                instance
+                    .level
+                    .asset_manager
+                    .loader_open::<room::Loader>(key.borrow())
+            );
             Self::build_object_list(instance, &ui, &room, self.required_only);
         });
         action
@@ -1653,24 +2175,35 @@ impl state::State for BuildRoom {
 
 /// Returns the object id of the object at the cursor's location
 /// if any. Walls are only checked if they aren't lowered
-fn find_object_at(renderer: &render::Renderer, level: &Level, room_id: room::Id, pos: (i32, i32)) -> Option<usize> {
-    use crate::server::level::object::ObjectPlacementAction::{WallFlag, SelectionBound};
+fn find_object_at(
+    renderer: &render::Renderer,
+    level: &Level,
+    room_id: room::Id,
+    pos: (i32, i32),
+) -> Option<usize> {
+    use crate::server::level::object::ObjectPlacementAction::{SelectionBound, WallFlag};
 
     let ray = renderer.get_mouse_ray(pos.0, pos.1);
     let world_pos = renderer.mouse_to_level(pos.0, pos.1);
 
     let lower_wall = if let Some(lvl) = level.get_room_info(room_id).building_level.as_ref() {
-        if lvl.should_lower_walls { None } else { Some(()) }
+        if lvl.should_lower_walls {
+            None
+        } else {
+            Some(())
+        }
     } else {
         Some(())
     };
     // If walls aren't lowered
     lower_wall
         // and the cursor intersects with a wall
-        .and_then(|_| if let Some(lvl) = level.get_room_info(room_id).building_level.as_ref() {
-            intersect_wall(lvl, ray, world_pos)
-        } else {
-            intersect_wall(level, ray, world_pos)
+        .and_then(|_| {
+            if let Some(lvl) = level.get_room_info(room_id).building_level.as_ref() {
+                intersect_wall(lvl, ray, world_pos)
+            } else {
+                intersect_wall(level, ray, world_pos)
+            }
         })
         // and the wall has an object that is a part of this
         // room
@@ -1684,61 +2217,75 @@ fn find_object_at(renderer: &render::Renderer, level: &Level, room_id: room::Id,
                 .filter(|v| *v != TileWallFlag::None)
                 .and_then(|iflag| {
                     // Find the object on the given wall (if any)
-                    level.get_room_objects(room_id)
+                    level
+                        .get_room_objects(room_id)
                         .iter()
                         .enumerate()
                         .rev()
                         .find(|&(_, obj)| {
-                            obj.iter()
-                                .flat_map(|v| &v.0.actions.0)
-                                .any(|action| {
-                                    // Have to check both ways as an object
-                                    // can be attached to either side of a wall
-                                    if let WallFlag{location, direction, ref flag} = *action {
-                                        let flags_same = match (iflag, flag) {
-                                            (TileWallFlag::None, &object::WallPlacementFlag::None) => true,
-                                            (TileWallFlag::Window(_), &object::WallPlacementFlag::Window{..}) => true,
-                                            (TileWallFlag::Door, &object::WallPlacementFlag::Door) => true,
-                                            _ => false,
-                                        };
-                                        return flags_same && (location == loc && direction == dir)
-                                            || (location.shift(direction) == loc && direction.reverse() == dir);
-                                    }
-                                    false
-                                })
+                            obj.iter().flat_map(|v| &v.0.actions.0).any(|action| {
+                                // Have to check both ways as an object
+                                // can be attached to either side of a wall
+                                if let WallFlag {
+                                    location,
+                                    direction,
+                                    ref flag,
+                                } = *action
+                                {
+                                    let flags_same = match (iflag, flag) {
+                                        (TileWallFlag::None, &object::WallPlacementFlag::None) => {
+                                            true
+                                        }
+                                        (
+                                            TileWallFlag::Window(_),
+                                            &object::WallPlacementFlag::Window { .. },
+                                        ) => true,
+                                        (TileWallFlag::Door, &object::WallPlacementFlag::Door) => {
+                                            true
+                                        }
+                                        _ => false,
+                                    };
+                                    return flags_same && (location == loc && direction == dir)
+                                        || (location.shift(direction) == loc
+                                            && direction.reverse() == dir);
+                                }
+                                false
+                            })
                         })
                         .map(|v| v.0)
                 })
         })
         // If we have already found an object return it
         // otherwise check placed objects in the room for a hit
-        .or_else(||
-            level.get_room_objects(room_id)
+        .or_else(|| {
+            level
+                .get_room_objects(room_id)
                 .iter()
                 .enumerate()
                 .rev()
                 .find(|&(_, obj)| {
-                    obj.iter()
-                        .flat_map(|v| &v.0.actions.0)
-                        .any(|action| {
-                            if let SelectionBound(bound) = *action {
-                                return bound.intersects_ray(ray);
-                            }
-                            false
-                        })
-
+                    obj.iter().flat_map(|v| &v.0.actions.0).any(|action| {
+                        if let SelectionBound(bound) = *action {
+                            return bound.intersects_ray(ray);
+                        }
+                        false
+                    })
                 })
                 .map(|v| v.0)
-        )
+        })
 }
 
 /// Returns the location and direction of the wall that intersects
 /// with the passed ray if one is there.
-fn intersect_wall<L: LevelView>(lvl: &L, ray: Ray, pos: (f32, f32)) -> Option<(Location, Direction)> {
+fn intersect_wall<L: LevelView>(
+    lvl: &L,
+    ray: Ray,
+    pos: (f32, f32),
+) -> Option<(Location, Direction)> {
     let loc = Location::new(pos.0 as i32, pos.1 as i32);
     // Check a few walls
-    for y in -2 .. 2 {
-        for x in -2 .. 2 {
+    for y in -2..2 {
+        for x in -2..2 {
             for dir in &[Direction::South, Direction::West] {
                 let loc = loc + (x, y);
                 if let Some(_info) = lvl.get_wall_info(loc, *dir) {
@@ -1753,16 +2300,18 @@ fn intersect_wall<L: LevelView>(lvl: &L, ray: Ray, pos: (f32, f32)) -> Option<(L
                     let fx = (ox as f32).abs();
                     let fy = (oy as f32).abs();
                     let bound = AABB {
-                        min: pos - Vector3::new(
-                            fx * (2.0 / 16.0) + (1.0 - fx) * 0.5,
-                            0.0,
-                            (1.0 - fy) * 0.5 + fy * (2.0 / 16.0)
-                        ),
-                        max: pos + Vector3::new(
-                            fx * (2.0 / 16.0) + (1.0 - fx) * 0.5,
-                            1.0,
-                            (1.0 - fy) * 0.5 + fy * (2.0 / 16.0)
-                        ),
+                        min: pos
+                            - Vector3::new(
+                                fx * (2.0 / 16.0) + (1.0 - fx) * 0.5,
+                                0.0,
+                                (1.0 - fy) * 0.5 + fy * (2.0 / 16.0),
+                            ),
+                        max: pos
+                            + Vector3::new(
+                                fx * (2.0 / 16.0) + (1.0 - fx) * 0.5,
+                                1.0,
+                                (1.0 - fy) * 0.5 + fy * (2.0 / 16.0),
+                            ),
                     };
 
                     if bound.intersects_ray(ray) {

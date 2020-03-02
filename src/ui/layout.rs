@@ -1,6 +1,5 @@
-
-use fungui::*;
 use crate::ui::*;
+use fungui::*;
 
 #[derive(Default)]
 pub(crate) struct Center {
@@ -37,9 +36,12 @@ pub static ALIGN_HEIGHT: StaticKey = StaticKey("align_height");
 impl LayoutEngine<UniverCityUI> for Center {
     type ChildData = CenterChild;
 
-    fn name() -> &'static str { "center" }
+    fn name() -> &'static str {
+        "center"
+    }
     fn style_properties<'a, F>(mut prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
         prop(ALIGN_WIDTH);
         prop(ALIGN_HEIGHT);
@@ -49,10 +51,21 @@ impl LayoutEngine<UniverCityUI> for Center {
         CenterChild::default()
     }
 
-    fn update_data(&mut self, _styles: &Styles<UniverCityUI>, _nc: &NodeChain<'_, UniverCityUI>, _rule: &Rule<UniverCityUI>) -> DirtyFlags {
+    fn update_data(
+        &mut self,
+        _styles: &Styles<UniverCityUI>,
+        _nc: &NodeChain<'_, UniverCityUI>,
+        _rule: &Rule<UniverCityUI>,
+    ) -> DirtyFlags {
         DirtyFlags::empty()
     }
-    fn update_child_data(&mut self, styles: &Styles<UniverCityUI>, nc: &NodeChain<'_, UniverCityUI>, rule: &Rule<UniverCityUI>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<UniverCityUI>,
+        nc: &NodeChain<'_, UniverCityUI>,
+        rule: &Rule<UniverCityUI>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.X => val => {
             let new = val.convert();
@@ -102,7 +115,11 @@ impl LayoutEngine<UniverCityUI> for Center {
     fn reset_unset_data(&mut self, _used_keys: &FnvHashSet<StaticKey>) -> DirtyFlags {
         DirtyFlags::empty()
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&X) && data.x.is_some() {
             data.x = None;
@@ -132,12 +149,25 @@ impl LayoutEngine<UniverCityUI> for Center {
         flags
     }
 
-    fn start_layout(&mut self, _ext: &mut NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         self.rect = current;
         current
     }
 
-    fn do_layout(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         if let Some(v) = data.width {
             current.width = v;
         } else {
@@ -151,7 +181,14 @@ impl LayoutEngine<UniverCityUI> for Center {
         current
     }
 
-    fn do_layout_end(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout_end(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         if data.align_width {
             current.x = (self.rect.width / 2) - (current.width / 2);
         } else {
@@ -167,7 +204,6 @@ impl LayoutEngine<UniverCityUI> for Center {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct Padded {
     padding: i32,
@@ -180,14 +216,18 @@ pub(crate) struct PaddedChild {
     height: Option<i32>,
 }
 
-impl <E> LayoutEngine<E> for Padded
-    where E: Extension
+impl<E> LayoutEngine<E> for Padded
+where
+    E: Extension,
 {
     type ChildData = PaddedChild;
 
-    fn name() -> &'static str { "padded" }
+    fn name() -> &'static str {
+        "padded"
+    }
     fn style_properties<'a, F>(mut prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
         prop(PADDING);
     }
@@ -196,7 +236,12 @@ impl <E> LayoutEngine<E> for Padded
         PaddedChild::default()
     }
 
-    fn update_data(&mut self, styles: &Styles<E>, nc: &NodeChain<'_, E>, rule: &Rule<E>) -> DirtyFlags {
+    fn update_data(
+        &mut self,
+        styles: &Styles<E>,
+        nc: &NodeChain<'_, E>,
+        rule: &Rule<E>,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.PADDING => val => {
             let new = val.convert().unwrap_or(0);
@@ -207,7 +252,13 @@ impl <E> LayoutEngine<E> for Padded
         });
         flags
     }
-    fn update_child_data(&mut self, styles: &Styles<E>, nc: &NodeChain<'_, E>, rule: &Rule<E>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<E>,
+        nc: &NodeChain<'_, E>,
+        rule: &Rule<E>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.X => val => {
             let new = val.convert();
@@ -248,7 +299,11 @@ impl <E> LayoutEngine<E> for Padded
         }
         flags
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&X) && data.x.is_some() {
             data.x = None;
@@ -269,11 +324,17 @@ impl <E> LayoutEngine<E> for Padded
 
         flags
     }
-    fn finish_layout(&mut self, _ext: &mut E::NodeData, mut current: Rect, _flags: DirtyFlags, children: ChildAccess<'_, Self, E>) -> Rect {
+    fn finish_layout(
+        &mut self,
+        _ext: &mut E::NodeData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+        children: ChildAccess<'_, Self, E>,
+    ) -> Rect {
         use std::cmp;
         let mut max = (0, 0);
         // TODO: Cache?
-        for i in 0 .. children.len() {
+        for i in 0..children.len() {
             let (c, _, _) = children.get(i).expect("Missing child");
             max.0 = cmp::max(max.0, c.x + c.width);
             max.1 = cmp::max(max.1, c.y + c.height);
@@ -283,7 +344,14 @@ impl <E> LayoutEngine<E> for Padded
         current
     }
 
-    fn do_layout(&mut self, _value: &NodeValue<E>, _ext: &mut E::NodeData, data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<E>,
+        _ext: &mut E::NodeData,
+        data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         current.x = self.padding + data.x.unwrap_or(0);
         current.y = self.padding + data.y.unwrap_or(0);
         data.width.map(|v| current.width = v);
@@ -307,15 +375,18 @@ pub(crate) struct TooltipChild {
 
 static PADDING: StaticKey = StaticKey("padding");
 
-
-impl <E> LayoutEngine<E> for Tooltip
-    where E: Extension
+impl<E> LayoutEngine<E> for Tooltip
+where
+    E: Extension,
 {
     type ChildData = TooltipChild;
 
-    fn name() -> &'static str { "tooltip" }
+    fn name() -> &'static str {
+        "tooltip"
+    }
     fn style_properties<'a, F>(mut prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
         prop(PADDING);
     }
@@ -324,7 +395,12 @@ impl <E> LayoutEngine<E> for Tooltip
         TooltipChild::default()
     }
 
-    fn update_data(&mut self, styles: &Styles<E>, nc: &NodeChain<'_, E>, rule: &Rule<E>) -> DirtyFlags {
+    fn update_data(
+        &mut self,
+        styles: &Styles<E>,
+        nc: &NodeChain<'_, E>,
+        rule: &Rule<E>,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.PADDING => val => {
             let new = val.convert().unwrap_or(0);
@@ -335,7 +411,13 @@ impl <E> LayoutEngine<E> for Tooltip
         });
         flags
     }
-    fn update_child_data(&mut self, styles: &Styles<E>, nc: &NodeChain<'_, E>, rule: &Rule<E>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<E>,
+        nc: &NodeChain<'_, E>,
+        rule: &Rule<E>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.X => val => {
             let new = val.convert();
@@ -376,7 +458,11 @@ impl <E> LayoutEngine<E> for Tooltip
         }
         flags
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&X) && data.x.is_some() {
             data.x = None;
@@ -397,19 +483,39 @@ impl <E> LayoutEngine<E> for Tooltip
 
         flags
     }
-    fn start_layout(&mut self, _ext: &mut E::NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, E>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut E::NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, E>,
+    ) -> Rect {
         self.parent = current;
         current
     }
 
-    fn do_layout(&mut self, _value: &NodeValue<E>, _ext: &mut E::NodeData, data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<E>,
+        _ext: &mut E::NodeData,
+        data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         data.x.map(|v| current.x = v);
         data.y.map(|v| current.y = v);
         data.width.map(|v| current.width = v);
         data.height.map(|v| current.height = v);
         current
     }
-    fn do_layout_end(&mut self, _value: &NodeValue<E>, _ext: &mut E::NodeData, _data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout_end(
+        &mut self,
+        _value: &NodeValue<E>,
+        _ext: &mut E::NodeData,
+        _data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         use std::cmp::max;
         current.x = max(current.x, self.padding);
         current.y = max(current.y, self.padding);
@@ -423,7 +529,6 @@ impl <E> LayoutEngine<E> for Tooltip
         current
     }
 }
-
 
 #[derive(Default)]
 pub struct Rows {
@@ -442,17 +547,22 @@ impl LayoutEngine<UniverCityUI> for Rows {
     }
 
     fn style_properties<'a, F>(_prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
     }
 
     fn new_child_data() -> Self::ChildData {
-        RowsChild {
-            height: None,
-        }
+        RowsChild { height: None }
     }
 
-    fn update_child_data(&mut self, styles: &Styles<UniverCityUI>, nc: &NodeChain<'_, UniverCityUI>, rule: &Rule<UniverCityUI>, data: &mut RowsChild) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<UniverCityUI>,
+        nc: &NodeChain<'_, UniverCityUI>,
+        rule: &Rule<UniverCityUI>,
+        data: &mut RowsChild,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.HEIGHT => val => {
             let new = val.convert().unwrap_or(0);
@@ -464,7 +574,11 @@ impl LayoutEngine<UniverCityUI> for Rows {
 
         flags
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut RowsChild) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut RowsChild,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&HEIGHT) && data.height.is_some() {
             data.height = None;
@@ -481,16 +595,35 @@ impl LayoutEngine<UniverCityUI> for Rows {
         }
     }
 
-    fn start_layout(&mut self, _ext: &mut NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         self.offset = 0;
         self.width = current.width;
         current
     }
-    fn finish_layout(&mut self, _ext: &mut NodeData, mut current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn finish_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         current.height = self.offset;
         current
     }
-    fn do_layout(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, data: &mut Self::ChildData, _current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        data: &mut Self::ChildData,
+        _current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         Rect {
             x: 0,
             y: self.offset,
@@ -498,12 +631,18 @@ impl LayoutEngine<UniverCityUI> for Rows {
             height: data.height.unwrap_or(16),
         }
     }
-    fn do_layout_end(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, _data: &mut Self::ChildData, current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout_end(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        _data: &mut Self::ChildData,
+        current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         self.offset += current.height;
         current
     }
 }
-
 
 #[derive(Default)]
 pub struct RowsInv {
@@ -522,17 +661,22 @@ impl LayoutEngine<UniverCityUI> for RowsInv {
     }
 
     fn style_properties<'a, F>(_prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
     }
 
     fn new_child_data() -> Self::ChildData {
-        RowsInvChild {
-            height: 16,
-        }
+        RowsInvChild { height: 16 }
     }
 
-    fn update_child_data(&mut self, styles: &Styles<UniverCityUI>, nc: &NodeChain<'_, UniverCityUI>, rule: &Rule<UniverCityUI>, data: &mut RowsInvChild) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<UniverCityUI>,
+        nc: &NodeChain<'_, UniverCityUI>,
+        rule: &Rule<UniverCityUI>,
+        data: &mut RowsInvChild,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.HEIGHT => val => {
             let new = val.convert().unwrap_or(16);
@@ -544,7 +688,11 @@ impl LayoutEngine<UniverCityUI> for RowsInv {
 
         flags
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut RowsInvChild) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut RowsInvChild,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&HEIGHT) && data.height != 16 {
             data.height = 16;
@@ -561,12 +709,25 @@ impl LayoutEngine<UniverCityUI> for RowsInv {
         }
     }
 
-    fn start_layout(&mut self, _ext: &mut NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         self.offset = current.height;
         self.width = current.width;
         current
     }
-    fn do_layout(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, data: &mut Self::ChildData, _current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        data: &mut Self::ChildData,
+        _current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         self.offset -= data.height;
         Rect {
             x: 0,
@@ -589,10 +750,7 @@ pub(crate) struct ClippedChild {
     height: Option<i32>,
 }
 
-fn apply_clip(
-    mut obj: Rect,
-    parent: Rect
-) -> Rect {
+fn apply_clip(mut obj: Rect, parent: Rect) -> Rect {
     if obj.x < 0 {
         obj.width += obj.x;
         obj.x = 0;
@@ -612,14 +770,18 @@ fn apply_clip(
     obj
 }
 
-impl <E> LayoutEngine<E> for Clipped
-    where E: Extension
+impl<E> LayoutEngine<E> for Clipped
+where
+    E: Extension,
 {
     type ChildData = ClippedChild;
 
-    fn name() -> &'static str { "clipped" }
+    fn name() -> &'static str {
+        "clipped"
+    }
     fn style_properties<'a, F>(_prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
     }
 
@@ -627,7 +789,13 @@ impl <E> LayoutEngine<E> for Clipped
         ClippedChild::default()
     }
 
-    fn update_child_data(&mut self, styles: &Styles<E>, nc: &NodeChain<'_, E>, rule: &Rule<E>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn update_child_data(
+        &mut self,
+        styles: &Styles<E>,
+        nc: &NodeChain<'_, E>,
+        rule: &Rule<E>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.X => val => {
             let new = val.convert();
@@ -663,7 +831,11 @@ impl <E> LayoutEngine<E> for Clipped
     fn reset_unset_data(&mut self, _used_keys: &FnvHashSet<StaticKey>) -> DirtyFlags {
         DirtyFlags::empty()
     }
-    fn reset_unset_child_data(&mut self, used_keys: &FnvHashSet<StaticKey>, data: &mut Self::ChildData) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        used_keys: &FnvHashSet<StaticKey>,
+        data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         if !used_keys.contains(&X) && data.x.is_some() {
             data.x = None;
@@ -684,19 +856,39 @@ impl <E> LayoutEngine<E> for Clipped
 
         flags
     }
-    fn start_layout(&mut self, _ext: &mut E::NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, E>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut E::NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, E>,
+    ) -> Rect {
         self.parent = current;
         current
     }
 
-    fn do_layout(&mut self, _value: &NodeValue<E>, _ext: &mut E::NodeData, data: &mut Self::ChildData, mut current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<E>,
+        _ext: &mut E::NodeData,
+        data: &mut Self::ChildData,
+        mut current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         data.x.map(|v| current.x = v);
         data.y.map(|v| current.y = v);
         data.width.map(|v| current.width = v);
         data.height.map(|v| current.height = v);
         apply_clip(current, self.parent)
     }
-    fn do_layout_end(&mut self, _value: &NodeValue<E>, _ext: &mut E::NodeData, _data: &mut Self::ChildData, current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout_end(
+        &mut self,
+        _value: &NodeValue<E>,
+        _ext: &mut E::NodeData,
+        _data: &mut Self::ChildData,
+        current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         apply_clip(current, self.parent)
     }
 }
@@ -733,7 +925,8 @@ impl LayoutEngine<UniverCityUI> for Grid {
     }
 
     fn style_properties<'a, F>(mut prop: F)
-        where F: FnMut(StaticKey) + 'a
+    where
+        F: FnMut(StaticKey) + 'a,
     {
         prop(SPACING);
         prop(MARGIN);
@@ -743,13 +936,15 @@ impl LayoutEngine<UniverCityUI> for Grid {
     }
 
     fn new_child_data() -> Self::ChildData {
-        GridChild {
-            x: 0,
-            y: 0,
-        }
+        GridChild { x: 0, y: 0 }
     }
 
-    fn update_data(&mut self, styles: &Styles<UniverCityUI>, nc: &NodeChain<'_, UniverCityUI>, rule: &Rule<UniverCityUI>) -> DirtyFlags {
+    fn update_data(
+        &mut self,
+        styles: &Styles<UniverCityUI>,
+        nc: &NodeChain<'_, UniverCityUI>,
+        rule: &Rule<UniverCityUI>,
+    ) -> DirtyFlags {
         let mut flags = DirtyFlags::empty();
         eval!(styles, nc, rule.SPACING => val => {
             let new = val.convert().unwrap_or(0);
@@ -823,7 +1018,11 @@ impl LayoutEngine<UniverCityUI> for Grid {
         }
         flags
     }
-    fn reset_unset_child_data(&mut self, _used_keys: &FnvHashSet<StaticKey>, _data: &mut Self::ChildData) -> DirtyFlags {
+    fn reset_unset_child_data(
+        &mut self,
+        _used_keys: &FnvHashSet<StaticKey>,
+        _data: &mut Self::ChildData,
+    ) -> DirtyFlags {
         if self.recompute {
             DirtyFlags::SIZE | DirtyFlags::POSITION
         } else {
@@ -839,7 +1038,13 @@ impl LayoutEngine<UniverCityUI> for Grid {
         }
     }
 
-    fn start_layout(&mut self, _ext: &mut NodeData, current: Rect, flags: DirtyFlags, children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn start_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        current: Rect,
+        flags: DirtyFlags,
+        children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         if self.recompute
             || flags.contains(DirtyFlags::SIZE)
             || flags.contains(DirtyFlags::LAYOUT)
@@ -855,10 +1060,8 @@ impl LayoutEngine<UniverCityUI> for Grid {
 
             let mut x = 0;
             let mut y = 0;
-            for i in 0 .. children.len() {
-                let mut c = children.get(i)
-                    .expect("len != actual child count")
-                    .2;
+            for i in 0..children.len() {
+                let mut c = children.get(i).expect("len != actual child count").2;
                 let (_, c) = c.split();
                 c.x = x;
                 c.y = y;
@@ -871,11 +1074,24 @@ impl LayoutEngine<UniverCityUI> for Grid {
         }
         current
     }
-    fn finish_layout(&mut self, _ext: &mut NodeData, current: Rect, _flags: DirtyFlags, _children: ChildAccess<'_, Self, UniverCityUI>) -> Rect {
+    fn finish_layout(
+        &mut self,
+        _ext: &mut NodeData,
+        current: Rect,
+        _flags: DirtyFlags,
+        _children: ChildAccess<'_, Self, UniverCityUI>,
+    ) -> Rect {
         self.recompute = false;
         current
     }
-    fn do_layout(&mut self, _value: &NodeValue<UniverCityUI>, _ext: &mut NodeData, data: &mut Self::ChildData, _current: Rect, _flags: DirtyFlags) -> Rect {
+    fn do_layout(
+        &mut self,
+        _value: &NodeValue<UniverCityUI>,
+        _ext: &mut NodeData,
+        data: &mut Self::ChildData,
+        _current: Rect,
+        _flags: DirtyFlags,
+    ) -> Rect {
         Rect {
             x: self.margin + data.x * (self.cell_width + self.spacing),
             y: self.margin + data.y * (self.cell_height + self.spacing),

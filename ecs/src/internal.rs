@@ -1,12 +1,12 @@
+use crate::util;
 use std::any::{Any, TypeId};
+use std::cell::UnsafeCell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::sync::{Mutex, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::cell::UnsafeCell;
-use crate::util;
 
+use super::{Component, ComponentStorage, Entity, EntityManager, SyncComponentSystem};
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use super::{Entity, EntityManager, Component, ComponentStorage, SyncComponentSystem};
 
 pub struct SystemParam<'a> {
     pub entities: &'a RwLock<EntityAllocator>,
@@ -18,7 +18,11 @@ unsafe impl<'a> Sync for SystemParam<'a> {}
 
 #[allow(clippy::type_complexity)]
 pub struct Scheduler {
-    funcs: Vec<(AtomicUsize, Vec<CType>, Box<dyn Fn(&SystemParam) + Sync + Send>)>,
+    funcs: Vec<(
+        AtomicUsize,
+        Vec<CType>,
+        Box<dyn Fn(&SystemParam) + Sync + Send>,
+    )>,
     locked: fnv::FnvHashMap<TypeId, ScheduleLock>,
     pool: ThreadPool,
     cycle: usize,
@@ -42,23 +46,28 @@ impl Scheduler {
 
     #[inline]
     pub fn add<S>(&mut self, system: S)
-        where S: for<'a> SyncComponentSystem<'a> + Sync + Send + 'static,
+    where
+        S: for<'a> SyncComponentSystem<'a> + Sync + Send + 'static,
     {
         let mut types = Vec::new();
         S::Param::collect_ctypes(&mut types);
-        self.funcs.push((AtomicUsize::new(self.cycle), types, Box::new(move |sysparam| {
-            let entities = EntityManager {
-                kill_chan: &sysparam.kill_chan,
-                entities: &sysparam.entities,
-            };
-            let param: S::Param = S::Param::create(&sysparam.components);
-            system.run(entities, param);
-        })));
+        self.funcs.push((
+            AtomicUsize::new(self.cycle),
+            types,
+            Box::new(move |sysparam| {
+                let entities = EntityManager {
+                    kill_chan: &sysparam.kill_chan,
+                    entities: &sysparam.entities,
+                };
+                let param: S::Param = S::Param::create(&sysparam.components);
+                system.run(entities, param);
+            }),
+        ));
     }
 
     pub fn run(&mut self, param: &SystemParam) {
+        use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
         use std::sync::mpsc::RecvTimeoutError;
-        use std::panic::{catch_unwind, AssertUnwindSafe, resume_unwind};
         self.cycle = self.cycle.wrapping_add(1);
         let cur_cycle = self.cycle;
         let max_tasks = self.num_threads;
@@ -76,13 +85,13 @@ impl Scheduler {
                 }
                 // If we have inactive thread and something left to process
                 // attempt to process it.
-                'consume_func:
-                while free_tasks > 0 && to_process > 0 {
+                'consume_func: while free_tasks > 0 && to_process > 0 {
                     // Search for a function which can be executed in the current state
-                    'funcs:
-                    for (id, &(ref cycle, ref types, ref f)) in funcs.iter()
-                            .enumerate()
-                            .filter(|&(_, ref v)| v.0.load(Ordering::Relaxed) != cur_cycle) {
+                    'funcs: for (id, &(ref cycle, ref types, ref f)) in funcs
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, ref v)| v.0.load(Ordering::Relaxed) != cur_cycle)
+                    {
                         for ty in types {
                             match *ty {
                                 CType::Read(id) => {
@@ -91,14 +100,14 @@ impl Scheduler {
                                     if !locked.get(&id).map_or(true, ScheduleLock::is_read) {
                                         continue 'funcs;
                                     }
-                                },
+                                }
                                 CType::Write(id) => {
                                     // Only a single writer is a allowed so if something is reading
                                     // or writing this function cannot be executed.
                                     if locked.contains_key(&id) {
                                         continue 'funcs;
                                     }
-                                },
+                                }
                             }
                         }
                         // If we make it here then the function is safe to execute. Update the locked
@@ -107,17 +116,19 @@ impl Scheduler {
                             match *ty {
                                 CType::Read(id) => {
                                     // Add another reader to the entry
-                                    if let ScheduleLock::Read(ref mut count) = *locked.entry(id).or_insert(ScheduleLock::Read(0)) {
+                                    if let ScheduleLock::Read(ref mut count) =
+                                        *locked.entry(id).or_insert(ScheduleLock::Read(0))
+                                    {
                                         *count += 1;
                                     } else {
                                         // At this point the lock should never be write
                                         unreachable!();
                                     }
-                                },
+                                }
                                 CType::Write(id) => {
                                     // Mark the entry as being write locked
                                     locked.insert(id, ScheduleLock::Write);
-                                },
+                                }
                             }
                         }
                         // Mark the function as executed this cycle so that its not checked again
@@ -165,11 +176,11 @@ impl Scheduler {
                                 } else {
                                     unreachable!();
                                 }
-                            },
+                            }
                             CType::Write(id) => {
                                 // Release the function's write lock on the type
                                 locked.remove(&id);
-                            },
+                            }
                         }
                     }
                     // Allow the thread to be used again
@@ -181,7 +192,6 @@ impl Scheduler {
             }
         });
     }
-
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -212,8 +222,9 @@ pub trait AccessorSet: Sized {
     fn create(store: &ComponentStore) -> Self;
 }
 
-impl <T> AccessorSet for T
-    where T: Accessor
+impl<T> AccessorSet for T
+where
+    T: Accessor,
 {
     fn collect_ctypes(types: &mut Vec<CType>) {
         types.push(Self::ctype());
@@ -259,7 +270,8 @@ impl EntityAllocator {
         if !self.entities.get(e.id as usize) {
             return false;
         }
-        self.generations.get(e.id as usize)
+        self.generations
+            .get(e.id as usize)
             .map_or(false, |v| *v == e.generation)
     }
 
@@ -284,7 +296,11 @@ impl EntityAllocator {
     }
 
     pub fn free(&mut self, e: Entity) -> bool {
-        if self.generations.get(e.id as usize).map_or(true, |v| *v != e.generation) {
+        if self
+            .generations
+            .get(e.id as usize)
+            .map_or(true, |v| *v != e.generation)
+        {
             return false;
         }
         self.entities.set(e.id as usize, false);
@@ -345,18 +361,25 @@ impl ComponentStore {
         if self.components.contains_key(&tid) {
             return;
         }
-        self.components.insert(tid, UnsafeCell::new(StoreWrap {
-            mask: util::BitSet::new(256),
-            max: 256,
-            store: Box::new(store),
-        }));
+        self.components.insert(
+            tid,
+            UnsafeCell::new(StoreWrap {
+                mask: util::BitSet::new(256),
+                max: 256,
+                store: Box::new(store),
+            }),
+        );
     }
 
     pub fn add_component<T: Component>(&mut self, id: u32, val: T) {
         use std::cmp;
-        let back_store = unsafe { &mut *self.components.get_mut(&TypeId::of::<T>())
-            .expect("Component type not registered")
-            .get()};
+        let back_store = unsafe {
+            &mut *self
+                .components
+                .get_mut(&TypeId::of::<T>())
+                .expect("Component type not registered")
+                .get()
+        };
         let store: &mut T::Storage = back_store.store.as_mut_any().downcast_mut().unwrap();
         if back_store.max <= id as usize {
             back_store.max = cmp::max(back_store.max * 2, id as usize + 1);
@@ -370,9 +393,13 @@ impl ComponentStore {
     }
 
     pub fn remove_component<T: Component>(&mut self, id: u32) -> Option<T> {
-        let back_store = unsafe { &mut *self.components.get_mut(&TypeId::of::<T>())
-            .expect("Component type not registered")
-            .get() };
+        let back_store = unsafe {
+            &mut *self
+                .components
+                .get_mut(&TypeId::of::<T>())
+                .expect("Component type not registered")
+                .get()
+        };
         if !T::Storage::self_bookkeeps() && !back_store.mask.get(id as usize) {
             return None;
         }
@@ -392,11 +419,15 @@ impl ComponentStore {
     }
 
     pub fn get_component<T: Component>(&self, id: u32) -> Option<&T> {
-        let back_store = unsafe { &*self.components.get(&TypeId::of::<T>())
-            .expect("Component type not registered")
-            .get() };
+        let back_store = unsafe {
+            &*self
+                .components
+                .get(&TypeId::of::<T>())
+                .expect("Component type not registered")
+                .get()
+        };
         if !T::Storage::self_bookkeeps() {
-            if back_store.mask.get(id as usize)  {
+            if back_store.mask.get(id as usize) {
                 let store: &T::Storage = back_store.store.as_any().downcast_ref().unwrap();
                 Some(unsafe { store.get_unchecked_component(id) })
             } else {
@@ -409,12 +440,15 @@ impl ComponentStore {
     }
 
     pub fn get_component_mut<T: Component>(&mut self, id: u32) -> Option<&mut T> {
-        let back_store = unsafe { &mut *self.components
-            .get_mut(&TypeId::of::<T>())
-            .expect("Component type not registered")
-            .get() };
+        let back_store = unsafe {
+            &mut *self
+                .components
+                .get_mut(&TypeId::of::<T>())
+                .expect("Component type not registered")
+                .get()
+        };
         if !T::Storage::self_bookkeeps() {
-            if back_store.mask.get(id as usize)  {
+            if back_store.mask.get(id as usize) {
                 let store: &mut T::Storage = back_store.store.as_mut_any().downcast_mut().unwrap();
                 Some(unsafe { store.get_unchecked_component_mut(id) })
             } else {

@@ -1,8 +1,7 @@
-
 use super::super::*;
-use crate::state;
-use crate::server::event;
 use crate::server::assets;
+use crate::server::event;
+use crate::state;
 
 pub struct StatsState {
     ui: Option<ui::Node>,
@@ -22,7 +21,7 @@ impl StatsState {
 }
 
 fn draw_money(instance: &mut crate::GameInstance, state: &mut crate::GameState, ui: &ui::Node) {
-    use std::cmp::{min, max};
+    use std::cmp::{max, min};
     let mut data = vec![];
     let mut min_val = UniDollar(0);
     let mut max_val = UniDollar(i64::min_value());
@@ -41,8 +40,8 @@ fn draw_money(instance: &mut crate::GameInstance, state: &mut crate::GameState, 
 
     if let Some(area) = query!(ui, graph_area).next() {
         let spacing = (max_val - min_val) / 8;
-        for i in 0 .. 9 {
-            let n = node!{
+        for i in 0..9 {
+            let n = node! {
                 graph_label(pos = i) {
                     @text(format!("- {}", max_val - spacing * i))
                 }
@@ -54,17 +53,17 @@ fn draw_money(instance: &mut crate::GameInstance, state: &mut crate::GameState, 
     let mut graph = vec![0; 650 * 400 * 4];
 
     // Draw a grid
-    for y in 0 .. 8 {
-        for x in 0 .. 13 {
-            for yy in 0 .. 50 {
-                for xx in 0 .. 50 {
+    for y in 0..8 {
+        for x in 0..13 {
+            for yy in 0..50 {
+                for xx in 0..50 {
                     let idx = (x * 50 + xx + (y * 50 + yy) * 650) * 4;
                     let (r, g, b) = if xx == 0 || xx == 49 || yy == 0 || yy == 49 {
                         (167, 202, 214)
                     } else {
                         (255, 255, 255)
                     };
-                    graph[idx    ] = r;
+                    graph[idx] = r;
                     graph[idx + 1] = g;
                     graph[idx + 2] = b;
                     graph[idx + 3] = 255;
@@ -79,15 +78,15 @@ fn draw_money(instance: &mut crate::GameInstance, state: &mut crate::GameState, 
 
         for (x, y) in draw_line(xx as i32 * 50, a, xx as i32 * 50 + 50, b) {
             if x < 650 && y < 400 {
-                for yy in 0 .. y {
+                for yy in 0..y {
                     let idx = (x + (400 - 1 - yy as usize) * 650) * 4;
-                    graph[idx    ] = 0;
+                    graph[idx] = 0;
                     graph[idx + 1] = 180;
                     graph[idx + 2] = 0;
                     graph[idx + 3] = 255;
                 }
                 let idx = (x + (400 - 1 - y as usize) * 650) * 4;
-                graph[idx    ] = 0;
+                graph[idx] = 0;
                 graph[idx + 1] = 255;
                 graph[idx + 2] = 0;
                 graph[idx + 3] = 255;
@@ -95,11 +94,20 @@ fn draw_money(instance: &mut crate::GameInstance, state: &mut crate::GameState, 
         }
     }
 
-    state.renderer.update_image(ResourceKey::new("dynamic", "650@400@graph"), 650, 400, graph);
+    state.renderer.update_image(
+        ResourceKey::new("dynamic", "650@400@graph"),
+        650,
+        400,
+        graph,
+    );
 }
 
-fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::GameState, ui: &ui::Node) {
-    use std::cmp::{min, max};
+fn draw_income_outcome(
+    instance: &mut crate::GameInstance,
+    state: &mut crate::GameState,
+    ui: &ui::Node,
+) {
+    use std::cmp::{max, min};
     let mut data = vec![];
     let mut min_val = UniDollar(0);
     let mut max_val = UniDollar(i64::min_value());
@@ -119,8 +127,8 @@ fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::Ga
 
     if let Some(area) = query!(ui, graph_area).next() {
         let spacing = (max_val - min_val) / 8;
-        for i in 0 .. 9 {
-            let n = node!{
+        for i in 0..9 {
+            let n = node! {
                 graph_label(pos = i) {
                     @text(format!("- {}", max_val - spacing * i))
                 }
@@ -132,17 +140,17 @@ fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::Ga
     let mut graph = vec![0; 650 * 400 * 4];
 
     // Draw a grid
-    for y in 0 .. 8 {
-        for x in 0 .. 13 {
-            for yy in 0 .. 50 {
-                for xx in 0 .. 50 {
+    for y in 0..8 {
+        for x in 0..13 {
+            for yy in 0..50 {
+                for xx in 0..50 {
                     let idx = (x * 50 + xx + (y * 50 + yy) * 650) * 4;
                     let (r, g, b) = if xx == 0 || xx == 49 || yy == 0 || yy == 49 {
                         (167, 202, 214)
                     } else {
                         (255, 255, 255)
                     };
-                    graph[idx    ] = r;
+                    graph[idx] = r;
                     graph[idx + 1] = g;
                     graph[idx + 2] = b;
                     graph[idx + 3] = 255;
@@ -160,15 +168,15 @@ fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::Ga
 
         for (x, y) in draw_line(xx as i32 * 50, a, xx as i32 * 50 + 50, b) {
             if x < 650 && y < 400 {
-                for yy in mid_point .. y {
+                for yy in mid_point..y {
                     let idx = (x + (400 - 1 - yy as usize) * 650) * 4;
-                    graph[idx    ] = 0;
+                    graph[idx] = 0;
                     graph[idx + 1] = 180;
                     graph[idx + 2] = 0;
                     graph[idx + 3] = 255;
                 }
                 let idx = (x + (400 - 1 - y as usize) * 650) * 4;
-                graph[idx    ] = 0;
+                graph[idx] = 0;
                 graph[idx + 1] = 255;
                 graph[idx + 2] = 0;
                 graph[idx + 3] = 255;
@@ -180,15 +188,15 @@ fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::Ga
 
         for (x, y) in draw_line(xx as i32 * 50, a, xx as i32 * 50 + 50, b) {
             if x < 650 && y < 400 {
-                for yy in y .. mid_point {
+                for yy in y..mid_point {
                     let idx = (x + (400 - 1 - yy as usize) * 650) * 4;
-                    graph[idx    ] = 180;
+                    graph[idx] = 180;
                     graph[idx + 1] = 0;
                     graph[idx + 2] = 0;
                     graph[idx + 3] = 255;
                 }
                 let idx = (x + (400 - 1 - y as usize) * 650) * 4;
-                graph[idx    ] = 255;
+                graph[idx] = 255;
                 graph[idx + 1] = 0;
                 graph[idx + 2] = 0;
                 graph[idx + 3] = 255;
@@ -196,7 +204,12 @@ fn draw_income_outcome(instance: &mut crate::GameInstance, state: &mut crate::Ga
         }
     }
 
-    state.renderer.update_image(ResourceKey::new("dynamic", "650@400@graph"), 650, 400, graph);
+    state.renderer.update_image(
+        ResourceKey::new("dynamic", "650@400@graph"),
+        650,
+        400,
+        graph,
+    );
 }
 
 fn draw_students(instance: &mut crate::GameInstance, state: &mut crate::GameState, ui: &ui::Node) {
@@ -218,8 +231,8 @@ fn draw_students(instance: &mut crate::GameInstance, state: &mut crate::GameStat
 
     if let Some(area) = query!(ui, graph_area).next() {
         let spacing = (max_val - min_val) / 8;
-        for i in 0 .. 9u32 {
-            let n = node!{
+        for i in 0..9u32 {
+            let n = node! {
                 graph_label(pos = i as i32) {
                     @text(format!("- {}", max_val - spacing * i))
                 }
@@ -231,17 +244,17 @@ fn draw_students(instance: &mut crate::GameInstance, state: &mut crate::GameStat
     let mut graph = vec![0; 650 * 400 * 4];
 
     // Draw a grid
-    for y in 0 .. 8 {
-        for x in 0 .. 13 {
-            for yy in 0 .. 50 {
-                for xx in 0 .. 50 {
+    for y in 0..8 {
+        for x in 0..13 {
+            for yy in 0..50 {
+                for xx in 0..50 {
                     let idx = (x * 50 + xx + (y * 50 + yy) * 650) * 4;
                     let (r, g, b) = if xx == 0 || xx == 49 || yy == 0 || yy == 49 {
                         (167, 202, 214)
                     } else {
                         (255, 255, 255)
                     };
-                    graph[idx    ] = r;
+                    graph[idx] = r;
                     graph[idx + 1] = g;
                     graph[idx + 2] = b;
                     graph[idx + 3] = 255;
@@ -256,15 +269,15 @@ fn draw_students(instance: &mut crate::GameInstance, state: &mut crate::GameStat
 
         for (x, y) in draw_line(xx as i32 * 50, a, xx as i32 * 50 + 50, b) {
             if x < 650 && y < 400 {
-                for yy in 0 .. y {
+                for yy in 0..y {
                     let idx = (x + (400 - 1 - yy as usize) * 650) * 4;
-                    graph[idx    ] = 180;
+                    graph[idx] = 180;
                     graph[idx + 1] = 180;
                     graph[idx + 2] = 0;
                     graph[idx + 3] = 255;
                 }
                 let idx = (x + (400 - 1 - y as usize) * 650) * 4;
-                graph[idx    ] = 255;
+                graph[idx] = 255;
                 graph[idx + 1] = 255;
                 graph[idx + 2] = 0;
                 graph[idx + 3] = 255;
@@ -272,7 +285,12 @@ fn draw_students(instance: &mut crate::GameInstance, state: &mut crate::GameStat
         }
     }
 
-    state.renderer.update_image(ResourceKey::new("dynamic", "650@400@graph"), 650, 400, graph);
+    state.renderer.update_image(
+        ResourceKey::new("dynamic", "650@400@graph"),
+        650,
+        400,
+        graph,
+    );
 }
 
 fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState, ui: &ui::Node) {
@@ -280,9 +298,7 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
     let min_val = 0;
     let mut max_val = u32::min_value();
     for hist in &instance.player.history {
-        let total: u32 = hist.grades.iter()
-            .cloned()
-            .sum();
+        let total: u32 = hist.grades.iter().cloned().sum();
         max_val = max(max_val, total);
     }
     if min_val == max_val {
@@ -292,8 +308,8 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
 
     if let Some(area) = query!(ui, graph_area).next() {
         let spacing = (max_val - min_val) / 8;
-        for i in 0 .. 9u32 {
-            let n = node!{
+        for i in 0..9u32 {
+            let n = node! {
                 graph_label(pos = i as i32) {
                     @text(format!("- {}", max_val - spacing * i))
                 }
@@ -305,17 +321,17 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
     let mut graph = vec![0; 650 * 400 * 4];
 
     // Draw a grid
-    for y in 0 .. 8 {
-        for x in 0 .. 13 {
-            for yy in 0 .. 50 {
-                for xx in 0 .. 50 {
+    for y in 0..8 {
+        for x in 0..13 {
+            for yy in 0..50 {
+                for xx in 0..50 {
                     let idx = (x * 50 + xx + (y * 50 + yy) * 650) * 4;
                     let (r, g, b) = if xx == 0 || xx == 49 || yy == 0 || yy == 49 {
                         (167, 202, 214)
                     } else {
                         (255, 255, 255)
                     };
-                    graph[idx    ] = r;
+                    graph[idx] = r;
                     graph[idx + 1] = g;
                     graph[idx + 2] = b;
                 }
@@ -336,8 +352,10 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
         let mut offset_b = 0;
 
         for &(grade, rr, gg, bb) in GRADES {
-            let a = f64::from(offset_a + data[0].grades[grade.as_index()] - min_val) / f64::from(max_val - min_val);
-            let b = f64::from(offset_b + data[1].grades[grade.as_index()] - min_val) / f64::from(max_val - min_val);
+            let a = f64::from(offset_a + data[0].grades[grade.as_index()] - min_val)
+                / f64::from(max_val - min_val);
+            let b = f64::from(offset_b + data[1].grades[grade.as_index()] - min_val)
+                / f64::from(max_val - min_val);
             offset_a += data[0].grades[grade.as_index()];
             offset_b += data[1].grades[grade.as_index()];
             let a = (399.0 * a) as i32;
@@ -345,10 +363,10 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
 
             for (x, y) in draw_line(xx as i32 * 50, a, xx as i32 * 50 + 50, b) {
                 if x < 650 && y < 400 {
-                    for yy in 0 ..= y {
+                    for yy in 0..=y {
                         let idx = (x + (400 - 1 - yy as usize) * 650) * 4;
                         if graph[idx + 3] == 0 {
-                            graph[idx    ] = rr;
+                            graph[idx] = rr;
                             graph[idx + 1] = gg;
                             graph[idx + 2] = bb;
                             graph[idx + 3] = 255;
@@ -363,7 +381,12 @@ fn draw_grades(instance: &mut crate::GameInstance, state: &mut crate::GameState,
         data[3] = 255;
     }
 
-    state.renderer.update_image(ResourceKey::new("dynamic", "650@400@graph"), 650, 400, graph);
+    state.renderer.update_image(
+        ResourceKey::new("dynamic", "650@400@graph"),
+        650,
+        400,
+        graph,
+    );
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -394,35 +417,53 @@ impl state::State for StatsState {
         })
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", "manage/stats"));
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(assets::ResourceKey::new("base", "manage/stats"));
         self.ui = Some(ui.clone());
 
         let instance = assume!(state.global_logger, instance.as_mut());
 
-        if let Some(btn) = query!(ui, button(tab="money")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(Tab::Money);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(tab = "money")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(Tab::Money);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(tab="income")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(Tab::Income);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(tab = "income")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(Tab::Income);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(tab="students")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(Tab::Students);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(tab = "students")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(Tab::Students);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(tab="grades")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(Tab::Grades);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(tab = "grades")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(Tab::Grades);
+                    true
+                }),
+            );
         }
 
         draw_money(instance, state, &ui);
@@ -432,7 +473,11 @@ impl state::State for StatsState {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         self.next_update -= state.delta;
 
         let instance = assume!(state.global_logger, instance.as_mut());
@@ -459,35 +504,52 @@ impl state::State for StatsState {
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<super::CloseWindowOthers, _, _>(|evt| {
-            // Handle in event_if in order to not consume the event and let
-            // other windows read it too
-            if !evt.0.is_same(&ui) {
+        evt.handle_event_if::<super::CloseWindowOthers, _, _>(
+            |evt| {
+                // Handle in event_if in order to not consume the event and let
+                // other windows read it too
+                if !evt.0.is_same(&ui) {
+                    action = state::Action::Pop;
+                }
+                false
+            },
+            |_| {},
+        );
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
                 action = state::Action::Pop;
-            }
-            false
-        }, |_| {});
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-        });
+            },
+        );
         evt.handle_event::<Tab, _>(|tab| {
             self.tab = tab;
             // Force a redraw
             self.next_update = -1.0;
-            if let Some(btn) = query!(ui, button(selected=true)).next() {
+            if let Some(btn) = query!(ui, button(selected = true)).next() {
                 btn.set_property("selected", false);
             }
-            if let Some(btn) = query!(ui, button(tab=tab.name())).next() {
+            if let Some(btn) = query!(ui, button(tab = tab.name())).next() {
                 btn.set_property("selected", true);
             }
         });
         action
     }
 
-    fn key_action(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, action: keybinds::KeyAction, _mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        _mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
 
         match action {
@@ -497,31 +559,30 @@ impl state::State for StatsState {
     }
 }
 
-fn draw_line(x1: i32, y1: i32, x2: i32, y2: i32) -> impl Iterator<Item=(usize, usize)> {
+fn draw_line(x1: i32, y1: i32, x2: i32, y2: i32) -> impl Iterator<Item = (usize, usize)> {
     let dx = 50;
     let dy = (y2 - y1).abs();
     let sx = 1;
     let sy = if y1 < y2 { 1 } else { -1 };
     let error = (if dx > dy { dx } else { dy }) / 2;
 
-    ::std::iter::repeat(())
-        .scan((x1, y1, error), move |state, _| {
-            if state.0 >= x2 && state.1 * sy >= y2 * sy {
-                None
-            } else {
-                let res = (state.0 as usize, state.1 as usize);
+    ::std::iter::repeat(()).scan((x1, y1, error), move |state, _| {
+        if state.0 >= x2 && state.1 * sy >= y2 * sy {
+            None
+        } else {
+            let res = (state.0 as usize, state.1 as usize);
 
-                let err = state.2;
-                if err > -dx {
-                    state.2 -= dy;
-                    state.0 += sx;
-                }
-                if err < dy {
-                    state.2 += dx;
-                    state.1 += sy;
-                }
-
-                Some(res)
+            let err = state.2;
+            if err > -dx {
+                state.2 -= dy;
+                state.0 += sx;
             }
-        })
+            if err < dy {
+                state.2 += dx;
+                state.1 += sy;
+            }
+
+            Some(res)
+        }
+    })
 }

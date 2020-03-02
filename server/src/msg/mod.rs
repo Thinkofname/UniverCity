@@ -11,14 +11,9 @@ pub struct MessageBuilder {
 }
 
 impl MessageBuilder {
-
     /// Changes the color of the following parts
     pub fn color(mut self, r: u8, g: u8, b: u8) -> Self {
-        self.color = Some(MsgColor {
-            r,
-            g,
-            b,
-        });
+        self.color = Some(MsgColor { r, g, b });
         self
     }
 
@@ -53,9 +48,7 @@ impl MessageBuilder {
 
     /// Builds the message
     pub fn build(self) -> Message {
-        Message {
-            parts: self.parts,
-        }
+        Message { parts: self.parts }
     }
 }
 

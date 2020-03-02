@@ -1,15 +1,15 @@
 //! A image loader that loads images in the background whilst
 //! initially returning a usable template if possible
 
-use std::thread;
-use std::sync::mpsc;
-use std::sync::{Mutex, Condvar, Arc};
 use std::mem;
+use std::sync::mpsc;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
 
-use png;
-use crate::server::assets;
 use crate::errors;
 use crate::prelude::*;
+use crate::server::assets;
+use png;
 
 /// Loads png assets from the asset manager
 pub enum Loader {}
@@ -18,7 +18,7 @@ type FutureData = (assets::ResourceKey<'static>, Mutex<FutureInner>, Condvar);
 
 struct ImgInfo {
     reader: png::Reader<assets::Asset>,
-    info: png::OutputInfo
+    info: png::OutputInfo,
 }
 
 pub struct LoaderData {
@@ -27,10 +27,12 @@ pub struct LoaderData {
 }
 
 macro_rules! try_task {
-    ($task:expr, $e:expr) => (
-        try_task!($task, $e, { continue; })
-    );
-    ($task:expr, $e:expr, $ret:expr) => (
+    ($task:expr, $e:expr) => {
+        try_task!($task, $e, {
+            continue;
+        })
+    };
+    ($task:expr, $e:expr, $ret:expr) => {
         match { $e } {
             Ok(val) => val,
             Err(err) => {
@@ -42,12 +44,12 @@ macro_rules! try_task {
                 $ret;
             }
         }
-    )
+    };
 }
 
 impl Loader {
     fn thread(recv: mpsc::Receiver<(ImgInfo, Arc<FutureData>)>) {
-        while let Ok((ImgInfo{mut reader, info}, task)) = recv.recv() {
+        while let Ok((ImgInfo { mut reader, info }, task)) = recv.recv() {
             let mut buf = vec![0; info.buffer_size()];
             try_task!(task, reader.next_frame(&mut buf));
             let buf = match info.color_type {
@@ -73,7 +75,7 @@ impl Loader {
                         cou[3] = if alpha { cin[1] } else { 255 };
                     }
                     out
-                },
+                }
                 png::ColorType::Indexed => unreachable!(),
             };
             {
@@ -89,7 +91,7 @@ impl Loader {
     }
 }
 
-impl <'a> assets::AssetLoader<'a> for Loader {
+impl<'a> assets::AssetLoader<'a> for Loader {
     type LoaderData = LoaderData;
     type Key = assets::ResourceKey<'a>;
     type Return = ImageFuture;
@@ -103,32 +105,42 @@ impl <'a> assets::AssetLoader<'a> for Loader {
         }
     }
 
-    fn load(data: &mut Self::LoaderData, assets: &assets::AssetManager, key: assets::ResourceKey<'_>) -> server::UResult<Self::Return> {
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &assets::AssetManager,
+        key: assets::ResourceKey<'_>,
+    ) -> server::UResult<Self::Return> {
         let task = Arc::new((
             key.borrow().into_owned(),
             Mutex::new(FutureInner {
                 state: State::Loading,
             }),
-            Condvar::new()
+            Condvar::new(),
         ));
-        let ret = ImageFuture {
-            inner: task,
-        };
+        let ret = ImageFuture { inner: task };
 
         // Read the header here
-        let file = try_task!(ret.inner, assets.open_from_pack(key.module_key(), &format!("textures/{}.png", key.resource())), return Ok(ret));
+        let file = try_task!(
+            ret.inner,
+            assets.open_from_pack(
+                key.module_key(),
+                &format!("textures/{}.png", key.resource())
+            ),
+            return Ok(ret)
+        );
         let decoder = png::Decoder::new(file);
         let (info, reader) = try_task!(ret.inner, decoder.read_info(), return Ok(ret));
         {
             let mut inner = ret.inner.1.lock().expect("Failed to lock task");
-            inner.state = State::Header(
-                info.width,
-                info.height,
-            );
+            inner.state = State::Header(info.width, info.height);
             ret.inner.2.notify_all();
         }
 
-        assume!(data.log, data.task_send.send((ImgInfo{reader, info}, ret.inner.clone())));
+        assume!(
+            data.log,
+            data.task_send
+                .send((ImgInfo { reader, info }, ret.inner.clone()))
+        );
         Ok(ret)
     }
 }
@@ -154,21 +166,20 @@ struct FutureInner {
 }
 
 impl ImageFuture {
-
     /// Returns a completed image future
     pub fn completed(width: u32, height: u32, data: Vec<u8>) -> ImageFuture {
         let task = Arc::new((
             ResourceKey::new("fake", "fake"),
             Mutex::new(FutureInner {
                 state: State::Done(Image {
-                    width, height, data,
+                    width,
+                    height,
+                    data,
                 }),
             }),
-            Condvar::new()
+            Condvar::new(),
         ));
-        ImageFuture {
-            inner: task,
-        }
+        ImageFuture { inner: task }
     }
 
     /// Returns the resource key that this image is being loaded
@@ -197,25 +208,25 @@ impl ImageFuture {
             match mem::replace(&mut data.state, State::Broken) {
                 State::Header(w, h) => {
                     data.state = State::Header(w, h);
-                    return Some((w, h))
-                },
+                    return Some((w, h));
+                }
                 State::Taken(w, h) => {
                     data.state = State::Taken(w, h);
-                    return Some((w, h))
-                },
+                    return Some((w, h));
+                }
                 State::Done(img) => {
                     let dims = (img.width, img.height);
                     data.state = State::Done(img);
-                    return Some(dims)
-                },
+                    return Some(dims);
+                }
                 State::Error(err) => {
                     data.state = State::Error(err);
                     return None;
-                },
+                }
                 State::Broken => panic!("Already errored"),
                 orig => {
                     data.state = orig;
-                },
+                }
             }
             data = self.inner.2.wait(data).expect("Failed to lock task");
         }
@@ -234,7 +245,7 @@ impl ImageFuture {
             orig => {
                 data.state = orig;
                 None
-            },
+            }
         }
     }
 
@@ -248,16 +259,14 @@ impl ImageFuture {
             match mem::replace(&mut data.state, State::Broken) {
                 State::Done(img) => {
                     data.state = State::Taken(img.width, img.height);
-                    return Ok(img)
-                },
-                State::Taken(_, _) => {
-                    panic!("Image already taken")
+                    return Ok(img);
                 }
+                State::Taken(_, _) => panic!("Image already taken"),
                 State::Error(err) => return Err(err),
                 State::Broken => panic!("Already errored"),
                 orig => {
                     data.state = orig;
-                },
+                }
             }
             data = self.inner.2.wait(data).expect("Failed to lock task");
         }
@@ -272,7 +281,7 @@ impl ImageFuture {
             orig => {
                 data.state = orig;
                 Ok(())
-            },
+            }
         }
     }
 }

@@ -1,20 +1,22 @@
+extern crate cgmath;
 extern crate libc;
 extern crate model;
-extern crate cgmath;
 
-use std::ffi;
-use std::marker::PhantomData;
 use std::borrow::Cow;
-use std::fs;
-use std::mem;
-use std::ptr;
-use std::path::Path;
 use std::collections::HashMap;
+use std::ffi;
+use std::fs;
+use std::marker::PhantomData;
+use std::mem;
+use std::path::Path;
+use std::ptr;
 
-#[allow(dead_code,
-        non_camel_case_types,
-        non_upper_case_globals,
-        non_snake_case)]
+#[allow(
+    dead_code,
+    non_camel_case_types,
+    non_upper_case_globals,
+    non_snake_case
+)]
 mod assimp {
     include!(concat!("assimp.rs"));
 }
@@ -30,22 +32,20 @@ impl Scene {
             let scene = assimp::aiImportFile(
                 name.as_ptr(),
                 assimp::aiProcess_Triangulate
-                | assimp::aiProcess_JoinIdenticalVertices
-                | assimp::aiProcess_LimitBoneWeights
-                | assimp::aiProcess_ImproveCacheLocality
-                | assimp::aiProcess_TransformUVCoords
-                | assimp::aiProcess_FlipUVs
-                | assimp::aiProcess_FlipWindingOrder
-                | assimp::aiProcess_MakeLeftHanded
+                    | assimp::aiProcess_JoinIdenticalVertices
+                    | assimp::aiProcess_LimitBoneWeights
+                    | assimp::aiProcess_ImproveCacheLocality
+                    | assimp::aiProcess_TransformUVCoords
+                    | assimp::aiProcess_FlipUVs
+                    | assimp::aiProcess_FlipWindingOrder
+                    | assimp::aiProcess_MakeLeftHanded,
             );
             if scene.is_null() {
                 let err = ffi::CStr::from_ptr(assimp::aiGetErrorString());
                 panic!("import_file: {}", err.to_string_lossy());
             }
 
-            Scene {
-                scene: scene,
-            }
+            Scene { scene: scene }
         }
     }
 
@@ -53,7 +53,7 @@ impl Scene {
         unsafe {
             let root = (*self.scene).mRootNode;
 
-            for off in 0 .. (*root).mNumChildren {
+            for off in 0..(*root).mNumChildren {
                 let child = *(*root).mChildren.offset(off as isize);
                 if (*child).mNumMeshes == 1 {
                     let mut mat = (*child).mTransformation;
@@ -69,7 +69,7 @@ impl Scene {
         }
     }
 
-    fn meshes<'a>(&'a self) -> impl Iterator<Item=Mesh<'a>> + 'a {
+    fn meshes<'a>(&'a self) -> impl Iterator<Item = Mesh<'a>> + 'a {
         unsafe {
             AIter {
                 count: ((*self.scene).mNumMeshes) as isize,
@@ -81,7 +81,7 @@ impl Scene {
         }
     }
 
-    fn animations<'a>(&'a self) -> impl Iterator<Item=Animation<'a>> + 'a {
+    fn animations<'a>(&'a self) -> impl Iterator<Item = Animation<'a>> + 'a {
         unsafe {
             AIter {
                 count: ((*self.scene).mNumAnimations) as isize,
@@ -97,23 +97,33 @@ impl Scene {
         unsafe {
             let mat = *(*self.scene).mMaterials.offset(idx as isize);
             let count = assimp::aiGetMaterialTextureCount(mat, assimp::aiTextureType_DIFFUSE);
-            for idx in 0 .. count {
+            for idx in 0..count {
                 let mut name: assimp::aiString = Default::default();
                 if assimp::aiGetMaterialTexture(
-                    mat, assimp::aiTextureType_DIFFUSE,
-                    idx, &mut name,
-                    ptr::null_mut(), ptr::null_mut(),
-                    ptr::null_mut(), ptr::null_mut(),
-                    ptr::null_mut(), ptr::null_mut()
-                ) != 0 {
+                    mat,
+                    assimp::aiTextureType_DIFFUSE,
+                    idx,
+                    &mut name,
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                    ptr::null_mut(),
+                ) != 0
+                {
                     panic!("Error")
                 }
                 let name = ffi::CStr::from_ptr(name.data.as_ptr());
                 let name = name.to_string_lossy();
-                let pos = name.find("assets/base/base/textures/")
-                    .expect(&format!("Texture must be in the textures folder: {:?}", name));
+                let pos = name.find("assets/base/base/textures/").expect(&format!(
+                    "Texture must be in the textures folder: {:?}",
+                    name
+                ));
 
-                return Some(name[pos + "assets/base/base/textures/".len()..name.len() - 4].to_owned());
+                return Some(
+                    name[pos + "assets/base/base/textures/".len()..name.len() - 4].to_owned(),
+                );
             }
             None
         }
@@ -121,26 +131,35 @@ impl Scene {
 
     fn texture(&self) -> String {
         unsafe {
-            for i in 0 .. (*self.scene).mNumMaterials {
+            for i in 0..(*self.scene).mNumMaterials {
                 let mat = *(*self.scene).mMaterials.offset(i as isize);
                 let count = assimp::aiGetMaterialTextureCount(mat, assimp::aiTextureType_DIFFUSE);
-                for idx in 0 .. count {
+                for idx in 0..count {
                     let mut name: assimp::aiString = Default::default();
                     if assimp::aiGetMaterialTexture(
-                            mat, assimp::aiTextureType_DIFFUSE,
-                            idx, &mut name,
-                            ptr::null_mut(), ptr::null_mut(),
-                            ptr::null_mut(), ptr::null_mut(),
-                            ptr::null_mut(), ptr::null_mut()
-                    ) != 0 {
+                        mat,
+                        assimp::aiTextureType_DIFFUSE,
+                        idx,
+                        &mut name,
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                        ptr::null_mut(),
+                    ) != 0
+                    {
                         panic!("Error")
                     }
                     let name = ffi::CStr::from_ptr(name.data.as_ptr());
                     let name = name.to_string_lossy();
-                    let pos = name.find("assets/base/base/textures/")
-                        .expect(&format!("Texture must be in the textures folder: {:?}", name));
+                    let pos = name.find("assets/base/base/textures/").expect(&format!(
+                        "Texture must be in the textures folder: {:?}",
+                        name
+                    ));
 
-                    return name[pos + "assets/base/base/textures/".len()..name.len() - 4].to_owned();
+                    return name[pos + "assets/base/base/textures/".len()..name.len() - 4]
+                        .to_owned();
                 }
             }
             panic!("Missing texture")
@@ -164,8 +183,9 @@ struct AIter<T, F, R> {
     _ret: PhantomData<R>,
 }
 
-impl <T, F, R> Iterator for AIter<T, F, R>
-    where F: Fn(*mut T) -> R,
+impl<T, F, R> Iterator for AIter<T, F, R>
+where
+    F: Fn(*mut T) -> R,
 {
     type Item = R;
 
@@ -188,7 +208,7 @@ struct Mesh<'a> {
     _life: PhantomData<&'a ()>,
 }
 
-impl <'a> Mesh<'a> {
+impl<'a> Mesh<'a> {
     fn from(mdl: *mut *mut assimp::aiMesh) -> Mesh<'a> {
         Mesh {
             mesh: unsafe { *mdl },
@@ -204,12 +224,10 @@ impl <'a> Mesh<'a> {
     }
 
     fn mat_index(&self) -> usize {
-        unsafe {
-            (*self.mesh).mMaterialIndex as usize
-        }
+        unsafe { (*self.mesh).mMaterialIndex as usize }
     }
 
-    fn verts(&'a self) -> impl Iterator<Item=Vector> + 'a {
+    fn verts(&'a self) -> impl Iterator<Item = Vector> + 'a {
         unsafe {
             AIter {
                 count: ((*self.mesh).mNumVertices) as isize,
@@ -221,7 +239,7 @@ impl <'a> Mesh<'a> {
         }
     }
 
-    fn normals(&'a self) -> impl Iterator<Item=Vector> + 'a {
+    fn normals(&'a self) -> impl Iterator<Item = Vector> + 'a {
         unsafe {
             AIter {
                 count: ((*self.mesh).mNumVertices) as isize,
@@ -233,7 +251,7 @@ impl <'a> Mesh<'a> {
         }
     }
 
-    fn uvcoords(&'a self) -> impl Iterator<Item=Vector> + 'a {
+    fn uvcoords(&'a self) -> impl Iterator<Item = Vector> + 'a {
         unsafe {
             AIter {
                 count: ((*self.mesh).mNumVertices) as isize,
@@ -245,7 +263,7 @@ impl <'a> Mesh<'a> {
         }
     }
 
-    fn faces(&'a self) -> impl Iterator<Item=model::Face> + 'a {
+    fn faces(&'a self) -> impl Iterator<Item = model::Face> + 'a {
         unsafe {
             AIter {
                 count: ((*self.mesh).mNumFaces) as isize,
@@ -257,7 +275,7 @@ impl <'a> Mesh<'a> {
         }
     }
 
-    fn bones(&'a self) -> impl Iterator<Item=Bone<'a>> + 'a {
+    fn bones(&'a self) -> impl Iterator<Item = Bone<'a>> + 'a {
         unsafe {
             AIter {
                 count: ((*self.mesh).mNumBones) as isize,
@@ -275,7 +293,7 @@ struct Animation<'a> {
     _life: PhantomData<&'a ()>,
 }
 
-impl <'a> Animation<'a> {
+impl<'a> Animation<'a> {
     fn from(ani: *mut *mut assimp::aiAnimation) -> Animation<'a> {
         Animation {
             ani: unsafe { *ani },
@@ -290,7 +308,7 @@ impl <'a> Animation<'a> {
         }
     }
 
-    fn channels(&'a self) -> impl Iterator<Item=NodeAnim<'a>> + 'a {
+    fn channels(&'a self) -> impl Iterator<Item = NodeAnim<'a>> + 'a {
         unsafe {
             AIter {
                 count: ((*self.ani).mNumChannels) as isize,
@@ -308,7 +326,7 @@ struct NodeAnim<'a> {
     _life: PhantomData<&'a ()>,
 }
 
-impl <'a> NodeAnim<'a> {
+impl<'a> NodeAnim<'a> {
     fn from(ani: *mut *mut assimp::aiNodeAnim) -> NodeAnim<'a> {
         NodeAnim {
             ani: unsafe { *ani },
@@ -323,43 +341,37 @@ impl <'a> NodeAnim<'a> {
         }
     }
 
-    fn position(&'a self) -> impl Iterator<Item=(f64, cgmath::Vector3<f32>)> + 'a {
+    fn position(&'a self) -> impl Iterator<Item = (f64, cgmath::Vector3<f32>)> + 'a {
         unsafe {
             AIter {
                 count: ((*self.ani).mNumPositionKeys) as isize,
                 vals: (*self.ani).mPositionKeys,
                 offset: 0,
-                conv: |v: *mut assimp::aiVectorKey| {
-                    ((*v).mTime, mem::transmute((*v).mValue))
-                },
+                conv: |v: *mut assimp::aiVectorKey| ((*v).mTime, mem::transmute((*v).mValue)),
                 _ret: PhantomData,
             }
         }
     }
 
-    fn rotation(&'a self) -> impl Iterator<Item=(f64, cgmath::Quaternion<f32>)> + 'a {
+    fn rotation(&'a self) -> impl Iterator<Item = (f64, cgmath::Quaternion<f32>)> + 'a {
         unsafe {
             AIter {
                 count: ((*self.ani).mNumRotationKeys) as isize,
                 vals: (*self.ani).mRotationKeys,
                 offset: 0,
-                conv: |v: *mut assimp::aiQuatKey| {
-                    ((*v).mTime, mem::transmute((*v).mValue))
-                },
+                conv: |v: *mut assimp::aiQuatKey| ((*v).mTime, mem::transmute((*v).mValue)),
                 _ret: PhantomData,
             }
         }
     }
 
-    fn scale(&'a self) -> impl Iterator<Item=(f64, cgmath::Vector3<f32>)> + 'a {
+    fn scale(&'a self) -> impl Iterator<Item = (f64, cgmath::Vector3<f32>)> + 'a {
         unsafe {
             AIter {
                 count: ((*self.ani).mNumScalingKeys) as isize,
                 vals: (*self.ani).mScalingKeys,
                 offset: 0,
-                conv: |v: *mut assimp::aiVectorKey| {
-                    ((*v).mTime, mem::transmute((*v).mValue))
-                },
+                conv: |v: *mut assimp::aiVectorKey| ((*v).mTime, mem::transmute((*v).mValue)),
                 _ret: PhantomData,
             }
         }
@@ -371,7 +383,7 @@ struct Bone<'a> {
     _life: PhantomData<&'a ()>,
 }
 
-impl <'a> Bone<'a> {
+impl<'a> Bone<'a> {
     fn from(bone: *mut *mut assimp::aiBone) -> Bone<'a> {
         Bone {
             bone: unsafe { *bone },
@@ -394,7 +406,7 @@ impl <'a> Bone<'a> {
         }
     }
 
-    fn weights(&self) -> impl Iterator<Item=VertexWeight> + 'a {
+    fn weights(&self) -> impl Iterator<Item = VertexWeight> + 'a {
         unsafe {
             AIter {
                 count: ((*self.bone).mNumWeights) as isize,
@@ -428,7 +440,7 @@ impl VertexWeight {
 pub struct Vector {
     pub x: f32,
     pub y: f32,
-    pub z: f32
+    pub z: f32,
 }
 
 fn to_vector(vec: *mut assimp::aiVector3D) -> Vector {
@@ -449,7 +461,7 @@ fn to_face(face: *mut assimp::aiFace) -> model::Face {
                 *(*face).mIndices.offset(0),
                 *(*face).mIndices.offset(1),
                 *(*face).mIndices.offset(2),
-            ]
+            ],
         }
     }
 }
@@ -485,11 +497,7 @@ fn convert_all(root: &Path, path: &Path) -> Result<(), Box<::std::error::Error>>
 
 fn convert_model(name: &str) {
     let scene = Scene::import_file(&format!("./assets-raw/models/{}.fbx", name));
-    let bones: usize = {
-        scene.meshes()
-            .map(|m| m.bones().count())
-            .sum()
-    };
+    let bones: usize = { scene.meshes().map(|m| m.bones().count()).sum() };
     if bones == 0 {
         convert_model_static(name, scene);
     } else {
@@ -509,9 +517,11 @@ fn convert_model_static(name: &str, scene: Scene) {
     let mut vert_offset = 0;
     for mesh in scene.meshes() {
         let sub_text = scene.texture_mat(mesh.mat_index());
-        model.sub_textures.push((vert_offset, sub_text.unwrap_or_else(|| scene.texture())));
+        model
+            .sub_textures
+            .push((vert_offset, sub_text.unwrap_or_else(|| scene.texture())));
 
-        for ((v,n), uv) in mesh.verts().zip(mesh.normals()).zip(mesh.uvcoords()) {
+        for ((v, n), uv) in mesh.verts().zip(mesh.normals()).zip(mesh.uvcoords()) {
             model.verts.push(model::Vertex {
                 x: v.x,
                 y: v.y,
@@ -555,8 +565,9 @@ unsafe fn build_node(node: *const assimp::aiNode) -> model::AniNode {
         child_nodes: Vec::with_capacity((*node).mNumChildren as usize),
     };
 
-    for i in 0 .. (*node).mNumChildren {
-        n.child_nodes.push(build_node(*(*node).mChildren.offset(i as isize)));
+    for i in 0..(*node).mNumChildren {
+        n.child_nodes
+            .push(build_node(*(*node).mChildren.offset(i as isize)));
     }
 
     n
@@ -583,8 +594,9 @@ fn convert_model_animated(name: &str, scene: Scene) {
             let chan = model::AnimationDetails {
                 position: channel.position().collect(),
                 rotation: {
-                    let mut rots: Vec<(f64, cgmath::Quaternion<f32>)> = channel.rotation().collect();
-                    for i in 0 .. rots.len() - 1 {
+                    let mut rots: Vec<(f64, cgmath::Quaternion<f32>)> =
+                        channel.rotation().collect();
+                    for i in 0..rots.len() - 1 {
                         if rots[i].1.dot(rots[i + 1].1) < 0.0 {
                             rots[i + 1].1 = -rots[i + 1].1;
                         }
@@ -596,8 +608,11 @@ fn convert_model_animated(name: &str, scene: Scene) {
             animation.channels.insert(channel.name().into_owned(), chan);
         }
         let ani_name = ani.name();
-        let ani_name = &ani_name[ani_name.char_indices().find(|v| v.1 == '|').map_or(0, |v| v.0) + 1..];
-
+        let ani_name = &ani_name[ani_name
+            .char_indices()
+            .find(|v| v.1 == '|')
+            .map_or(0, |v| v.0)
+            + 1..];
 
         let path = format!("./assets/base/base/models/{}_{}.uani", name, ani_name);
         let path = Path::new(&path);
@@ -609,7 +624,7 @@ fn convert_model_animated(name: &str, scene: Scene) {
 
     let mut vert_offset = 0;
     for mesh in scene.meshes() {
-        for ((v,n), uv) in mesh.verts().zip(mesh.normals()).zip(mesh.uvcoords()) {
+        for ((v, n), uv) in mesh.verts().zip(mesh.normals()).zip(mesh.uvcoords()) {
             model.verts.push(model::AniVertex {
                 x: v.x,
                 y: v.y,
@@ -651,7 +666,6 @@ fn convert_model_animated(name: &str, scene: Scene) {
 
         vert_offset = model.verts.len();
     }
-
 
     let path = format!("./assets/base/base/models/{}.uamod", name);
     let path = Path::new(&path);

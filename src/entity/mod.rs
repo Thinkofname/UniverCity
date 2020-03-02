@@ -1,16 +1,16 @@
 //! Entity management and structures
 
-mod sys;
 mod info;
+mod sys;
 
 pub use self::info::*;
 
 use crate::ecs;
-use crate::server::assets;
-use crate::server::entity::*;
-use crate::server::common;
-use crate::render::animated_model;
 use crate::prelude::*;
+use crate::render::animated_model;
+use crate::server::assets;
+use crate::server::common;
+use crate::server::entity::*;
 
 /// Registers components required by the client
 pub fn register_components(c: &mut ecs::Container) {
@@ -57,33 +57,65 @@ pub fn register_frame_systems(sys: &mut ecs::Systems) {
 }
 
 /// Handles creating entities for the server
-pub enum ClientEntityCreator{}
+pub enum ClientEntityCreator {}
 
 impl EntityCreator for ClientEntityCreator {
     type ScriptTypes = crate::instance::scripting::Types;
-    fn static_model(c: &mut ecs::Container, model: assets::ResourceKey<'_>, texture: Option<assets::ResourceKey<'_>>) -> ecs::Entity {
-        let e = ServerEntityCreator::static_model(c, model.borrow(), texture.as_ref().map(|v| v.borrow()));
-        c.add_component(e, Model {
-            name: model.into_owned(),
-        });
+    fn static_model(
+        c: &mut ecs::Container,
+        model: assets::ResourceKey<'_>,
+        texture: Option<assets::ResourceKey<'_>>,
+    ) -> ecs::Entity {
+        let e = ServerEntityCreator::static_model(
+            c,
+            model.borrow(),
+            texture.as_ref().map(|v| v.borrow()),
+        );
+        c.add_component(
+            e,
+            Model {
+                name: model.into_owned(),
+            },
+        );
         c.add_component(e, StaticModel);
         if let Some(tex) = texture {
-            c.add_component(e, ModelTexture {
-                name: tex.into_owned(),
-            });
+            c.add_component(
+                e,
+                ModelTexture {
+                    name: tex.into_owned(),
+                },
+            );
         }
         e
     }
-    fn animated_model(c: &mut ecs::Container, model: assets::ResourceKey<'_>, texture: Option<assets::ResourceKey<'_>>, animation_set: common::AnimationSet, animation: &str) -> ecs::Entity {
-        let e = ServerEntityCreator::animated_model(c, model.borrow(), texture.as_ref().map(|v| v.borrow()), animation_set.clone(), animation);
-        c.add_component(e, Model {
-            name: model.into_owned(),
-        });
+    fn animated_model(
+        c: &mut ecs::Container,
+        model: assets::ResourceKey<'_>,
+        texture: Option<assets::ResourceKey<'_>>,
+        animation_set: common::AnimationSet,
+        animation: &str,
+    ) -> ecs::Entity {
+        let e = ServerEntityCreator::animated_model(
+            c,
+            model.borrow(),
+            texture.as_ref().map(|v| v.borrow()),
+            animation_set.clone(),
+            animation,
+        );
+        c.add_component(
+            e,
+            Model {
+                name: model.into_owned(),
+            },
+        );
         c.add_component(e, AnimatedModel::new(animation_set, animation));
         if let Some(tex) = texture {
-            c.add_component(e, ModelTexture {
-                name: tex.into_owned(),
-            });
+            c.add_component(
+                e,
+                ModelTexture {
+                    name: tex.into_owned(),
+                },
+            );
         }
         e
     }
@@ -151,7 +183,7 @@ impl AnimatedModel {
     /// animation.
     pub fn new<S: Into<String>>(
         animation_set: common::AnimationSet,
-        animation: S
+        animation: S,
     ) -> AnimatedModel {
         AnimatedModel {
             animation_set,
@@ -163,7 +195,9 @@ impl AnimatedModel {
 
     /// Changes the animation currently playing
     pub fn set_animation<S: Into<String> + PartialEq<String>>(&mut self, name: S) {
-        if self.animation_queue.len() != 1 || self.animation_queue.first().map_or(true, |v| name != *v) {
+        if self.animation_queue.len() != 1
+            || self.animation_queue.first().map_or(true, |v| name != *v)
+        {
             let name = name.into();
             self.time = 0.0;
             self.speed = 1.0;

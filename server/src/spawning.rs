@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 
 const SPAWN_CHECK_INTERVAL: u32 = 20 * 60; // 1 Minute
@@ -21,7 +20,8 @@ impl Spawner {
     pub fn new(log: &Logger, players: &[PlayerId]) -> Spawner {
         Spawner {
             log: log.new(o!("source" => "spawner")),
-            info: players.iter()
+            info: players
+                .iter()
                 .map(|v| SpawnInfo {
                     id: *v,
                     required_students: 0,
@@ -40,10 +40,10 @@ impl Spawner {
         entities: &mut Container,
         scripting: &script::Engine,
     ) {
-        use rand::{Rng, thread_rng};
-        use std::cmp::{min, max};
         use lua::{Ref, Table};
         use rand::seq::SliceRandom;
+        use rand::{thread_rng, Rng};
+        use std::cmp::{max, min};
 
         self.spawn_check += 1;
         if self.spawn_check >= SPAWN_CHECK_INTERVAL {
@@ -55,24 +55,29 @@ impl Spawner {
             let log = &self.log;
 
             // Firstly work out how many students the player has
-            let students = entities.with(|em: EntityManager<'_>, owned: Read<Owned>, student: Read<StudentController>| {
-                let mask = student.mask().and(&owned);
-                em.iter_mask(&mask)
-                    .filter(|e| assume!(log, owned.get_component(*e)).player_id == player.id)
-                    .count()
-            });
+            let students = entities.with(
+                |em: EntityManager<'_>, owned: Read<Owned>, student: Read<StudentController>| {
+                    let mask = student.mask().and(&owned);
+                    em.iter_mask(&mask)
+                        .filter(|e| assume!(log, owned.get_component(*e)).player_id == player.id)
+                        .count()
+                },
+            );
 
             // Then work out how many students their UniverCity can support
-            let capacity: usize = level.room_ids()
+            let capacity: usize = level
+                .room_ids()
                 .into_iter()
                 .map(|v| level.get_room_info(v))
                 .filter(|v| v.owner == player.id)
                 .filter(|v| !v.controller.is_invalid())
-                .filter(|v| assume!(log, assets.loader_open::<room::Loader>(v.key.borrow())).used_for_teaching)
+                .filter(|v| {
+                    assume!(log, assets.loader_open::<room::Loader>(v.key.borrow()))
+                        .used_for_teaching
+                })
                 .filter_map(|v| entities.get_component::<RoomController>(v.controller))
                 .map(|v| v.capacity)
                 .sum();
-
 
             // Allow the spawning of a subset of the difference between supported
             // and owned.
@@ -81,11 +86,7 @@ impl Spawner {
             let weight = 3.0 + (f32::from(info.rating) / 30000.0) * 1.5;
             let diff = (capacity as f32 * weight).round() as u32;
             let diff = diff as i32 - students as i32;
-            let diff = if diff < 0 {
-                0
-            } else {
-                diff as u32
-            };
+            let diff = if diff < 0 { 0 } else { diff as u32 };
             player.required_students = diff;
         }
 
@@ -103,11 +104,14 @@ impl Spawner {
             if player.inspector_cooldown <= 0 && rng.gen_bool(1.0 / 500.0) {
                 player.inspector_cooldown = rng.gen_range(20 * 60 * 5, 20 * 60 * 15);
 
-                let ety = assume!(self.log, assets.loader_open::<Loader<ServerComponent>>(if rng.gen_bool(1.0 / 10.0) {
-                    vip.borrow()
-                } else {
-                    inspector.borrow()
-                }));
+                let ety = assume!(
+                    self.log,
+                    assets.loader_open::<Loader<ServerComponent>>(if rng.gen_bool(1.0 / 10.0) {
+                        vip.borrow()
+                    } else {
+                        inspector.borrow()
+                    })
+                );
                 let variant = rng.gen_range(0, ety.variants.len());
                 let e = ety.create_entity(entities, variant, None);
 
@@ -118,18 +122,28 @@ impl Spawner {
                     pos.y = 0.2;
                     pos.z = ty as f32 + 0.5;
                 }
-                entities.add_component(e, Owned {
-                    player_id: player.id,
-                });
+                entities.add_component(
+                    e,
+                    Owned {
+                        player_id: player.id,
+                    },
+                );
             }
             if player.required_students > 0
-                && rng.gen_bool(1.0 / f64::from(max(1, min(150, (LESSON_LENGTH as u32 * 4 * 3) / player.required_students))))
+                && rng.gen_bool(
+                    1.0 / f64::from(max(
+                        1,
+                        min(
+                            150,
+                            (LESSON_LENGTH as u32 * 4 * 3) / player.required_students,
+                        ),
+                    )),
+                )
             {
                 #[derive(Serialize)]
-                struct PlayerInfo {
-                }
-                let player_script_info = assume!(self.log, lua::to_table(scripting, &PlayerInfo {
-                }));
+                struct PlayerInfo {}
+                let player_script_info =
+                    assume!(self.log, lua::to_table(scripting, &PlayerInfo {}));
 
                 #[derive(Deserialize)]
                 struct StudentInfo {
@@ -153,20 +167,27 @@ impl Spawner {
 
                 player.required_students -= 1;
                 let (t_x, t_y) = gen_spawn(level, &mut rng);
-                let ety = assume!(self.log, assets.loader_open::<Loader<ServerComponent>>(student.borrow()));
+                let ety = assume!(
+                    self.log,
+                    assets.loader_open::<Loader<ServerComponent>>(student.borrow())
+                );
 
-                let student_info = match scripting.with_borrows()
+                let student_info = match scripting
+                    .with_borrows()
                     .borrow_mut(entities)
-                    .invoke_function::<_, Ref<Table>>("invoke_module_method", (
-                        base.clone(),
-                        student_creation.clone(),
-                        generate.clone(),
-                        player_script_info.clone(),
-                    )) {
+                    .invoke_function::<_, Ref<Table>>(
+                        "invoke_module_method",
+                        (
+                            base.clone(),
+                            student_creation.clone(),
+                            generate.clone(),
+                            player_script_info.clone(),
+                        ),
+                    ) {
                     Err(err) => {
                         error!(self.log, "Failed to generate student"; "error" => % err);
                         continue;
-                    },
+                    }
                     Ok(val) => val,
                 };
                 let student_info: StudentInfo = match lua::from_table(&student_info) {
@@ -174,24 +195,33 @@ impl Spawner {
                     Err(err) => {
                         error!(self.log, "Failed to generate student"; "error" => % err);
                         continue;
-                    },
+                    }
                 };
 
-                let e_variant = student_info.variant
+                let e_variant = student_info
+                    .variant
                     .unwrap_or_else(|| rng.gen_range(0, ety.variants.len()));
 
-                let name = if let (Some(f), Some(s)) = (
-                    student_info.first_name,
-                    student_info.surname,
-                ) {
-                    ((*f).into(), (*s).into())
-                } else {
-                    let variant = &ety.variants[e_variant];
-                    (
-                        variant.name_list.first.choose(&mut rng).cloned().unwrap_or_else(|| "Missing".into()),
-                        variant.name_list.second.choose(&mut rng).cloned().unwrap_or_else(|| "Name".into()),
-                    )
-                };
+                let name =
+                    if let (Some(f), Some(s)) = (student_info.first_name, student_info.surname) {
+                        ((*f).into(), (*s).into())
+                    } else {
+                        let variant = &ety.variants[e_variant];
+                        (
+                            variant
+                                .name_list
+                                .first
+                                .choose(&mut rng)
+                                .cloned()
+                                .unwrap_or_else(|| "Missing".into()),
+                            variant
+                                .name_list
+                                .second
+                                .choose(&mut rng)
+                                .cloned()
+                                .unwrap_or_else(|| "Name".into()),
+                        )
+                    };
 
                 let e = ety.create_entity(entities, e_variant, Some(name));
                 {
@@ -200,22 +230,30 @@ impl Spawner {
                     pos.y = 0.2;
                     pos.z = t_y as f32 + 0.5;
                 }
-                entities.add_component(e, Owned {
-                    player_id: player.id,
-                });
-                entities.add_component(e, Money {
-                    money: student_info.money,
-                });
+                entities.add_component(
+                    e,
+                    Owned {
+                        player_id: player.id,
+                    },
+                );
+                entities.add_component(
+                    e,
+                    Money {
+                        money: student_info.money,
+                    },
+                );
                 let vars = assume!(self.log, entities.get_custom::<choice::StudentVars>(e));
 
                 for (k, v) in student_info.vars {
                     match v {
                         VarValue::Bool(v) => vars.set_boolean(&k, v),
-                        VarValue::Float(v) => if vars.get_type(&k) == Some(choice::Type::Integer) {
-                            vars.set_integer(&k, v as i32)
-                        } else {
-                            vars.set_float(&k, v as f32)
-                        },
+                        VarValue::Float(v) => {
+                            if vars.get_type(&k) == Some(choice::Type::Integer) {
+                                vars.set_integer(&k, v as i32)
+                            } else {
+                                vars.set_float(&k, v as f32)
+                            }
+                        }
                     };
                 }
             }
@@ -224,18 +262,23 @@ impl Spawner {
 }
 
 fn gen_spawn<R>(level: &Level, rng: &mut R) -> (i32, i32)
-    where R: ::rand::Rng
+where
+    R: ::rand::Rng,
 {
     use rand::seq::SliceRandom;
 
     let road = ResourceKey::new("base", "external/road");
     let rooms = level.room_ids();
-    let spawn_point = rooms.iter()
+    let spawn_point = rooms
+        .iter()
         .map(|v| level.get_room_info(*v))
         .filter(|v| v.key == road)
-        .filter(|v| v.area.min.x == 0 || v.area.min.y == 0
-            || v.area.max.x + 1 == level.width as i32
-            || v.area.max.y + 1 == level.height as i32)
+        .filter(|v| {
+            v.area.min.x == 0
+                || v.area.min.y == 0
+                || v.area.max.x + 1 == level.width as i32
+                || v.area.max.y + 1 == level.height as i32
+        })
         .collect::<Vec<_>>();
 
     let spawn_point = assume!(level.log, spawn_point.choose(rng));

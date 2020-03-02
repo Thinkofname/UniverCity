@@ -1,11 +1,9 @@
-
 use super::super::*;
-use crate::state;
-use crate::server::event;
-use crate::server::assets;
-use crate::server::network;
 use crate::prelude::*;
-
+use crate::server::assets;
+use crate::server::event;
+use crate::server::network;
+use crate::state;
 
 pub struct EntityInfoState {
     ui: Option<ui::Node>,
@@ -85,64 +83,106 @@ impl state::State for EntityInfoState {
         })
     }
 
-    fn added(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn added(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
-        let id = assume!(state.global_logger, instance.entities.get_component::<NetworkId>(self.target).map(|v| v.0));
-        self.request_ticket = Some(instance.request_manager.request(player::EntityResults {
-            entity_id: id,
-        }));
+        let id = assume!(
+            state.global_logger,
+            instance
+                .entities
+                .get_component::<NetworkId>(self.target)
+                .map(|v| v.0)
+        );
+        self.request_ticket = Some(
+            instance
+                .request_manager
+                .request(player::EntityResults { entity_id: id }),
+        );
         state::Action::Nothing
     }
 
-    fn active_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn active_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         // Handle the reply from a prompt if any
-        if let Some(ui::prompt::ConfirmResponse::Accept) = self.fire_event.take()
-            .and_then(|v| v.recv().ok())
+        if let Some(ui::prompt::ConfirmResponse::Accept) =
+            self.fire_event.take().and_then(|v| v.recv().ok())
         {
-            let mut cmd: Command = FireStaff::new(
-                assume!(state.global_logger, instance.entities.get_component::<NetworkId>(self.target).map(|v| v.0))
-            ).into();
+            let mut cmd: Command = FireStaff::new(assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<NetworkId>(self.target)
+                    .map(|v| v.0)
+            ))
+            .into();
             let mut proxy = super::GameProxy::proxy(state);
 
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                proxy.state.audio
-                    .controller
-                    .borrow_mut()
-                    .play_sound(ResourceKey::new("base", "slapsound"));
-                return state::Action::Pop;
-            });
+            try_cmd!(
+                instance.log,
+                cmd.execute(
+                    &mut proxy,
+                    &mut instance.player,
+                    CommandParams {
+                        log: &instance.log,
+                        level: &mut instance.level,
+                        engine: &instance.scripting,
+                        entities: &mut instance.entities,
+                        snapshots: &instance.snapshots,
+                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                    }
+                ),
+                {
+                    instance.push_command(cmd, req);
+                    proxy
+                        .state
+                        .audio
+                        .controller
+                        .borrow_mut()
+                        .play_sound(ResourceKey::new("base", "slapsound"));
+                    return state::Action::Pop;
+                }
+            );
         }
 
-        self.variant = instance.entities.get_component::<Living>(self.target)
-            .and_then(|v| state.asset_manager.loader_open::<Loader<ServerComponent>>(v.key.borrow()).ok())
+        self.variant = instance
+            .entities
+            .get_component::<Living>(self.target)
+            .and_then(|v| {
+                state
+                    .asset_manager
+                    .loader_open::<Loader<ServerComponent>>(v.key.borrow())
+                    .ok()
+            })
             .map(|v| entity_variant(&*v));
-        let ui = state.ui_manager.create_node(assets::ResourceKey::new("base", if self.variant == Some(Stats::STUDENT) {
-            "manage/student_info"
-        } else {
-            "manage/staff_info"
-        }));
+        let ui = state.ui_manager.create_node(assets::ResourceKey::new(
+            "base",
+            if self.variant == Some(Stats::STUDENT) {
+                "manage/student_info"
+            } else {
+                "manage/staff_info"
+            },
+        ));
         self.ui = Some(ui.clone());
 
         #[cfg(feature = "debugutil")]
         {
             if let Some(content) = query!(ui, window > content).next() {
-                content.add_child(node!{
+                content.add_child(node! {
                     debug_local {
                         @text("Local:")
                     }
                 });
-                content.add_child(node!{
+                content.add_child(node! {
                     debug_remote {
                         @text("Remote:")
                     }
@@ -161,28 +201,40 @@ impl state::State for EntityInfoState {
             self.variant,
         );
 
-        let living = assume!(state.global_logger, instance.entities.get_component::<Living>(self.target));
+        let living = assume!(
+            state.global_logger,
+            instance.entities.get_component::<Living>(self.target)
+        );
 
         if let Some(name) = query!(ui, name > @text).next() {
             name.set_text(format!("{} {}", living.name.0, living.name.1));
         }
-        if let Some(btn) = query!(ui, button(id="locate")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(FocusEntity);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(id = "locate")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(FocusEntity);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(id="move")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(MoveEntity);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(id = "move")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(MoveEntity);
+                    true
+                }),
+            );
         }
-        if let Some(btn) = query!(ui, button(id="fire")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(FireEntity);
-                true
-            }));
+        if let Some(btn) = query!(ui, button(id = "fire")).next() {
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(FireEntity);
+                    true
+                }),
+            );
         }
         for t in query!(ui, timetable > timetable_entry > @text).matches() {
             t.set_text("Loading...");
@@ -193,7 +245,11 @@ impl state::State for EntityInfoState {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         if let Tab::Overview = self.current_tab {
             self.stats_lerp = (self.stats_lerp + state.delta * 0.05).min(1.0);
             let ui = assume!(state.global_logger, self.ui.clone());
@@ -215,10 +271,18 @@ impl state::State for EntityInfoState {
         let instance = assume!(state.global_logger, instance.as_mut());
         self.next_request -= 1;
         if self.next_request <= 0 {
-            let id = assume!(state.global_logger, instance.entities.get_component::<NetworkId>(self.target).map(|v| v.0));
-            self.request_ticket = Some(instance.request_manager.request(player::EntityResults {
-                entity_id: id,
-            }));
+            let id = assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<NetworkId>(self.target)
+                    .map(|v| v.0)
+            );
+            self.request_ticket = Some(
+                instance
+                    .request_manager
+                    .request(player::EntityResults { entity_id: id }),
+            );
             state::Action::Nothing
         } else {
             state::Action::Nothing
@@ -231,13 +295,22 @@ impl state::State for EntityInfoState {
         }
     }
 
-    fn ui_event_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
         let instance = assume!(state.global_logger, instance.as_mut());
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-        });
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Pop;
+            },
+        );
         evt.inspect_event::<super::CloseOtherInfos, _>(|evt| {
             if !evt.0.is_same(&ui) {
                 action = state::Action::Pop;
@@ -248,14 +321,17 @@ impl state::State for EntityInfoState {
             state.renderer.suggest_camera_position(
                 room.area.min.x as f32 + room.area.width() as f32 / 2.0,
                 room.area.min.y as f32 + room.area.height() as f32 / 2.0,
-                45.0
+                45.0,
             );
         });
         evt.handle_event::<FocusEntity, _>(|_| {
             if instance.entities.is_valid(self.target) {
-                let pos = if let Some(pos) = instance.entities.get_component::<Position>(self.target) {
-                    pos
-                } else { return };
+                let pos =
+                    if let Some(pos) = instance.entities.get_component::<Position>(self.target) {
+                        pos
+                    } else {
+                        return;
+                    };
                 state.renderer.suggest_camera_position(pos.x, pos.z, 45.0);
             }
         });
@@ -275,25 +351,37 @@ impl state::State for EntityInfoState {
         });
         evt.handle_event::<MoveEntity, _>(|_| {
             if instance.entities.is_valid(self.target) {
-
-                let mut cmd: Command = StartMoveStaff::new(
-                    assume!(state.global_logger, instance.entities.get_component::<NetworkId>(self.target).map(|v| v.0))
-                ).into();
+                let mut cmd: Command = StartMoveStaff::new(assume!(
+                    state.global_logger,
+                    instance
+                        .entities
+                        .get_component::<NetworkId>(self.target)
+                        .map(|v| v.0)
+                ))
+                .into();
                 let mut proxy = super::GameProxy::proxy(state);
 
-                try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, CommandParams {
-                    log: &instance.log,
-                    level: &mut instance.level,
-                    engine: &instance.scripting,
-                    entities: &mut instance.entities,
-                    snapshots: &instance.snapshots,
-                    mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-                }), {
-                    instance.push_command(cmd, req);
-                    action = state::Action::Switch(Box::new(
-                        super::PlaceStaffState::new(None, false)
-                    ));
-                });
+                try_cmd!(
+                    instance.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        instance.push_command(cmd, req);
+                        action = state::Action::Switch(Box::new(super::PlaceStaffState::new(
+                            None, false,
+                        )));
+                    }
+                );
             }
         });
         evt.handle_event::<FireEntity, _>(|_| {
@@ -308,12 +396,18 @@ impl state::State for EntityInfoState {
                     },
                     move |rpl| {
                         let _ = send.send(rpl);
-                    }
+                    },
                 )));
             }
         });
         if let Some(req) = self.request_ticket {
-            let id = assume!(state.global_logger, instance.entities.get_component::<NetworkId>(self.target).map(|v| v.0));
+            let id = assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<NetworkId>(self.target)
+                    .map(|v| v.0)
+            );
             network::RequestManager::handle_reply(evt, req, |res| {
                 if id != res.entity_id {
                     return;
@@ -337,21 +431,19 @@ impl state::State for EntityInfoState {
                 let skills: Vec<_> = query!(ui, skills > skill).matches().collect();
                 if skills.is_empty() {
                     for (idx, f) in res.stats.0.iter().enumerate() {
-                        self.stats[idx] = (
-                            *f,
-                            *f
-                        );
+                        self.stats[idx] = (*f, *f);
                     }
                 } else {
-                    for (idx, (fui, f)) in skills.into_iter().rev().zip(res.stats.0.iter()).enumerate()  {
+                    for (idx, (fui, f)) in
+                        skills.into_iter().rev().zip(res.stats.0.iter()).enumerate()
+                    {
                         if let Some(skill_bar) = query!(fui, skill > skill_clip).next() {
                             self.stats[idx] = (
                                 skill_bar.get_property::<f64>("value").unwrap_or(0.0) as f32,
-                                *f
+                                *f,
                             );
                         }
                     }
-
                 }
                 self.stats_lerp = 0.0;
 
@@ -359,8 +451,14 @@ impl state::State for EntityInfoState {
                 {
                     if let Some(content) = query!(ui, window > content).next() {
                         if let Some(local) = query!(content, debug_local > @text).next() {
-                            let ani = instance.entities.get_component::<entity::AnimatedModel>(self.target);
-                            local.set_text(format!("Local: {:?} {:?}", self.target, ani.map_or(&[] as &[_], |v| &*v.animation_queue)));
+                            let ani = instance
+                                .entities
+                                .get_component::<entity::AnimatedModel>(self.target);
+                            local.set_text(format!(
+                                "Local: {:?} {:?}",
+                                self.target,
+                                ani.map_or(&[] as &[_], |v| &*v.animation_queue)
+                            ));
                         }
                         if let Some(remote) = query!(content, debug_remote > @text).next() {
                             remote.set_text(format!("Remote: {}", res.entity_debug))
@@ -372,7 +470,13 @@ impl state::State for EntityInfoState {
         action
     }
 
-    fn key_action(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, action: keybinds::KeyAction, _mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        _mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
 
         match action {
@@ -381,7 +485,9 @@ impl state::State for EntityInfoState {
         }
     }
 
-    fn can_have_duplicates(&self) -> bool { true }
+    fn can_have_duplicates(&self) -> bool {
+        true
+    }
 }
 
 fn rebuild_page(
@@ -398,17 +504,12 @@ fn rebuild_page(
     for c in cont.children() {
         let name = c.name();
         match name.as_ref().map(|v| v.as_str()) {
-            Some("tabs_inside")
-            | Some("title")
-            | Some("name")
-            | Some("buttons")
-            | Some("debug_local")
-            | Some("debug_remote") => {},
+            Some("tabs_inside") | Some("title") | Some("name") | Some("buttons")
+            | Some("debug_local") | Some("debug_remote") => {}
             _ => {
                 cont.remove_child(c);
             }
         }
-
     }
 
     if let Some(outside) = query!(ui, tabs_outside).next() {
@@ -420,10 +521,13 @@ fn rebuild_page(
                 let node = node! {
                     page_tab(index=t.index() as i32, tab=t.image().to_owned())
                 };
-                node.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                    evt.emit(ChangeTab(*t));
-                    true
-                }));
+                node.set_property(
+                    "on_click",
+                    ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                        evt.emit(ChangeTab(*t));
+                        true
+                    }),
+                );
                 outside.add_child(node);
             }
         }
@@ -459,10 +563,15 @@ fn rebuild_page(
                         };
                         for p in info {
                             let n = match p {
-                                player::TimetableEntryState::Free => node!(course_period(booked=false)),
-                                player::TimetableEntryState::Lesson => node!(course_period(booked=true)),
-                                player::TimetableEntryState::Completed(grade) =>
-                                    node!(course_period(booked=true, grade=grade.as_str().to_owned())),
+                                player::TimetableEntryState::Free => {
+                                    node!(course_period(booked = false))
+                                }
+                                player::TimetableEntryState::Lesson => {
+                                    node!(course_period(booked = true))
+                                }
+                                player::TimetableEntryState::Completed(grade) => node!(
+                                    course_period(booked = true, grade = grade.as_str().to_owned())
+                                ),
                             };
                             d.add_child(n);
                         }
@@ -470,7 +579,6 @@ fn rebuild_page(
                         tt.add_child(d);
                     }
                 } else {
-
                 }
                 cont.add_child(tt);
             }
@@ -502,7 +610,7 @@ fn rebuild_page(
                     skills.add_child(n);
                 }
             }
-        },
+        }
         Tab::History => {
             let history = node!(student_history);
             cont.add_child(history.clone());
@@ -518,11 +626,11 @@ fn rebuild_page(
                     }
                 });
             }
-        },
+        }
     }
 }
 
-pub (super) fn fix_case(s: &str) -> String {
+pub(super) fn fix_case(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut first = true;
     for c in s.chars() {

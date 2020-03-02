@@ -1,12 +1,11 @@
-
 use crate::server;
 
+use super::{GameInstance, GameState};
 use crate::prelude::*;
-use super::{GameState, GameInstance};
+use crate::server::common::MissionEntry;
+use crate::server::lua;
 use crate::state;
 use crate::ui;
-use crate::server::lua;
-use crate::server::common::MissionEntry;
 
 pub(crate) struct MenuState {
     ui: Option<ui::Node>,
@@ -34,34 +33,54 @@ impl state::State for MenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/campaign"));
-        if let Some(new_game) = query!(node, button(id="new_game")).next() {
-            new_game.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(NewGame);
-                true
-            }));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/campaign"));
+        if let Some(new_game) = query!(node, button(id = "new_game")).next() {
+            new_game.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(NewGame);
+                    true
+                }),
+            );
         }
-        if let Some(load_game) = query!(node, button(id="load_game")).next() {
-            load_game.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(LoadGame);
-                true
-            }));
+        if let Some(load_game) = query!(node, button(id = "load_game")).next() {
+            load_game.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(LoadGame);
+                    true
+                }),
+            );
         }
 
         if let Some(content) = query!(node, campaign_list > scroll_panel > content).next() {
             let missions = assume!(
                 state.global_logger,
-                state.ui_manager.scripting.get::<lua::Ref<lua::Table>>(lua::Scope::Global, "missions")
+                state
+                    .ui_manager
+                    .scripting
+                    .get::<lua::Ref<lua::Table>>(lua::Scope::Global, "missions")
             );
             self.missions.clear();
             for (idx, mission) in missions.iter::<i32, lua::Ref<lua::Table>>() {
                 let idx = idx as usize - 1;
                 let is_valid = true;
 
-                let mission = assume!(state.global_logger, lua::from_table::<MissionEntry>(&mission));
+                let mission = assume!(
+                    state.global_logger,
+                    lua::from_table::<MissionEntry>(&mission)
+                );
 
                 let entry = node! {
                     campaign_entry(selected=idx == self.selected_item, entry=idx as i32, name=mission.name.clone(), valid=is_valid) {
@@ -71,10 +90,13 @@ impl state::State for MenuState {
                     }
                 };
                 if is_valid {
-                    entry.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                        evt.emit(SelectEntry(idx));
-                        true
-                    }));
+                    entry.set_property(
+                        "on_click",
+                        ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                            evt.emit(SelectEntry(idx));
+                            true
+                        }),
+                    );
                 }
                 content.add_child(entry);
                 self.missions.push(mission);
@@ -93,22 +115,38 @@ impl state::State for MenuState {
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
         evt.handle_event::<NewGame, _>(|_| {
-            if let Some(cur) = query!(ui, campaign_entry(entry=self.selected_item as i32)).next() {
+            if let Some(cur) = query!(ui, campaign_entry(entry = self.selected_item as i32)).next()
+            {
                 let entry = assume!(state.global_logger, cur.get_property::<i32>("entry")) as usize;
                 let mission = &self.missions[entry];
                 let name = format!("missions/{}", mission.save_key);
-                let valid = server::saving::can_load(&state.filesystem, &name, server::saving::SaveType::Mission);
+                let valid = server::saving::can_load(
+                    &state.filesystem,
+                    &name,
+                    server::saving::SaveType::Mission,
+                );
                 if valid.is_ok() {
-                    let fs = crate::make_filesystem(#[cfg(feature = "steam")] &state.steam);
+                    let fs = crate::make_filesystem(
+                        #[cfg(feature = "steam")]
+                        &state.steam,
+                    );
                     // Ask to restart instead
                     let events = state.ui_manager.events.clone();
                     action = state::Action::Push(Box::new(ui::prompt::Confirm::new(
                         ui::prompt::ConfirmConfig {
-                            description: format!("Are you sure you wish to restart the mission \"{}\"?", mission.name),
+                            description: format!(
+                                "Are you sure you wish to restart the mission \"{}\"?",
+                                mission.name
+                            ),
                             accept: "Restart".into(),
                             ..ui::prompt::ConfirmConfig::default()
                         },
@@ -117,46 +155,57 @@ impl state::State for MenuState {
                                 let _ = server::saving::delete_save(&fs, &name);
                                 events.borrow_mut().emit(NewGame);
                             }
-                        }
+                        },
                     )));
                 } else {
                     let _ = server::saving::delete_save(&state.filesystem, &name);
                     let key = mission.get_name_key().into_owned();
                     let (instance, _hosted_server) = GameInstance::single_player(
-                        &state.global_logger, &state.asset_manager,
-                        #[cfg(feature = "steam")] state.steam.clone(), name,
-                        Some(key)
+                        &state.global_logger,
+                        &state.asset_manager,
+                        #[cfg(feature = "steam")]
+                        state.steam.clone(),
+                        name,
+                        Some(key),
                     )
-                        .expect("Failed to connect to single player instance");
-                    action = state::Action::Switch(Box::new(crate::instance::BaseState::new(instance)));
+                    .expect("Failed to connect to single player instance");
+                    action =
+                        state::Action::Switch(Box::new(crate::instance::BaseState::new(instance)));
                 }
             }
         });
         evt.handle_event::<LoadGame, _>(|_| {
-            if let Some(cur) = query!(ui, campaign_entry(entry=self.selected_item as i32)).next() {
+            if let Some(cur) = query!(ui, campaign_entry(entry = self.selected_item as i32)).next()
+            {
                 let entry = assume!(state.global_logger, cur.get_property::<i32>("entry")) as usize;
                 let mission = &self.missions[entry];
                 let key = mission.get_name_key().into_owned();
                 let name = format!("missions/{}", mission.save_key);
                 let (instance, _hosted_server) = GameInstance::single_player(
-                    &state.global_logger, &state.asset_manager,
-                    #[cfg(feature = "steam")] state.steam.clone(), name,
-                    Some(key)
+                    &state.global_logger,
+                    &state.asset_manager,
+                    #[cfg(feature = "steam")]
+                    state.steam.clone(),
+                    name,
+                    Some(key),
                 )
-                    .expect("Failed to connect to single player instance");
+                .expect("Failed to connect to single player instance");
                 action = state::Action::Switch(Box::new(crate::instance::BaseState::new(instance)));
             }
         });
         evt.handle_event::<SelectEntry, _>(|SelectEntry(idx)| {
-            if let Some(old) = query!(ui, campaign_entry(entry=self.selected_item as i32)).next() {
+            if let Some(old) = query!(ui, campaign_entry(entry = self.selected_item as i32)).next()
+            {
                 old.set_property("selected", false);
             }
             self.selected_item = idx;
-            if let Some(new) = query!(ui, campaign_entry(entry=self.selected_item as i32)).next() {
+            if let Some(new) = query!(ui, campaign_entry(entry = self.selected_item as i32)).next()
+            {
                 new.set_property("selected", true);
             }
 
-            if let Some(cur) = query!(ui, campaign_entry(entry=self.selected_item as i32)).next() {
+            if let Some(cur) = query!(ui, campaign_entry(entry = self.selected_item as i32)).next()
+            {
                 let entry = assume!(state.global_logger, cur.get_property::<i32>("entry")) as usize;
                 let mission = &self.missions[entry];
 
@@ -165,19 +214,31 @@ impl state::State for MenuState {
                 }
 
                 if let (Some(new), Some(load)) = (
-                    query!(ui, button(id="new_game")).next(),
-                    query!(ui, button(id="load_game")).next(),
+                    query!(ui, button(id = "new_game")).next(),
+                    query!(ui, button(id = "load_game")).next(),
                 ) {
-                    let valid = server::saving::can_load(&state.filesystem, &format!("missions/{}", mission.save_key), server::saving::SaveType::Mission);
+                    let valid = server::saving::can_load(
+                        &state.filesystem,
+                        &format!("missions/{}", mission.save_key),
+                        server::saving::SaveType::Mission,
+                    );
                     if valid.is_ok() {
-                        query!(new, content > @text).next().map(|v| v.set_text("Restart Mission"));
+                        query!(new, content > @text)
+                            .next()
+                            .map(|v| v.set_text("Restart Mission"));
                         new.set_property("disabled", false);
-                        query!(load, content > @text).next().map(|v| v.set_text("Continue Mission"));
+                        query!(load, content > @text)
+                            .next()
+                            .map(|v| v.set_text("Continue Mission"));
                         load.set_property("disabled", false);
                     } else {
-                        query!(new, content > @text).next().map(|v| v.set_text("Start Mission"));
+                        query!(new, content > @text)
+                            .next()
+                            .map(|v| v.set_text("Start Mission"));
                         new.set_property("disabled", false);
-                        query!(load, content > @text).next().map(|v| v.set_text("Continue Mission"));
+                        query!(load, content > @text)
+                            .next()
+                            .map(|v| v.set_text("Continue Mission"));
                         load.set_property("disabled", true);
                     }
                 }

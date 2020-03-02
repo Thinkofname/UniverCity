@@ -1,8 +1,7 @@
-
-use combine::*;
+use combine::error::*;
 use combine::parser::char::*;
 use combine::parser::range::*;
-use combine::error::*;
+use combine::*;
 
 use std::fmt::{self, Display};
 
@@ -26,20 +25,16 @@ pub enum Type {
     Float,
 }
 
-impl <'a> From<ExprInner<'a>> for Expr<'a> {
+impl<'a> From<ExprInner<'a>> for Expr<'a> {
     fn from(v: ExprInner<'a>) -> Expr<'a> {
-        Expr {
-            inner: v,
-            ty: None,
-        }
+        Expr { inner: v, ty: None }
     }
 }
-impl <'a> Display for Expr<'a> {
+impl<'a> Display for Expr<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Display::fmt(&self.inner, f)
     }
 }
-
 
 #[derive(Debug, PartialEq)]
 pub enum ExprInner<'a> {
@@ -72,7 +67,7 @@ pub enum ExprInner<'a> {
     FloatToInt(Box<Expr<'a>>),
 }
 
-impl <'a> Display for ExprInner<'a> {
+impl<'a> Display for ExprInner<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExprInner::Get(name) => write!(f, "{}", name),
@@ -105,30 +100,26 @@ impl <'a> Display for ExprInner<'a> {
     }
 }
 
-fn expr<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str>
-{
+fn expr<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str> {
     let skip_spaces = || spaces().silent();
 
-    let (mut current, _) =
-        skip_spaces()
+    let (mut current, _) = skip_spaces()
         .with(parser(bool_ops))
         .skip(skip_spaces())
         .parse_stream(input)?;
 
     while let Ok((op, _)) = choice((
-                attempt(string("==")),
-                attempt(string("!=")),
-                attempt(string("<=")),
-                attempt(string(">=")),
-                string("<"),
-                string(">"),
-            ))
-            .skip(skip_spaces())
-            .parse_stream(input)
+        attempt(string("==")),
+        attempt(string("!=")),
+        attempt(string("<=")),
+        attempt(string(">=")),
+        string("<"),
+        string(">"),
+    ))
+    .skip(skip_spaces())
+    .parse_stream(input)
     {
-        let (other, _) = parser(bool_ops)
-            .skip(skip_spaces())
-            .parse_stream(input)?;
+        let (other, _) = parser(bool_ops).skip(skip_spaces()).parse_stream(input)?;
         current = match op {
             "==" => ExprInner::Equal(Box::new(current), Box::new(other)),
             "!=" => ExprInner::NotEqual(Box::new(current), Box::new(other)),
@@ -137,93 +128,77 @@ fn expr<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str>
             "<" => ExprInner::Less(Box::new(current), Box::new(other)),
             ">" => ExprInner::Greater(Box::new(current), Box::new(other)),
             _ => unreachable!(),
-        }.into();
+        }
+        .into();
     }
     Ok((current, Consumed::Consumed(())))
 }
 
-fn bool_ops<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str>
-{
+fn bool_ops<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str> {
     let skip_spaces = || spaces().silent();
 
-    let (mut current, _) = parser(term1)
-        .skip(skip_spaces())
-        .parse_stream(input)?;
+    let (mut current, _) = parser(term1).skip(skip_spaces()).parse_stream(input)?;
 
-    while let Ok((op, _)) = choice((
-                attempt(string("&&")),
-                attempt(string("||")),
-                string("^"),
-            ))
-            .skip(skip_spaces())
-            .parse_stream(input)
+    while let Ok((op, _)) = choice((attempt(string("&&")), attempt(string("||")), string("^")))
+        .skip(skip_spaces())
+        .parse_stream(input)
     {
-        let (other, _) = parser(term1)
-            .skip(skip_spaces())
-            .parse_stream(input)?;
+        let (other, _) = parser(term1).skip(skip_spaces()).parse_stream(input)?;
         current = match op {
             "&&" => ExprInner::And(Box::new(current), Box::new(other)),
             "||" => ExprInner::Or(Box::new(current), Box::new(other)),
             "^" => ExprInner::Xor(Box::new(current), Box::new(other)),
             _ => unreachable!(),
-        }.into();
+        }
+        .into();
     }
 
     Ok((current, Consumed::Consumed(())))
 }
 
-fn term1<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str>
-{
+fn term1<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str> {
     let skip_spaces = || spaces().silent();
 
-    let (mut current, _) = parser(term2)
-        .skip(skip_spaces())
-        .parse_stream(input)?;
+    let (mut current, _) = parser(term2).skip(skip_spaces()).parse_stream(input)?;
 
     while let Ok((op, _)) = choice((char('+'), char('-')))
-            .skip(skip_spaces())
-            .parse_stream(input)
+        .skip(skip_spaces())
+        .parse_stream(input)
     {
-        let (other, _) = parser(term2)
-            .skip(skip_spaces())
-            .parse_stream(input)?;
+        let (other, _) = parser(term2).skip(skip_spaces()).parse_stream(input)?;
         current = match op {
             '+' => ExprInner::Add(Box::new(current), Box::new(other)),
             '-' => ExprInner::Sub(Box::new(current), Box::new(other)),
             _ => unreachable!(),
-        }.into();
+        }
+        .into();
     }
 
     Ok((current, Consumed::Consumed(())))
 }
 
-fn term2<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str>
-{
+fn term2<'a>(input: &mut &'a str) -> ParseResult<Expr<'a>, &'a str> {
     let skip_spaces = || spaces().silent();
 
-    let (mut current, _) = factor()
-        .skip(skip_spaces())
-        .parse_stream(input)?;
+    let (mut current, _) = factor().skip(skip_spaces()).parse_stream(input)?;
 
     while let Ok((op, _)) = choice((char('*'), char('/'), char('%')))
-            .skip(skip_spaces())
-            .parse_stream(input)
+        .skip(skip_spaces())
+        .parse_stream(input)
     {
-        let (other, _) = factor()
-            .skip(skip_spaces())
-            .parse_stream(input)?;
+        let (other, _) = factor().skip(skip_spaces()).parse_stream(input)?;
         current = match op {
             '*' => ExprInner::Mul(Box::new(current), Box::new(other)),
             '/' => ExprInner::Div(Box::new(current), Box::new(other)),
             '%' => ExprInner::Rem(Box::new(current), Box::new(other)),
             _ => unreachable!(),
-        }.into();
+        }
+        .into();
     }
     Ok((current, Consumed::Consumed(())))
 }
 
-fn factor<'a>() -> impl Parser<Input = &'a str, Output = Expr<'a>>
-{
+fn factor<'a>() -> impl Parser<Input = &'a str, Output = Expr<'a>> {
     let skip_spaces = || spaces().silent();
 
     let global = string("global")
@@ -274,23 +249,23 @@ fn factor<'a>() -> impl Parser<Input = &'a str, Output = Expr<'a>>
         .map(|_| ExprInner::Boolean(false))
         .map(Into::into);
 
-    let float = from_str(recognize(
-            optional(char('-'))
-                .with(
-                    take_while1(|c: char| c.is_digit(10) || c == '.')
-                        .and_then(|v: &str| if v.contains('.') { Ok(v) } else { Err(StringStreamError::UnexpectedParse)} )
-                )
-        ))
-        .map(ExprInner::Float)
-        .map(Into::into);
+    let float = from_str(recognize(optional(char('-')).with(
+        take_while1(|c: char| c.is_digit(10) || c == '.').and_then(|v: &str| {
+            if v.contains('.') {
+                Ok(v)
+            } else {
+                Err(StringStreamError::UnexpectedParse)
+            }
+        }),
+    )))
+    .map(ExprInner::Float)
+    .map(Into::into);
 
     let int = from_str(recognize(
-            optional(char('-'))
-                .with(take_while1(|c: char| c.is_digit(10)))
-        ))
-        .map(ExprInner::Integer)
-        .map(Into::into);
-
+        optional(char('-')).with(take_while1(|c: char| c.is_digit(10))),
+    ))
+    .map(ExprInner::Integer)
+    .map(Into::into);
 
     choice((
         attempt(float_to_int),
@@ -308,11 +283,13 @@ fn factor<'a>() -> impl Parser<Input = &'a str, Output = Expr<'a>>
 
 pub fn parse(val: &str) -> crate::errors::Result<Expr<'_>> {
     match parser(expr).parse(val) {
-        Ok((expr, rem)) => if rem.trim().is_empty() {
-            Ok(expr)
-        } else {
-            Err(crate::errors::ErrorKind::IncompleteParse(rem.into()).into())
-        },
+        Ok((expr, rem)) => {
+            if rem.trim().is_empty() {
+                Ok(expr)
+            } else {
+                Err(crate::errors::ErrorKind::IncompleteParse(rem.into()).into())
+            }
+        }
         Err(_err) => Err(crate::errors::ErrorKind::ParseFailed(val.into()).into()),
     }
 }

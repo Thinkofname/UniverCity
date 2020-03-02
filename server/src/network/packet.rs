@@ -1,17 +1,14 @@
 //! Packet definitions and serializing
 
-use std::io::{self, Write, Read};
-use delta_encode::{bitio, AlwaysVec};
 use crate::command;
-use crate::player;
 use crate::notify;
+use crate::player;
 use crate::prelude::*;
+use delta_encode::{bitio, AlwaysVec};
+use std::io::{self, Read, Write};
 
 // Compat due to the move
-pub use delta_encode::bitio::{
-    write_len_bits,
-    read_len_bits
-};
+pub use delta_encode::bitio::{read_len_bits, write_len_bits};
 
 #[doc(hidden)]
 #[macro_export]
@@ -344,7 +341,8 @@ pub struct Raw(pub Vec<u8>);
 impl delta_encode::DeltaEncodable for Raw {
     #[inline]
     fn encode<W>(&self, _base: Option<&Self>, w: &mut bitio::Writer<W>) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         for b in &self.0 {
             w.write_unsigned(u64::from(*b), 8)?;
@@ -354,17 +352,20 @@ impl delta_encode::DeltaEncodable for Raw {
 
     #[inline]
     fn decode<R>(_base: Option<&Self>, r: &mut bitio::Reader<R>) -> io::Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         let mut data = Vec::with_capacity(256);
         loop {
             let val = match r.read_unsigned(8) {
                 Ok(val) => val as u8,
-                Err(err) => if err.kind() == io::ErrorKind::UnexpectedEof {
-                    break
-                } else {
-                    return Err(err);
-                },
+                Err(err) => {
+                    if err.kind() == io::ErrorKind::UnexpectedEof {
+                        break;
+                    } else {
+                        return Err(err);
+                    }
+                }
             };
             data.push(val);
         }

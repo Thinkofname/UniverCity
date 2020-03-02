@@ -1,24 +1,14 @@
 //! Audio management
 
 use crate::prelude::*;
-use univercity_audio::{
-    AudioMixer,
-    AudioDataSource,
-    AudioBuffer,
-    OggStream,
-    SoundRef,
-};
-use sdl2::AudioSubsystem;
-use sdl2::audio::{
-    AudioSpecDesired,
-    AudioCallback,
-    AudioDevice,
-};
 use crate::server::lua::{self, Ref, Scope};
-use std::rc::{Rc, Weak};
-use std::cell::RefCell;
-use std::sync::{Arc, Mutex};
 use cgmath;
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use sdl2::AudioSubsystem;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
+use std::sync::{Arc, Mutex};
+use univercity_audio::{AudioBuffer, AudioDataSource, AudioMixer, OggStream, SoundRef};
 
 /// Manages the audio device
 pub struct AudioManager {
@@ -30,7 +20,9 @@ pub struct AudioManager {
 }
 
 #[inline]
-fn send_sync<T: Send + Sync>(v: T) -> T { v }
+fn send_sync<T: Send + Sync>(v: T) -> T {
+    v
+}
 
 const FADE_TIME: Duration = Duration::from_secs(1);
 
@@ -38,19 +30,27 @@ impl AudioManager {
     /// Creates a new audio manager.
     ///
     /// This creates an audio device in sdl for output
-    pub fn new(logger: &Logger, audio: AudioSubsystem, asset_manager: AssetManager) -> AudioManager {
+    pub fn new(
+        logger: &Logger,
+        audio: AudioSubsystem,
+        asset_manager: AssetManager,
+    ) -> AudioManager {
         let mixer = AudioMixer::new(44_100);
         let mix = mixer.clone();
-        let device = audio.open_playback(None, &AudioSpecDesired {
-            freq: Some(44_100),
-            channels: Some(2),
-            samples: None,
-        }, move |spec| {
-            assert_eq!(spec.freq, 44_100);
-            SDLAudioCallback {
-                inner: mix
-            }
-        }).expect("Failed to open an audio device");
+        let device = audio
+            .open_playback(
+                None,
+                &AudioSpecDesired {
+                    freq: Some(44_100),
+                    channels: Some(2),
+                    samples: None,
+                },
+                move |spec| {
+                    assert_eq!(spec.freq, 44_100);
+                    SDLAudioCallback { inner: mix }
+                },
+            )
+            .expect("Failed to open an audio device");
         device.resume();
 
         AudioManager {
@@ -75,9 +75,9 @@ impl AudioManager {
 
     /// Ticks playing music
     pub fn tick(&self, camera_x: f32, camera_y: f32, camera_rotation: cgmath::Deg<f32>) {
-        use rand::thread_rng;
-        use rand::seq::SliceRandom;
         use ogg_metadata::AudioMetadata;
+        use rand::seq::SliceRandom;
+        use rand::thread_rng;
 
         let controller: &mut AudioController = &mut *self.controller.borrow_mut();
         controller.camera = (camera_x, camera_y, camera_rotation);
@@ -88,31 +88,44 @@ impl AudioManager {
             if let Some(remaining) = song.length.checked_sub(song.start.elapsed()) {
                 if remaining <= FADE_TIME {
                     let vol = remaining.as_nanos() as f64 / FADE_TIME.as_nanos() as f64;
-                    song.sound.set_volume((vol * controller.music_volume) as f32);
+                    song.sound
+                        .set_volume((vol * controller.music_volume) as f32);
                 }
             } else {
                 song.sound.stop();
             }
         }
 
-        if controller.playing_song.as_ref().map_or(true, |v| v.sound.has_ended()) {
+        if controller
+            .playing_song
+            .as_ref()
+            .map_or(true, |v| v.sound.has_ended())
+        {
             let mut rng = thread_rng();
             if let Some(song) = controller.songs.choose(&mut rng) {
-                let asset = assume!(controller.log, controller.assets.open_from_pack(
-                    song.module_key(),
-                    &format!("sound/{}.ogg", song.resource())
-                ));
+                let asset = assume!(
+                    controller.log,
+                    controller.assets.open_from_pack(
+                        song.module_key(),
+                        &format!("sound/{}.ogg", song.resource())
+                    )
+                );
                 // Get length
                 let meta = assume!(controller.log, ogg_metadata::read_format(asset));
                 let length = match assume!(controller.log, meta.get(0)) {
-                    ogg_metadata::OggFormat::Vorbis(meta) => meta.get_duration().expect("Missing audio duration"),
+                    ogg_metadata::OggFormat::Vorbis(meta) => {
+                        meta.get_duration().expect("Missing audio duration")
+                    }
                     _ => panic!("Unsupported ogg format"),
                 };
 
-                let asset = assume!(controller.log, controller.assets.open_from_pack(
-                    song.module_key(),
-                    &format!("sound/{}.ogg", song.resource())
-                ));
+                let asset = assume!(
+                    controller.log,
+                    controller.assets.open_from_pack(
+                        song.module_key(),
+                        &format!("sound/{}.ogg", song.resource())
+                    )
+                );
 
                 let ogg = assume!(controller.log, OggStream::load(asset))
                     .resampled(44_100)
@@ -142,13 +155,10 @@ impl AudioManager {
 
         let plist = format!("sound/music/{}.list", list);
         for m_key in controller.assets.get_packs() {
-            let file = if let Ok(f) = controller.assets.open_from_pack(
-                    m_key.borrow(),
-                    &plist
-            ) {
+            let file = if let Ok(f) = controller.assets.open_from_pack(m_key.borrow(), &plist) {
                 f
             } else {
-                continue
+                continue;
             };
 
             let file = BufReader::new(file);
@@ -263,23 +273,32 @@ impl PositionRef {
 }
 
 impl lua::LuaUsable for PositionRef {
-
     fn fields(t: &lua::TypeBuilder) {
-        t.field("get_position", lua::closure1(|_lua, this: Ref<PositionRef>| -> (f64, f64) {
-            let (x, y) = this.position();
-            (f64::from(x), f64::from(y))
-        }));
-        t.field("set_position", lua::closure3(|_lua, this: Ref<PositionRef>, x: f64, y: f64| {
-            this.set_position(x as f32, y as f32);
-        }));
-        t.field("get_ended", lua::closure1(|_lua, this: Ref<PositionRef>| -> bool {
-            this.sound.has_ended()
-        }));
-        t.field("set_ended", lua::closure2(|_lua, this: Ref<PositionRef>, ended: bool|{
-            if ended {
-                this.sound.stop()
-            }
-        }));
+        t.field(
+            "get_position",
+            lua::closure1(|_lua, this: Ref<PositionRef>| -> (f64, f64) {
+                let (x, y) = this.position();
+                (f64::from(x), f64::from(y))
+            }),
+        );
+        t.field(
+            "set_position",
+            lua::closure3(|_lua, this: Ref<PositionRef>, x: f64, y: f64| {
+                this.set_position(x as f32, y as f32);
+            }),
+        );
+        t.field(
+            "get_ended",
+            lua::closure1(|_lua, this: Ref<PositionRef>| -> bool { this.sound.has_ended() }),
+        );
+        t.field(
+            "set_ended",
+            lua::closure2(|_lua, this: Ref<PositionRef>, ended: bool| {
+                if ended {
+                    this.sound.stop()
+                }
+            }),
+        );
     }
 }
 
@@ -295,24 +314,24 @@ impl AudioController {
 
     fn make_sound(&mut self, sound: ResourceKey<'_>) -> SoundRef {
         if let Some(sound) = self.loaded_sounds.get(&sound).cloned() {
-            let snd = self.mixer.play(
-                sound.source()
-                    .volume(self.sound_volume as f32)
-            );
+            let snd = self
+                .mixer
+                .play(sound.source().volume(self.sound_volume as f32));
             return snd;
         }
-        let asset = assume!(self.log, self.assets.open_from_pack(
-            sound.module_key(),
-            &format!("sound/{}.ogg", sound.resource())
-        ));
+        let asset = assume!(
+            self.log,
+            self.assets.open_from_pack(
+                sound.module_key(),
+                &format!("sound/{}.ogg", sound.resource())
+            )
+        );
         let ogg = assume!(self.log, OggStream::load(asset))
             .resampled(44_100)
             .into_buffer();
         self.loaded_sounds.insert(sound.into_owned(), ogg.clone());
-        self.mixer.play(
-            ogg.source()
-                .volume(self.sound_volume as f32)
-        )
+        self.mixer
+            .play(ogg.source().volume(self.sound_volume as f32))
     }
 
     /// Plays the named sound file at the target position
@@ -358,16 +377,10 @@ impl AudioController {
 
                 let mut vol = if side < 0.0 {
                     let am = side.abs() / 30.0;
-                    (
-                        1.0 + am * 0.5,
-                        1.0 - am * 0.5,
-                    )
+                    (1.0 + am * 0.5, 1.0 - am * 0.5)
                 } else {
                     let am = side.abs() / 30.0;
-                    (
-                        1.0 - am * 0.5,
-                        1.0 + am * 0.5,
-                    )
+                    (1.0 - am * 0.5, 1.0 + am * 0.5)
                 };
                 vol.0 *= dvol;
                 vol.1 *= dvol;
@@ -377,7 +390,7 @@ impl AudioController {
 
             snd.sound.set_volume_sides(
                 left * self.sound_volume as f32,
-                right * self.sound_volume as f32
+                right * self.sound_volume as f32,
             );
 
             if snd.first {
@@ -390,8 +403,7 @@ impl AudioController {
 struct SDLAudioCallback {
     inner: AudioMixer,
 }
-impl AudioCallback for SDLAudioCallback
-{
+impl AudioCallback for SDLAudioCallback {
     type Channel = i16;
 
     fn callback(&mut self, out: &mut [i16]) {
@@ -406,23 +418,45 @@ impl AudioCallback for SDLAudioCallback
 
 /// Sets up a interface for scripts to interface with audio playback
 pub fn init_audiolib(state: &lua::Lua) {
-    state.set(Scope::Global, "audio_play_sound", lua::closure2(|lua, module: Ref<String>, sound: Ref<String>| -> UResult<()> {
-        let audio = lua.get_tracked::<AudioController>()
-            .ok_or_else(|| ErrorKind::InvalidState)?;
-        let mut audio = audio.borrow_mut();
-        let key = LazyResourceKey::parse(&sound)
-            .or_module(ModuleKey::new(&*module))
-            .into_owned();
-        audio.play_sound(key);
-        Ok(())
-    }));
-    state.set(Scope::Global, "audio_play_sound_at", lua::closure4(|lua, module: Ref<String>, sound: Ref<String>, x: f64, y: f64| -> UResult<Ref<PositionRef>> {
-        let audio = lua.get_tracked::<AudioController>()
-            .ok_or_else(|| ErrorKind::InvalidState)?;
-        let mut audio = audio.borrow_mut();
-        let key = LazyResourceKey::parse(&sound)
-            .or_module(ModuleKey::new(&*module))
-            .into_owned();
-        Ok(Ref::new(lua, audio.play_sound_at(key, (x as f32, y as f32))))
-    }));
+    state.set(
+        Scope::Global,
+        "audio_play_sound",
+        lua::closure2(
+            |lua, module: Ref<String>, sound: Ref<String>| -> UResult<()> {
+                let audio = lua
+                    .get_tracked::<AudioController>()
+                    .ok_or_else(|| ErrorKind::InvalidState)?;
+                let mut audio = audio.borrow_mut();
+                let key = LazyResourceKey::parse(&sound)
+                    .or_module(ModuleKey::new(&*module))
+                    .into_owned();
+                audio.play_sound(key);
+                Ok(())
+            },
+        ),
+    );
+    state.set(
+        Scope::Global,
+        "audio_play_sound_at",
+        lua::closure4(
+            |lua,
+             module: Ref<String>,
+             sound: Ref<String>,
+             x: f64,
+             y: f64|
+             -> UResult<Ref<PositionRef>> {
+                let audio = lua
+                    .get_tracked::<AudioController>()
+                    .ok_or_else(|| ErrorKind::InvalidState)?;
+                let mut audio = audio.borrow_mut();
+                let key = LazyResourceKey::parse(&sound)
+                    .or_module(ModuleKey::new(&*module))
+                    .into_owned();
+                Ok(Ref::new(
+                    lua,
+                    audio.play_sound_at(key, (x as f32, y as f32)),
+                ))
+            },
+        ),
+    );
 }

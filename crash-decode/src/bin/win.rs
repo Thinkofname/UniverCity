@@ -3,28 +3,42 @@ extern crate winapi;
 
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, BufRead};
-use std::ptr;
+use std::io::{BufRead, BufReader};
 use std::mem::{self, zeroed};
+use std::ptr;
 
-use winapi::um::dbghelp::*;
-use winapi::um::winnt::*;
-use winapi::um::errhandlingapi::GetLastError;
-use winapi::shared::minwindef::*;
 use winapi::shared::basetsd::DWORD64;
 use winapi::shared::guiddef::GUID;
+use winapi::shared::minwindef::*;
+use winapi::um::dbghelp::*;
+use winapi::um::errhandlingapi::GetLastError;
+use winapi::um::winnt::*;
 
 use std::ffi::*;
 use std::os::windows::ffi::*;
 use std::slice;
 
 extern "C" {
-    fn SymLoadModuleExW(process: HANDLE, file: HANDLE, image_name: PCWSTR, module_name: PCWSTR, base_of_dll: DWORD64, size: DWORD, data: PMODLOAD_DATA, flags: DWORD) -> DWORD64;
+    fn SymLoadModuleExW(
+        process: HANDLE,
+        file: HANDLE,
+        image_name: PCWSTR,
+        module_name: PCWSTR,
+        base_of_dll: DWORD64,
+        size: DWORD,
+        data: PMODLOAD_DATA,
+        flags: DWORD,
+    ) -> DWORD64;
     fn SymUnloadModule64(process: HANDLE, base: DWORD64) -> BOOL;
     fn SymSetOptions(options: DWORD) -> DWORD;
     fn SymSetSearchPathW(process: HANDLE, search_path: PCWSTR) -> BOOL;
     fn SymGetSearchPathW(process: HANDLE, search_path: PCWSTR, len: DWORD64) -> BOOL;
-    fn SymGetLineFromAddrW64(process: HANDLE, addr: DWORD64, displacement: *mut DWORD, line: *mut IMAGEHLP_LINEW64) -> BOOL;
+    fn SymGetLineFromAddrW64(
+        process: HANDLE,
+        addr: DWORD64,
+        displacement: *mut DWORD,
+        line: *mut IMAGEHLP_LINEW64,
+    ) -> BOOL;
     fn SymFromNameW(process: HANDLE, name: PCWSTR, symbol: *mut SYMBOL_INFOW) -> BOOL;
 }
 
@@ -79,7 +93,7 @@ fn main() {
             panic!("Err: {:?}", GetLastError());
         }
 
-        let mut path = vec![0; 1024*1024];
+        let mut path = vec![0; 1024 * 1024];
         if SymGetSearchPathW(process, path.as_mut_ptr(), path.len() as _) == 0 {
             panic!("Err: {:?}", GetLastError());
         }
@@ -88,23 +102,39 @@ fn main() {
         search_path.push(';');
         search_path.push_str(&env::current_dir().unwrap().to_string_lossy());
 
-        let search_path: Vec<u16> = OsStr::new(&search_path).encode_wide().chain(Some(0)).collect();
+        let search_path: Vec<u16> = OsStr::new(&search_path)
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
         if SymSetSearchPathW(process, search_path.as_ptr()) == 0 {
             panic!("Err: {:?}", GetLastError());
         }
 
         let binary_w: Vec<u16> = OsStr::new(&binary).encode_wide().chain(Some(0)).collect();
-        let module_base = SymLoadModuleExW(process, ptr::null_mut(), binary_w.as_ptr(), ptr::null(), 0, 0, ptr::null_mut(), 0);
+        let module_base = SymLoadModuleExW(
+            process,
+            ptr::null_mut(),
+            binary_w.as_ptr(),
+            ptr::null(),
+            0,
+            0,
+            ptr::null_mut(),
+            0,
+        );
         if module_base == 0 {
             panic!("Err: {:?}", GetLastError());
         }
 
         let diff = {
-            let mut buffer = vec![0; mem::size_of::<SYMBOL_INFOW>() + MAX_SYM_NAME * mem::size_of::<WCHAR>()];
+            let mut buffer =
+                vec![0; mem::size_of::<SYMBOL_INFOW>() + MAX_SYM_NAME * mem::size_of::<WCHAR>()];
             let info: &mut SYMBOL_INFOW = &mut *(buffer.as_mut_ptr() as *mut _);
             info.SizeOfStruct = mem::size_of::<SYMBOL_INFOW>() as u32;
             info.MaxNameLen = MAX_SYM_NAME as u32;
-            let base_anchor_name: Vec<u16> = OsStr::new("base_anchor").encode_wide().chain(Some(0)).collect();
+            let base_anchor_name: Vec<u16> = OsStr::new("base_anchor")
+                .encode_wide()
+                .chain(Some(0))
+                .collect();
             if SymFromNameW(process, base_anchor_name.as_ptr(), info) == 0 {
                 panic!("Failed to get base symbol: {}", GetLastError());
             }
@@ -117,22 +147,24 @@ fn main() {
             let mut line: IMAGEHLP_LINEW64 = zeroed();
             line.SizeOfStruct = mem::size_of::<IMAGEHLP_LINEW64>() as _;
             let mut displacement = 0;
-            let (file, line_no) = if SymGetLineFromAddrW64(process, ip - diff, &mut displacement, &mut line) != 0 {
-                let mut len = 0;
-                while *line.FileName.offset(len) != 0 {
-                    len += 1;
-                }
-                let name: &[u16] = slice::from_raw_parts(line.FileName, len as usize);
-                let name = OsString::from_wide(name);
-                (
-                    name.to_string_lossy().into_owned(),
-                    line.LineNumber.to_string(),
-                )
-            } else {
-                ("??".into(), "?".into())
-            };
+            let (file, line_no) =
+                if SymGetLineFromAddrW64(process, ip - diff, &mut displacement, &mut line) != 0 {
+                    let mut len = 0;
+                    while *line.FileName.offset(len) != 0 {
+                        len += 1;
+                    }
+                    let name: &[u16] = slice::from_raw_parts(line.FileName, len as usize);
+                    let name = OsString::from_wide(name);
+                    (
+                        name.to_string_lossy().into_owned(),
+                        line.LineNumber.to_string(),
+                    )
+                } else {
+                    ("??".into(), "?".into())
+                };
 
-            let mut buffer = vec![0; mem::size_of::<SYMBOL_INFOW>() + MAX_SYM_NAME * mem::size_of::<WCHAR>()];
+            let mut buffer =
+                vec![0; mem::size_of::<SYMBOL_INFOW>() + MAX_SYM_NAME * mem::size_of::<WCHAR>()];
             let info: &mut SYMBOL_INFOW = &mut *(buffer.as_mut_ptr() as *mut _);
             info.SizeOfStruct = mem::size_of::<SYMBOL_INFOW>() as u32;
             info.MaxNameLen = MAX_SYM_NAME as u32;
@@ -144,7 +176,6 @@ fn main() {
                 let name = OsString::from_wide(name);
                 name.to_string_lossy().into_owned()
             };
-
 
             println!("{}", name);
             println!("    at: {}:{}", file, line_no);

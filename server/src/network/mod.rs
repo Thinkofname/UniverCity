@@ -14,18 +14,18 @@ pub mod steam;
 #[cfg(feature = "steam")]
 pub use self::steam::*;
 
-use std::sync::mpsc;
+use crate::event;
+use std::cell::RefCell;
+use std::collections::hash_map::ValuesMut;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::collections::hash_map::ValuesMut;
-use std::time;
 use std::marker::PhantomData;
-use std::cell::RefCell;
-use crate::event;
+use std::sync::mpsc;
+use std::time;
 
-use crate::util::FNVMap;
 use crate::errors;
 use crate::prelude::*;
+use crate::util::FNVMap;
 
 /// Manages network connections
 pub struct NetworkManager<S: SocketListener> {
@@ -34,11 +34,12 @@ pub struct NetworkManager<S: SocketListener> {
     connections: FNVMap<<S::Socket as Socket>::Id, Connection<S::Socket>>,
 }
 
-impl <S: SocketListener> NetworkManager<S> {
+impl<S: SocketListener> NetworkManager<S> {
     /// Creates a new network manager that listens for connections on the passed
     /// address
     pub fn new<A>(log: &Logger, addr: A) -> errors::Result<NetworkManager<S>>
-        where A: Into<<S as SocketListener>::Address>
+    where
+        A: Into<<S as SocketListener>::Address>,
     {
         let log = log.new(o!(
             "source" => "network-manager",
@@ -56,23 +57,31 @@ impl <S: SocketListener> NetworkManager<S> {
         while let Some(mut socket) = self.listener.next_socket() {
             info!(self.log, "New connection: {:?}", socket);
             let id = socket.id();
-            self.connections.insert(id.clone(), Connection::new(&self.log, socket));
+            self.connections
+                .insert(id.clone(), Connection::new(&self.log, socket));
         }
     }
 
     /// Returns the connection with the given id if it exists
-    pub fn get_connection(&mut self, id: &<S::Socket as Socket>::Id) -> Option<&mut Connection<S::Socket>> {
+    pub fn get_connection(
+        &mut self,
+        id: &<S::Socket as Socket>::Id,
+    ) -> Option<&mut Connection<S::Socket>> {
         self.connections.get_mut(id)
     }
 
     /// Returns all currently active connections.
-    pub fn connections(&mut self) -> ValuesMut<'_, <S::Socket as Socket>::Id, Connection<S::Socket>> {
+    pub fn connections(
+        &mut self,
+    ) -> ValuesMut<'_, <S::Socket as Socket>::Id, Connection<S::Socket>> {
         let listener = &mut self.listener;
-        self.connections.retain(|_, v| if v.closed {
-            listener.drop_socket(&v.id);
-            false
-        } else {
-            true
+        self.connections.retain(|_, v| {
+            if v.closed {
+                listener.drop_socket(&v.id);
+                false
+            } else {
+                true
+            }
         });
         self.connections.values_mut()
     }
@@ -97,7 +106,7 @@ pub struct Connection<S: Socket> {
     recv: Receiver,
 }
 
-impl <S: Socket> Connection<S> {
+impl<S: Socket> Connection<S> {
     fn new(log: &Logger, mut socket: S) -> Connection<S> {
         let id = socket.id();
         let (send, recv) = socket.split(log);
@@ -118,7 +127,8 @@ impl <S: Socket> Connection<S> {
     /// Order of the frames when recieved by the target and
     /// whether the data arrives at all isn't guaranteed.
     pub fn send<P>(&mut self, data: P) -> errors::Result<()>
-        where P: Into<packet::Packet> + Debug
+    where
+        P: Into<packet::Packet> + Debug,
     {
         let ret = self.send.send(data);
         self.closed |= ret.is_err();
@@ -133,7 +143,8 @@ impl <S: Socket> Connection<S> {
     /// defined window then the socket should be closed and an
     /// error returned for all future `send*` and `recv` calls.
     pub fn ensure_send<P>(&mut self, data: P) -> errors::Result<()>
-        where P: Into<packet::Packet> + Debug
+    where
+        P: Into<packet::Packet> + Debug,
     {
         let ret = self.send.ensure_send(data);
         self.closed |= ret.is_err();
@@ -143,13 +154,13 @@ impl <S: Socket> Connection<S> {
     /// Reads a single Packet if available.
     pub fn recv(&mut self) -> errors::Result<packet::Packet> {
         let ret = self.recv.try_recv();
-        self.closed |= ret.as_ref()
-            .err()
-            .map_or(false, |e| if let errors::ErrorKind::NoData = *e.kind() {
+        self.closed |= ret.as_ref().err().map_or(false, |e| {
+            if let errors::ErrorKind::NoData = *e.kind() {
                 false
             } else {
                 true
-            });
+            }
+        });
         ret
     }
 }
@@ -190,12 +201,15 @@ impl Sender {
     /// Order of the frames when recieved by the target and
     /// whether the data arrives at all isn't guaranteed.
     pub fn send<P>(&mut self, data: P) -> errors::Result<()>
-        where P: Into<packet::Packet>
+    where
+        P: Into<packet::Packet>,
     {
         match *self {
-            Sender::Reliable{ref inner} => inner.send(data.into())
+            Sender::Reliable { ref inner } => inner
+                .send(data.into())
                 .map_err(|_| errors::ErrorKind::ConnectionClosed.into()),
-            Sender::Unreliable{ref inner} => inner.send((false, data.into()))
+            Sender::Unreliable { ref inner } => inner
+                .send((false, data.into()))
                 .map_err(|_| errors::ErrorKind::ConnectionClosed.into()),
         }
     }
@@ -208,12 +222,15 @@ impl Sender {
     /// defined window then the socket should be closed and an
     /// error returned for all future `send*` and `recv` calls.
     pub fn ensure_send<P>(&mut self, data: P) -> errors::Result<()>
-        where P: Into<packet::Packet>
+    where
+        P: Into<packet::Packet>,
     {
         match *self {
-            Sender::Reliable{ref inner} => inner.send(data.into())
+            Sender::Reliable { ref inner } => inner
+                .send(data.into())
                 .map_err(|_| errors::ErrorKind::ConnectionClosed.into()),
-            Sender::Unreliable{ref inner} => inner.send((true, data.into()))
+            Sender::Unreliable { ref inner } => inner
+                .send((true, data.into()))
                 .map_err(|_| errors::ErrorKind::ConnectionClosed.into()),
         }
     }
@@ -226,7 +243,6 @@ pub struct Receiver {
 }
 
 impl Receiver {
-
     /// Reads a single Packet if available.
     pub fn try_recv(&mut self) -> errors::Result<packet::Packet> {
         let ret = self.inner.try_recv();
@@ -318,7 +334,7 @@ pub struct RequestTicket<R> {
     id: u32,
 }
 
-impl <R> Clone for RequestTicket<R> {
+impl<R> Clone for RequestTicket<R> {
     fn clone(&self) -> Self {
         Self {
             _r: PhantomData,
@@ -327,8 +343,7 @@ impl <R> Clone for RequestTicket<R> {
     }
 }
 
-impl <R> Copy for RequestTicket<R> {
-}
+impl<R> Copy for RequestTicket<R> {}
 
 /// An event sent when a reply is given
 pub struct ReplyEvent(pub packet::Reply);
@@ -352,8 +367,9 @@ pub struct Replier<'a, R> {
     _r: PhantomData<R>,
 }
 
-impl <'a, R> Replier<'a, R>
-    where R: Requestable
+impl<'a, R> Replier<'a, R>
+where
+    R: Requestable,
 {
     /// Replies to the request
     pub fn reply(&self, rpl: R::Reply) {
@@ -362,35 +378,43 @@ impl <'a, R> Replier<'a, R>
 
         let mut data = bitio::Writer::new(Vec::new());
         rpl.encode(None, &mut data).expect("Failed to encode reply");
-        replies.push(packet::Reply {
-            ty: R::ID,
-            id: self.id,
-            data: packet::Raw(data.finish().expect("Failed to encode reply")),
-        }.into());
+        replies.push(
+            packet::Reply {
+                ty: R::ID,
+                id: self.id,
+                data: packet::Raw(data.finish().expect("Failed to encode reply")),
+            }
+            .into(),
+        );
     }
 }
 
-impl <'a> AnyRequest<'a> {
+impl<'a> AnyRequest<'a> {
     /// Tries to handle the request as the given type
     pub fn handle<R, F>(&self, func: F)
-        where R: Requestable,
-            F: FnOnce(R, Replier<'a, R>)
+    where
+        R: Requestable,
+        F: FnOnce(R, Replier<'a, R>),
     {
         use std::io;
         if self.pck.ty == R::ID {
             let mut reader = bitio::Reader::new(io::Cursor::new(&self.pck.data.0));
             let r = R::decode(None, &mut reader).expect("Failed to decode request");
-            func(r, Replier {
-                id: self.pck.id,
-                reply: self.reply,
-                _r: PhantomData,
-            });
+            func(
+                r,
+                Replier {
+                    id: self.pck.id,
+                    reply: self.reply,
+                    _r: PhantomData,
+                },
+            );
         }
     }
 }
 
-impl <'a, I> Iterator for Requests<'a, I>
-    where I: Iterator<Item=packet::Request>,
+impl<'a, I> Iterator for Requests<'a, I>
+where
+    I: Iterator<Item = packet::Request>,
 {
     type Item = AnyRequest<'a>;
 
@@ -403,7 +427,7 @@ impl <'a, I> Iterator for Requests<'a, I>
     }
 }
 
-impl <'a, I> Drop for Requests<'a, I> {
+impl<'a, I> Drop for Requests<'a, I> {
     fn drop(&mut self) {
         let mut r = self.replies.borrow_mut();
         self.packets.append(&mut *r);
@@ -427,21 +451,26 @@ impl RequestManager {
     }
 
     /// Returns a collection of packets that need to be sent
-    pub fn packets(&mut self) -> impl Iterator<Item=packet::Packet> + '_ {
+    pub fn packets(&mut self) -> impl Iterator<Item = packet::Packet> + '_ {
         self.packets.drain(..)
     }
 
     /// Queues a request to be sent
     pub fn request<R>(&mut self, req: R) -> RequestTicket<R>
-        where R: Requestable
+    where
+        R: Requestable,
     {
         let mut data = bitio::Writer::new(Vec::new());
-        req.encode(None, &mut data).expect("Failed to encode request");
-        self.packets.push(packet::Request {
-            ty: R::ID,
-            id: self.next_id,
-            data: packet::Raw(data.finish().expect("Failed to encode request")),
-        }.into());
+        req.encode(None, &mut data)
+            .expect("Failed to encode request");
+        self.packets.push(
+            packet::Request {
+                ty: R::ID,
+                id: self.next_id,
+                data: packet::Raw(data.finish().expect("Failed to encode request")),
+            }
+            .into(),
+        );
         let ticket = RequestTicket {
             _r: PhantomData,
             id: self.next_id,
@@ -453,23 +482,24 @@ impl RequestManager {
     /// Waits for a reply and calls the function if the event
     /// is the reply
     pub fn handle_reply<R, F>(evt: &mut event::EventHandler, ticket: RequestTicket<R>, func: F)
-        where F: FnOnce(R::Reply),
-            R: Requestable
+    where
+        F: FnOnce(R::Reply),
+        R: Requestable,
     {
-        use std::io;
         use delta_encode::DeltaEncodable;
+        use std::io;
         evt.handle_event_if::<ReplyEvent, _, _>(
             |evt| evt.0.id == ticket.id && evt.0.ty == R::ID,
             |evt| {
                 let mut r = bitio::Reader::new(io::Cursor::new(evt.0.data.0));
                 let rpl = R::Reply::decode(None, &mut r).expect("Failed to decode reply");
                 func(rpl);
-            }
+            },
         );
     }
 
     /// An iterator over requests
-    pub fn requests(&mut self) -> impl Iterator<Item=AnyRequest<'_>> {
+    pub fn requests(&mut self) -> impl Iterator<Item = AnyRequest<'_>> {
         Requests {
             packets: &mut self.packets,
             replies: &self.replies,

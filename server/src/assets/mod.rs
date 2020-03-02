@@ -33,19 +33,19 @@
 //! left off where it can be inferred to avoid repeating
 //! youself, `LazyResourceKey` may be used for this case.
 
-use std::sync::{Arc, Mutex};
-use std::io::{self, SeekFrom, Write, Read, Seek};
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::any::{TypeId, Any};
-use std::time::SystemTime;
+use std::any::{Any, TypeId};
 use std::fmt::{self, Debug};
+use std::fs;
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
-use byteorder::{LittleEndian, ReadBytesExt};
-use crate::util::*;
-use delta_encode::DeltaEncodable;
 use crate::errors;
 use crate::prelude::*;
+use crate::util::*;
+use byteorder::{LittleEndian, ReadBytesExt};
+use delta_encode::DeltaEncodable;
 use memmap;
 
 mod arcstr;
@@ -63,12 +63,10 @@ pub struct ModuleKey<'a> {
     key: ArcStr<'a>,
 }
 
-impl <'a> ModuleKey<'a> {
+impl<'a> ModuleKey<'a> {
     /// Creates a module key that references the named module.
     pub fn new<S: Into<ArcStr<'a>>>(module: S) -> ModuleKey<'a> {
-        ModuleKey {
-            key: module.into(),
-        }
+        ModuleKey { key: module.into() }
     }
 
     /// Returns the module name of this key
@@ -100,28 +98,29 @@ impl <'a> ModuleKey<'a> {
     /// data as this key.
     pub fn borrow(&'a self) -> ModuleKey<'a> {
         ModuleKey {
-            key: self.key.borrow()
+            key: self.key.borrow(),
         }
     }
 }
 
-impl <'a, 'b> PartialEq<ModuleKey<'a>> for ModuleKey<'b> {
+impl<'a, 'b> PartialEq<ModuleKey<'a>> for ModuleKey<'b> {
     fn eq(&self, other: &ModuleKey<'a>) -> bool {
         self.key == other.key
     }
 }
 
-impl <'a> Debug for ModuleKey<'a> {
+impl<'a> Debug for ModuleKey<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "Module({})", self.key)
     }
 }
 
-impl <'a, T> From<T> for ModuleKey<'a> where T: Into<ArcStr<'a>> {
+impl<'a, T> From<T> for ModuleKey<'a>
+where
+    T: Into<ArcStr<'a>>,
+{
     fn from(v: T) -> ModuleKey<'a> {
-        ModuleKey {
-            key: v.into(),
-        }
+        ModuleKey { key: v.into() }
     }
 }
 
@@ -138,19 +137,19 @@ pub struct ResourceKey<'a> {
     resource: ArcStr<'a>,
 }
 
-impl <'a> ResourceKey<'a> {
+impl<'a> ResourceKey<'a> {
     /// Creates a resource key that references the named resource.
     ///
     /// Inherits the lifetime of its parameters
-    pub fn new<'b: 'a, 'c: 'a,  M, S>(module: M, resource: S) -> ResourceKey<'a>
-        where S: Into<ArcStr<'b>>,
-            M: Into<ModuleKey<'c>>
+    pub fn new<'b: 'a, 'c: 'a, M, S>(module: M, resource: S) -> ResourceKey<'a>
+    where
+        S: Into<ArcStr<'b>>,
+        M: Into<ModuleKey<'c>>,
     {
         ResourceKey {
             module: module.into(),
             resource: resource.into(),
         }
-
     }
 
     /// Parses the passed string into a resource key.
@@ -237,7 +236,7 @@ impl <'a> ResourceKey<'a> {
         let r = self.resource.as_bytes();
         buf[..m.len()].copy_from_slice(m);
         buf[m.len()] = b':';
-        buf[m.len() + 1 .. m.len() + 1 + r.len()].copy_from_slice(r);
+        buf[m.len() + 1..m.len() + 1 + r.len()].copy_from_slice(r);
         m.len() + r.len() + 1
     }
 
@@ -265,43 +264,46 @@ impl <'a> ResourceKey<'a> {
         if self.module() != other.module() {
             false
         } else if self.resource.ends_with('*') {
-            other.resource.starts_with(&self.resource[..self.resource.len() - 1])
+            other
+                .resource
+                .starts_with(&self.resource[..self.resource.len() - 1])
         } else {
             self.resource == other.resource
         }
     }
 }
 
-impl <'a, 'b> PartialEq<ResourceKey<'a>> for ResourceKey<'b> {
+impl<'a, 'b> PartialEq<ResourceKey<'a>> for ResourceKey<'b> {
     fn eq(&self, other: &ResourceKey<'a>) -> bool {
         self.module == other.module && self.resource == other.resource
     }
 }
 
-impl <'a> Debug for ResourceKey<'a> {
+impl<'a> Debug for ResourceKey<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "Resource({}:{})", self.module.key, self.resource)
     }
 }
 
-impl <'a> DeltaEncodable for ResourceKey<'static> {
+impl<'a> DeltaEncodable for ResourceKey<'static> {
     fn encode<W>(&self, base: Option<&Self>, w: &mut bitio::Writer<W>) -> io::Result<()>
-        where W: Write
+    where
+        W: Write,
     {
         bitio::encode_str(&self.module.key, base.map(|v| v.module.key.as_ref()), w)?;
         bitio::encode_str(&self.resource, base.map(|v| v.resource.as_ref()), w)
     }
 
     fn decode<R>(base: Option<&Self>, r: &mut bitio::Reader<R>) -> io::Result<Self>
-        where R: Read
+    where
+        R: Read,
     {
         Ok(ResourceKey::new(
             bitio::decode_string(base.map(|v| v.module.key.as_ref()), r)?,
-            bitio::decode_string(base.map(|v| v.resource.as_ref()), r)?
+            bitio::decode_string(base.map(|v| v.resource.as_ref()), r)?,
         ))
     }
 }
-
 
 /// References a resource from a module. The module
 /// can be `None`
@@ -317,8 +319,7 @@ pub struct LazyResourceKey<'a> {
     resource: ArcStr<'a>,
 }
 
-impl <'a> LazyResourceKey<'a> {
-
+impl<'a> LazyResourceKey<'a> {
     /// Parses the passed string into a lazy resource key.
     ///
     /// If the string contains a `:` the value before it
@@ -354,8 +355,10 @@ impl <'a> LazyResourceKey<'a> {
     ///
     /// Inherits the lifetime of its parameters
     pub fn new<M, S>(module: M, resource: S) -> LazyResourceKey<'a>
-        where S: Into<ArcStr<'a>>,
-            M: Into<Option<ModuleKey<'a>>> {
+    where
+        S: Into<ArcStr<'a>>,
+        M: Into<Option<ModuleKey<'a>>>,
+    {
         LazyResourceKey {
             module: module.into(),
             resource: resource.into(),
@@ -415,7 +418,11 @@ impl <'a> LazyResourceKey<'a> {
     /// If the resource key was already owned this is a no-op.
     pub fn into_owned(self) -> LazyResourceKey<'static> {
         LazyResourceKey {
-            module: if let Some(m) = self.module { Some(m.into_owned()) } else { None },
+            module: if let Some(m) = self.module {
+                Some(m.into_owned())
+            } else {
+                None
+            },
             resource: self.resource.into_owned(),
         }
     }
@@ -423,7 +430,11 @@ impl <'a> LazyResourceKey<'a> {
     /// Creates a reference to the resource key.
     pub fn borrow(&'a self) -> LazyResourceKey<'a> {
         LazyResourceKey {
-            module: if let Some(ref m) = self.module { Some(m.borrow()) } else { None },
+            module: if let Some(ref m) = self.module {
+                Some(m.borrow())
+            } else {
+                None
+            },
             resource: self.resource.borrow(),
         }
     }
@@ -432,11 +443,14 @@ impl <'a> LazyResourceKey<'a> {
     /// if this key doesn't have one defined
     pub fn borrow_module(&'a self, module: ModuleKey<'a>) -> ResourceKey<'a> {
         ResourceKey {
-            module: if let Some(ref m) = self.module { m.borrow() } else { module },
+            module: if let Some(ref m) = self.module {
+                m.borrow()
+            } else {
+                module
+            },
             resource: self.resource.borrow(),
         }
     }
-
 
     /// Returns a string that represents both the module (if it has one)
     /// and the resource.
@@ -452,7 +466,7 @@ impl <'a> LazyResourceKey<'a> {
     }
 }
 
-impl <'a, 'b> PartialEq<LazyResourceKey<'a>> for LazyResourceKey<'b> {
+impl<'a, 'b> PartialEq<LazyResourceKey<'a>> for LazyResourceKey<'b> {
     fn eq(&self, other: &LazyResourceKey<'a>) -> bool {
         if self.resource != other.resource {
             return false;
@@ -460,42 +474,42 @@ impl <'a, 'b> PartialEq<LazyResourceKey<'a>> for LazyResourceKey<'b> {
         match (self.module.as_ref(), other.module.as_ref()) {
             (Some(m), Some(mo)) => m == mo,
             (None, None) => true,
-            _ => false
+            _ => false,
         }
     }
 }
 
-impl <'a, 'b> PartialEq<LazyResourceKey<'a>> for ResourceKey<'b> {
+impl<'a, 'b> PartialEq<LazyResourceKey<'a>> for ResourceKey<'b> {
     fn eq(&self, other: &LazyResourceKey<'a>) -> bool {
         if self.resource != other.resource {
             return false;
         }
         match (&self.module, other.module.as_ref()) {
             (m, Some(mo)) => m == mo,
-            _ => false
+            _ => false,
         }
     }
 }
 
-impl <'a, 'b> PartialEq<ResourceKey<'a>> for LazyResourceKey<'b> {
+impl<'a, 'b> PartialEq<ResourceKey<'a>> for LazyResourceKey<'b> {
     fn eq(&self, other: &ResourceKey<'a>) -> bool {
         if self.resource != other.resource {
             return false;
         }
         match (&other.module, self.module.as_ref()) {
             (m, Some(mo)) => m == mo,
-            _ => false
+            _ => false,
         }
     }
 }
 
-impl <'a> Debug for LazyResourceKey<'a> {
+impl<'a> Debug for LazyResourceKey<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "LazyResource({:?}:{})", self.module, self.resource)
     }
 }
 
-impl <'a> From<ResourceKey<'a>> for LazyResourceKey<'a> {
+impl<'a> From<ResourceKey<'a>> for LazyResourceKey<'a> {
     fn from(v: ResourceKey<'a>) -> LazyResourceKey<'a> {
         LazyResourceKey {
             module: Some(v.module),
@@ -511,12 +525,12 @@ pub struct AssetsBuilder {
 }
 
 impl AssetsBuilder {
-
     /// Registers a new asset loader
     pub fn register<'a, L: AssetLoader<'a>>(mut self) -> AssetsBuilder {
-        self.loader_data.insert(TypeId::of::<L::LoaderData>(), Mutex::new(Box::new(L::init(
-            &self.store
-        ))));
+        self.loader_data.insert(
+            TypeId::of::<L::LoaderData>(),
+            Mutex::new(Box::new(L::init(&self.store))),
+        );
         self
     }
 
@@ -526,7 +540,7 @@ impl AssetsBuilder {
             inner: Arc::new(AssetInner {
                 store: self.store,
                 loader_data: self.loader_data,
-            })
+            }),
         }
     }
 }
@@ -556,12 +570,20 @@ impl AssetManager {
         let log = log.new(o!(
             "packs" => packs.join(","),
         ));
-        let assets = packs.iter()
-            .map(|name| if name.starts_with("workshop:") {
-                    let path = assume!(log, PathBuf::from(&name["workshop:".len()..]).canonicalize());
-                    let info: crate::ModMeta = assume!(log, fs::File::open(path.join("meta.json"))
-                        .map_err(errors::Error::from)
-                        .and_then(|v| serde_json::from_reader(v).map_err(errors::Error::from)));
+        let assets = packs
+            .iter()
+            .map(|name| {
+                if name.starts_with("workshop:") {
+                    let path = assume!(
+                        log,
+                        PathBuf::from(&name["workshop:".len()..]).canonicalize()
+                    );
+                    let info: crate::ModMeta = assume!(
+                        log,
+                        fs::File::open(path.join("meta.json"))
+                            .map_err(errors::Error::from)
+                            .and_then(|v| serde_json::from_reader(v).map_err(errors::Error::from))
+                    );
                     (
                         ModuleKey::new(info.main),
                         Box::new(DirFetcher(path)) as Box<dyn Fetcher + Send + Sync>,
@@ -569,33 +591,36 @@ impl AssetManager {
                 } else if fs::metadata(&format!("./assets/{}", name)).is_ok() {
                     (
                         ModuleKey::new(&**name).into_owned(),
-                        Box::new(DirFetcher(
-                            assume!(log, PathBuf::from(&format!("./assets/{}/", name)).canonicalize())
-                        )) as Box<dyn Fetcher + Send + Sync>,
+                        Box::new(DirFetcher(assume!(
+                            log,
+                            PathBuf::from(&format!("./assets/{}/", name)).canonicalize()
+                        ))) as Box<dyn Fetcher + Send + Sync>,
                     )
                 } else {
                     (
                         ModuleKey::new(&**name).into_owned(),
-                        Box::new(assume!(log, PackedFetcher::new(name))) as Box<dyn Fetcher + Send + Sync>,
+                        Box::new(assume!(log, PackedFetcher::new(name)))
+                            as Box<dyn Fetcher + Send + Sync>,
                     )
                 }
-            )
+            })
             .collect();
 
         #[cfg(feature = "debugutil")]
         let assets = {
             let mut a: Vec<_> = assets;
-            a.push((ModuleKey::new("debug"), Box::new(DirFetcher(
-                    assume!(log, PathBuf::from("./assets/debug/").canonicalize())
-                )) as Box<dyn Fetcher + Send + Sync>));
+            a.push((
+                ModuleKey::new("debug"),
+                Box::new(DirFetcher(assume!(
+                    log,
+                    PathBuf::from("./assets/debug/").canonicalize()
+                ))) as Box<dyn Fetcher + Send + Sync>,
+            ));
             a
         };
 
         AssetsBuilder {
-            store: Store {
-                assets,
-                log,
-            },
+            store: Store { assets, log },
             loader_data: FNVMap::default(),
         }
     }
@@ -612,7 +637,8 @@ impl AssetManager {
     /// complex paths (e.g. with `..` or `.`) on all types of
     /// 'packs'.
     pub fn open_from_pack<'a, M>(&self, module: M, name: &str) -> errors::Result<Asset>
-        where M: Into<ModuleKey<'a>>
+    where
+        M: Into<ModuleKey<'a>>,
     {
         self.inner.store.open_from_pack(module.into(), name)
     }
@@ -635,9 +661,14 @@ impl AssetManager {
     /// specific system. See the docs for the loader itself for
     /// more information.
     pub fn loader_open<'a, L: AssetLoader<'a>>(&self, res: L::Key) -> UResult<L::Return> {
-        let mut loader_data = assume!(self.inner.store.log, self.inner.loader_data[&TypeId::of::<L::LoaderData>()]
-            .lock());
-        let data = assume!(self.inner.store.log, loader_data.downcast_mut::<L::LoaderData>());
+        let mut loader_data = assume!(
+            self.inner.store.log,
+            self.inner.loader_data[&TypeId::of::<L::LoaderData>()].lock()
+        );
+        let data = assume!(
+            self.inner.store.log,
+            loader_data.downcast_mut::<L::LoaderData>()
+        );
         L::load(data, self, res)
     }
 }
@@ -669,7 +700,11 @@ pub trait AssetLoader<'a> {
     ///
     /// If this can fail then the return type must handle this
     /// instead of panicing.
-    fn load(data: &mut Self::LoaderData, assets: &AssetManager, key: Self::Key) -> UResult<Self::Return>;
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &AssetManager,
+        key: Self::Key,
+    ) -> UResult<Self::Return>;
 }
 
 /// Collection of packs
@@ -680,12 +715,9 @@ pub struct Store {
 }
 
 impl Store {
-
     /// Returns a vector containing all loaded packs names
     pub fn get_packs(&self) -> Vec<ModuleKey<'static>> {
-        self.assets.iter()
-            .map(|v| v.0.clone())
-            .collect()
+        self.assets.iter().map(|v| v.0.clone()).collect()
     }
 
     /// Opens the named asset from the named pack
@@ -747,7 +779,7 @@ impl Read for Asset {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match *self {
             Asset::Buffer(ref mut b) => b.read(buf),
-            Asset::File(ref mut f) =>f.read(buf),
+            Asset::File(ref mut f) => f.read(buf),
             Asset::Mapped(ref mut m) => m.reader.read(buf),
         }
     }
@@ -828,29 +860,33 @@ impl PackedFetcher {
         let mut index = FNVMap::default();
         let mut fi = fs::File::open(&format!("./assets/packed/{}.index", name))?;
         let len = fi.read_u32::<LittleEndian>()?;
-        for _ in 0 .. len {
+        for _ in 0..len {
             let slen = fi.read_u16::<LittleEndian>()?;
             let mut buf = vec![0; slen as usize];
             fi.read_exact(&mut buf)?;
             let name = String::from_utf8(buf)?;
             let name = name.trim_start_matches('/');
-            let pos = name.char_indices().find(|v| v.1 == '/')
+            let pos = name
+                .char_indices()
+                .find(|v| v.1 == '/')
                 .ok_or_else::<ErrorKind, _>(|| "Invalid file path in index".into())?;
             let (module, res) = name.split_at(pos.0);
-            let key = ResourceKey::new(
-                module,
-                &res[1..]
+            let key = ResourceKey::new(module, &res[1..]);
+            index.insert(
+                key.into_owned(),
+                (
+                    fi.read_u64::<LittleEndian>()?,
+                    fi.read_u64::<LittleEndian>()?,
+                ),
             );
-            index.insert(key.into_owned(), (
-                fi.read_u64::<LittleEndian>()?,
-                fi.read_u64::<LittleEndian>()?
-            ));
         }
         Ok(PackedFetcher {
             index,
             map: Arc::new(unsafe {
-                memmap::MmapOptions::new()
-                    .map(&fs::File::open(&format!("./assets/packed/{}.assets", name))?)?
+                memmap::MmapOptions::new().map(&fs::File::open(&format!(
+                    "./assets/packed/{}.assets",
+                    name
+                ))?)?
             }),
         })
     }
@@ -859,10 +895,10 @@ impl PackedFetcher {
 impl Fetcher for PackedFetcher {
     fn open(&self, module: ModuleKey<'_>, name: &str) -> Option<Asset> {
         let offset = self.index.get(&ResourceKey::new(module, name))?;
-        let data = self.map.get(offset.0 as usize .. offset.0 as usize + offset.1 as usize)?;
-        let data = unsafe {
-            &*(data as *const [u8] as *const [u8])
-        };
+        let data = self
+            .map
+            .get(offset.0 as usize..offset.0 as usize + offset.1 as usize)?;
+        let data = unsafe { &*(data as *const [u8] as *const [u8]) };
         let mapped = MappedAsset {
             _map: self.map.clone(),
             reader: io::Cursor::new(data),
@@ -901,7 +937,10 @@ mod tests {
         let full = ResourceKey::new("test", "key");
 
         assert_eq!(lazy, lazy_part.borrow().or_module(ModuleKey::new("test")));
-        assert_eq!(lazy.borrow().or_module(ModuleKey::new("cake")), lazy_part.borrow().or_module(ModuleKey::new("test")));
+        assert_eq!(
+            lazy.borrow().or_module(ModuleKey::new("cake")),
+            lazy_part.borrow().or_module(ModuleKey::new("test"))
+        );
         assert_eq!(lazy, full);
         assert_ne!(lazy, lazy_part);
         assert_ne!(lazy_part, full);

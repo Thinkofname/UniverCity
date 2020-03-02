@@ -27,7 +27,6 @@ pub struct LessonManager {
 component!(LessonManager => Vec);
 
 impl LessonManager {
-
     /// Creates a lesson manager preloaded with all listed lessons
     /// loaded.
     pub fn new(log: Logger, assets: &AssetManager) -> LessonManager {
@@ -38,12 +37,13 @@ impl LessonManager {
 
         for pack in assets.get_packs() {
             let mut styles = String::new();
-            let mut res = if let Ok(res) = assets.open_from_pack(pack.borrow(), "lessons/lessons.list") {
-                res
-            } else {
-                error!(log, "Missing lesson list {:?}", pack);
-                continue;
-            };
+            let mut res =
+                if let Ok(res) = assets.open_from_pack(pack.borrow(), "lessons/lessons.list") {
+                    res
+                } else {
+                    error!(log, "Missing lesson list {:?}", pack);
+                    continue;
+                };
             assume!(log, res.read_to_string(&mut styles));
             for line in styles.lines() {
                 let line = line.trim();
@@ -52,10 +52,12 @@ impl LessonManager {
                     continue;
                 }
                 // Support cross module loading
-                let s_key = LazyResourceKey::parse(line)
-                    .or_module(pack.borrow());
+                let s_key = LazyResourceKey::parse(line).or_module(pack.borrow());
 
-                let file = match assets.open_from_pack(s_key.module_key(), &format!("lessons/{}.json", s_key.resource())) {
+                let file = match assets.open_from_pack(
+                    s_key.module_key(),
+                    &format!("lessons/{}.json", s_key.resource()),
+                ) {
                     Ok(v) => v,
                     Err(err) => {
                         error!(log, "Failed to load lesson: {:?}", s_key; "error" => ?err);
@@ -75,19 +77,23 @@ impl LessonManager {
                     key: lkey.clone(),
                     name: info.name,
                     group: info.group,
-                    valid_rooms: info.valid_rooms
+                    valid_rooms: info
+                        .valid_rooms
                         .into_iter()
-                        .map(|v| LazyResourceKey::parse(&v)
-                            .or_module(pack.borrow())
-                            .into_owned()
-                        )
+                        .map(|v| {
+                            LazyResourceKey::parse(&v)
+                                .or_module(pack.borrow())
+                                .into_owned()
+                        })
                         .collect(),
-                    valid_staff: info.valid_staff
+                    valid_staff: info
+                        .valid_staff
                         .into_iter()
-                        .map(|v| LazyResourceKey::parse(&v)
-                            .or_module(pack.borrow())
-                            .into_owned()
-                        )
+                        .map(|v| {
+                            LazyResourceKey::parse(&v)
+                                .or_module(pack.borrow())
+                                .into_owned()
+                        })
                         .collect(),
                     required_lessons: info.required_lessons,
                     description: info.description,
@@ -95,7 +101,6 @@ impl LessonManager {
 
                 groups.insert(lesson.group.clone());
                 lessons.insert(lkey, lesson);
-
             }
         }
 
@@ -108,21 +113,23 @@ impl LessonManager {
     /// Returns the lesson information for the given key if it exists
     #[inline]
     pub fn get<'a, 'b>(&'a self, key: ResourceKey<'b>) -> Option<&'a Lesson>
-        where 'b: 'a
+    where
+        'b: 'a,
     {
         self.lessons.get(&key)
     }
 
     /// Returns an iterator over all lessons in a given group
     #[inline]
-    pub fn lessons_in_group<'a>(&'a self, group: &'a str) -> impl Iterator<Item=&'a Lesson> {
-        self.lessons.values()
-            .filter(move |v| v.group == group)
+    pub fn lessons_in_group<'a>(&'a self, group: &'a str) -> impl Iterator<Item = &'a Lesson> {
+        self.lessons.values().filter(move |v| v.group == group)
     }
 }
 
 /// A unique id for a course
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Debug, DeltaEncode, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Debug, DeltaEncode, Serialize, Deserialize,
+)]
 #[delta_always]
 pub struct CourseId(pub u32);
 
@@ -146,12 +153,20 @@ pub struct Course {
     pub deprecated: bool,
 }
 
-fn book(booked: &mut Write<Booked>, e: ecs::Entity, day: usize, p: usize, course: Option<CourseId>) {
+fn book(
+    booked: &mut Write<Booked>,
+    e: ecs::Entity,
+    day: usize,
+    p: usize,
+    course: Option<CourseId>,
+) {
     let booked = if let Some(booked) = booked.get_component_mut(e) {
         booked
     } else {
         booked.add_component(e, Booked::default());
-        booked.get_component_mut(e).expect("Missing after adding booked component")
+        booked
+            .get_component_mut(e)
+            .expect("Missing after adding booked component")
     };
 
     booked.timetable[day][p] = course;
@@ -160,18 +175,21 @@ fn book(booked: &mut Write<Booked>, e: ecs::Entity, day: usize, p: usize, course
 impl Course {
     /// Updates the about the state of the course (e.g. booking rooms/staff)
     pub fn init_world(&self, lrooms: &LevelRooms, entities: &mut ecs::Container) {
-        entities.with(|
-            _em: EntityManager,
-            mut booked: Write<Booked>,
-        | {
+        entities.with(|_em: EntityManager, mut booked: Write<Booked>| {
             for (idx_day, day) in self.timetable.iter().enumerate() {
                 for (idx_p, p) in day.iter().enumerate() {
-                    if let CourseEntry::Lesson{ref rooms, ..} = p {
+                    if let CourseEntry::Lesson { ref rooms, .. } = p {
                         for room in rooms {
                             book(&mut booked, room.staff, idx_day, idx_p, Some(self.uid));
                             if let Some(room) = lrooms.try_room_info(room.room) {
                                 if !room.controller.is_invalid() {
-                                    book(&mut booked, room.controller, idx_day, idx_p, Some(self.uid));
+                                    book(
+                                        &mut booked,
+                                        room.controller,
+                                        idx_day,
+                                        idx_p,
+                                        Some(self.uid),
+                                    );
                                 }
                             }
                         }
@@ -183,18 +201,15 @@ impl Course {
 
     /// Updates the about the state of the course (e.g. unbooking rooms/staff)
     pub fn deinit_world(&self, lrooms: &LevelRooms, entities: &mut ecs::Container) {
-        entities.with(|
-            _em: EntityManager,
-            mut booked: Write<Booked>,
-        | {
+        entities.with(|_em: EntityManager, mut booked: Write<Booked>| {
             self.deinit_world_raw(lrooms, &mut booked);
         });
     }
     /// Updates the about the state of the course (e.g. unbooking rooms/staff)
-    pub fn deinit_world_raw(&self, lrooms: &LevelRooms, booked: &mut Write<Booked>,) {
+    pub fn deinit_world_raw(&self, lrooms: &LevelRooms, booked: &mut Write<Booked>) {
         for (idx_day, day) in self.timetable.iter().enumerate() {
             for (idx_p, p) in day.iter().enumerate() {
-                if let CourseEntry::Lesson{ref rooms, ..} = p {
+                if let CourseEntry::Lesson { ref rooms, .. } = p {
                     for room in rooms {
                         book(booked, room.staff, idx_day, idx_p, None);
                         if let Some(room) = lrooms.try_room_info(room.room) {
@@ -210,21 +225,32 @@ impl Course {
 
     /// Converts from a network course to a normal course
     pub fn from_network(snapshots: &snapshot::Snapshots, net: NetworkCourse) -> Option<Course> {
-        fn entry_conv(snapshots: &snapshot::Snapshots, n: NetworkCourseEntry) -> Option<CourseEntry> {
+        fn entry_conv(
+            snapshots: &snapshot::Snapshots,
+            n: NetworkCourseEntry,
+        ) -> Option<CourseEntry> {
             Some(match n {
                 NetworkCourseEntry::Free => CourseEntry::Free,
-                NetworkCourseEntry::Lesson{key, rooms} => CourseEntry::Lesson {
+                NetworkCourseEntry::Lesson { key, rooms } => CourseEntry::Lesson {
                     key: key,
-                    rooms: rooms.0.into_iter()
-                        .map(|v| Ok(LessonRoom {
-                            room: v.room,
-                            staff: snapshots.get_entity_by_id(v.staff).ok_or(())?,
-                        }))
-                        .collect::<Result<Vec<_>, ()>>().ok()?,
-                }
+                    rooms: rooms
+                        .0
+                        .into_iter()
+                        .map(|v| {
+                            Ok(LessonRoom {
+                                room: v.room,
+                                staff: snapshots.get_entity_by_id(v.staff).ok_or(())?,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, ()>>()
+                        .ok()?,
+                },
             })
         }
-        fn timetable_conv(snapshots: &snapshot::Snapshots, n: [NetworkCourseEntry; 4]) -> Option<[CourseEntry; 4]> {
+        fn timetable_conv(
+            snapshots: &snapshot::Snapshots,
+            n: [NetworkCourseEntry; 4],
+        ) -> Option<[CourseEntry; 4]> {
             let [n0, n1, n2, n3] = n;
             Some([
                 entry_conv(snapshots, n0)?,
@@ -255,7 +281,11 @@ impl Course {
     /// Updates this course using the information from the network course
     ///
     /// Fails if the group or uid doesn't match
-    pub fn update_from_network(&mut self, snapshots: &snapshot::Snapshots, net: NetworkCourse) -> UResult<()> {
+    pub fn update_from_network(
+        &mut self,
+        snapshots: &snapshot::Snapshots,
+        net: NetworkCourse,
+    ) -> UResult<()> {
         // Safety checks
         if self.uid != net.uid {
             bail!("Wrong group");
@@ -280,20 +310,27 @@ impl Course {
         fn entry_conv(ids: &Read<NetworkId>, n: &CourseEntry) -> Option<NetworkCourseEntry> {
             Some(match n {
                 CourseEntry::Free => NetworkCourseEntry::Free,
-                CourseEntry::Lesson{key, rooms} => NetworkCourseEntry::Lesson {
+                CourseEntry::Lesson { key, rooms } => NetworkCourseEntry::Lesson {
                     key: key.clone(),
-                    rooms: delta_encode::AlwaysVec(rooms.iter()
-                        .map(|v| Ok(NetworkLessonRoom {
-                            room: v.room,
-                            staff: ids.get_component(v.staff)
-                                .map(|v| v.0)
-                                .ok_or(())?,
-                        }))
-                        .collect::<Result<Vec<_>, ()>>().ok()?),
-                }
+                    rooms: delta_encode::AlwaysVec(
+                        rooms
+                            .iter()
+                            .map(|v| {
+                                Ok(NetworkLessonRoom {
+                                    room: v.room,
+                                    staff: ids.get_component(v.staff).map(|v| v.0).ok_or(())?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>, ()>>()
+                            .ok()?,
+                    ),
+                },
             })
         }
-        fn timetable_conv(ids: &Read<NetworkId>, n: &[CourseEntry; 4]) -> Option<[NetworkCourseEntry; 4]> {
+        fn timetable_conv(
+            ids: &Read<NetworkId>,
+            n: &[CourseEntry; 4],
+        ) -> Option<[NetworkCourseEntry; 4]> {
             let [n0, n1, n2, n3] = n;
             Some([
                 entry_conv(ids, n0)?,
@@ -339,7 +376,7 @@ impl CourseEntry {
     /// Returns if this course entry is for the lesson with the given key
     pub fn is_lesson_type(&self, key: ResourceKey) -> bool {
         match self {
-            CourseEntry::Lesson{key: okey, ..} => *okey == key,
+            CourseEntry::Lesson { key: okey, .. } => *okey == key,
             _ => false,
         }
     }
@@ -403,7 +440,7 @@ impl NetworkCourseEntry {
     /// Returns if this course entry is for the lesson with the given key
     pub fn is_lesson_type(&self, key: ResourceKey) -> bool {
         match self {
-            NetworkCourseEntry::Lesson{key: okey, ..} => *okey == key,
+            NetworkCourseEntry::Lesson { key: okey, .. } => *okey == key,
             _ => false,
         }
     }
@@ -415,7 +452,6 @@ impl NetworkCourseEntry {
         }
     }
 }
-
 
 impl Default for NetworkCourseEntry {
     fn default() -> NetworkCourseEntry {

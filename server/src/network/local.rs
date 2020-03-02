@@ -2,10 +2,10 @@
 
 use super::*;
 
-use std::sync::mpsc;
-use std::fmt::{self, Debug};
-use crate::prelude::*;
 use crate::errors;
+use crate::prelude::*;
+use std::fmt::{self, Debug};
+use std::sync::mpsc;
 
 /// Local connection
 pub struct LoopbackSocket {
@@ -26,19 +26,22 @@ pub struct LoopbackKey;
 impl Socket for LoopbackSocket {
     type Id = LoopbackKey;
 
-    fn is_local() -> bool { true }
-    fn needs_verify() -> bool { false }
+    fn is_local() -> bool {
+        true
+    }
+    fn needs_verify() -> bool {
+        false
+    }
 
     fn id(&mut self) -> LoopbackKey {
         LoopbackKey
     }
 
     fn split(self, _log: &Logger) -> (Sender, Receiver) {
-        (Sender::Reliable {
-            inner: self.send,
-        }, Receiver {
-            inner: self.recv,
-        })
+        (
+            Sender::Reliable { inner: self.send },
+            Receiver { inner: self.recv },
+        )
     }
 }
 

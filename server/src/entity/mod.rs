@@ -1,30 +1,21 @@
 //! Entity management and structures
 
-pub mod snapshot;
-pub mod pathfind;
-mod info;
-pub mod free_roam;
 pub mod course;
+pub mod free_roam;
+mod info;
+pub mod pathfind;
+pub mod snapshot;
 
 mod timetable;
 
 pub(crate) use self::timetable::{
-    TimeTable,
-    Activity,
-    TimeTableCompleted,
-    TimeTableStart,
-    generate_time_table,
+    generate_time_table, Activity, TimeTable, TimeTableCompleted, TimeTableStart,
 };
 pub use self::timetable::{LESSON_LENGTH, NUM_TIMETABLE_SLOTS};
 
 mod sys;
 pub use self::sys::{
-    RoomController,
-    StudentController,
-    GotoRoom,
-    request_entity_now,
-    follow_sys,
-    follow_rot
+    follow_rot, follow_sys, request_entity_now, GotoRoom, RoomController, StudentController,
 };
 
 mod stats;
@@ -35,13 +26,13 @@ pub use self::sys::EntityDispatcher;
 
 use std::sync::Arc;
 
-use crate::ecs::{self, closure_system, EntityManager};
 use crate::assets;
 use crate::common;
+use crate::ecs::{self, closure_system, EntityManager};
 use crate::level;
 use crate::level::room;
 use crate::prelude::*;
-use lua::{Ref, Table, Lua, Coroutine};
+use lua::{Coroutine, Lua, Ref, Table};
 
 /// Registers components required by the server and the client
 pub fn register_components(c: &mut ecs::Container) {
@@ -144,28 +135,72 @@ pub trait EntityCreator {
     /// The types used for lua scripting
     type ScriptTypes: script::ScriptTypes;
     /// Creates an entity which is a static model
-    fn static_model(c: &mut ecs::Container, model: assets::ResourceKey<'_>, texture: Option<assets::ResourceKey<'_>>) -> ecs::Entity;
+    fn static_model(
+        c: &mut ecs::Container,
+        model: assets::ResourceKey<'_>,
+        texture: Option<assets::ResourceKey<'_>>,
+    ) -> ecs::Entity;
     /// Creates an entity which is a animated model
-    fn animated_model(c: &mut ecs::Container, model: assets::ResourceKey<'_>, texture: Option<assets::ResourceKey<'_>>, animation_set: common::AnimationSet, animation: &str) -> ecs::Entity;
+    fn animated_model(
+        c: &mut ecs::Container,
+        model: assets::ResourceKey<'_>,
+        texture: Option<assets::ResourceKey<'_>>,
+        animation_set: common::AnimationSet,
+        animation: &str,
+    ) -> ecs::Entity;
 }
 
 /// Handles creating entities for the server
-pub enum ServerEntityCreator{}
+pub enum ServerEntityCreator {}
 
 impl EntityCreator for ServerEntityCreator {
     type ScriptTypes = crate::script_room::Types;
 
-    fn static_model(c: &mut ecs::Container, _model: assets::ResourceKey<'_>, _texture: Option<assets::ResourceKey<'_>>) -> ecs::Entity {
+    fn static_model(
+        c: &mut ecs::Container,
+        _model: assets::ResourceKey<'_>,
+        _texture: Option<assets::ResourceKey<'_>>,
+    ) -> ecs::Entity {
         let e = c.new_entity();
-        c.add_component(e, Position {x: 0.0, y: 0.0, z: 0.0});
-        c.add_component(e, Rotation {rotation: Angle::new(0.0)});
+        c.add_component(
+            e,
+            Position {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        );
+        c.add_component(
+            e,
+            Rotation {
+                rotation: Angle::new(0.0),
+            },
+        );
         e
     }
-    fn animated_model(c: &mut ecs::Container, _model: assets::ResourceKey<'_>, _texture: Option<assets::ResourceKey<'_>>, _animation_set: common::AnimationSet, _animation: &str) -> ecs::Entity {
+    fn animated_model(
+        c: &mut ecs::Container,
+        _model: assets::ResourceKey<'_>,
+        _texture: Option<assets::ResourceKey<'_>>,
+        _animation_set: common::AnimationSet,
+        _animation: &str,
+    ) -> ecs::Entity {
         use std::f32::consts::PI;
         let e = c.new_entity();
-        c.add_component(e, Position {x: 0.0, y: 0.0, z: 0.0});
-        c.add_component(e, Rotation {rotation: Angle::new(PI * 0.5)});
+        c.add_component(
+            e,
+            Position {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        );
+        c.add_component(
+            e,
+            Rotation {
+                rotation: Angle::new(PI * 0.5),
+            },
+        );
         e
     }
 }
@@ -187,7 +222,6 @@ pub struct DayTick {
     /// Global increasing timer in ticks
     #[delta_diff]
     pub time: u32,
-
 }
 component!(DayTick => const World);
 
@@ -422,7 +456,6 @@ impl StateData {
     }
 }
 
-
 /// Marks the entity of requiring the room that owns it to exist.
 ///
 /// Destroys itself if the room is missing
@@ -482,9 +515,9 @@ pub struct IconEmote {
 component!(IconEmote => Map);
 
 impl IconEmote {
-
     pub(super) fn from_existing<I>(list: I) -> IconEmote
-        where I: Iterator<Item = (u8, Emote)>
+    where
+        I: Iterator<Item = (u8, Emote)>,
     {
         IconEmote {
             icons: list.collect(),
@@ -502,12 +535,15 @@ impl IconEmote {
             ie.next_id = ie.next_id.wrapping_add(1);
             return;
         }
-        ie.add_component(entity, IconEmote {
-            icons: vec![(0, e)],
-            time: 0,
-            current: None,
-            next_id: 1,
-        });
+        ie.add_component(
+            entity,
+            IconEmote {
+                icons: vec![(0, e)],
+                time: 0,
+                current: None,
+                next_id: 1,
+            },
+        );
     }
 }
 
@@ -681,7 +717,9 @@ impl Grades {
 }
 
 /// A grade for a class
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize, DeltaEncode)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize, DeltaEncode,
+)]
 pub enum Grade {
     /// The highest grade a student can get
     ///
@@ -745,9 +783,7 @@ component!(LuaRoamEntityProperties => Map);
 impl LuaRoamEntityProperties {
     /// Creates a new set of properties for an entity in the given room
     pub fn new() -> LuaRoamEntityProperties {
-        LuaRoamEntityProperties {
-            coroutine: None,
-        }
+        LuaRoamEntityProperties { coroutine: None }
     }
 
     /// Returns the room properties for the entity.
@@ -763,8 +799,6 @@ impl LuaRoamEntityProperties {
         None
     }
 }
-
-
 
 /// Script properties for room
 pub struct LuaRoomProperties {
@@ -804,7 +838,6 @@ impl LuaRoomProperties {
 #[derive(Default)]
 pub struct AutoRest;
 component!(AutoRest => Marker);
-
 
 /// Contains information about when an entity is booked for a
 /// lesson

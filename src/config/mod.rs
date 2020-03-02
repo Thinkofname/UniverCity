@@ -1,21 +1,21 @@
 //! Handles cofiguration for the game
 
-pub mod keybinds;
 mod graphics;
+pub mod keybinds;
 
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
 use std::fs::File;
+use std::rc::Rc;
 
 use serde_json;
 
+use crate::instance::GameInstance;
 use crate::prelude::*;
+use crate::server::event;
 use crate::state;
 use crate::GameState;
-use crate::instance::GameInstance;
-use crate::server::event;
-use sdl2::video::FullscreenType;
 use sdl2;
+use sdl2::video::FullscreenType;
 
 /// The current configuration of the game
 pub struct Config {
@@ -77,19 +77,34 @@ struct ConfigFormat {
     asset_packs: Vec<String>,
 }
 
-fn shadow_default() -> u32 { 2048 }
-fn ssao_default() -> u32 { 16 }
-fn fxaa_default() -> bool { true }
-fn render_scale_default() -> f32 { 1.0 }
-fn ui_scale_default() -> f32 { 1.0 }
+fn shadow_default() -> u32 {
+    2048
+}
+fn ssao_default() -> u32 {
+    16
+}
+fn fxaa_default() -> bool {
+    true
+}
+fn render_scale_default() -> f32 {
+    1.0
+}
+fn ui_scale_default() -> f32 {
+    1.0
+}
 
-fn placement_valid_def() -> (u8, u8, u8) { (46, 65, 114) }
-fn placement_invalid_def() -> (u8, u8, u8) { (170, 57, 57) }
+fn placement_valid_def() -> (u8, u8, u8) {
+    (46, 65, 114)
+}
+fn placement_invalid_def() -> (u8, u8, u8) {
+    (170, 57, 57)
+}
 
 impl Config {
     /// Creates a configuration with the default settings
     pub fn default(video: &sdl2::VideoSubsystem) -> Rc<Config> {
-        let res = video.desktop_display_mode(0)
+        let res = video
+            .desktop_display_mode(0)
             .ok()
             .map_or((800, 480), |v| (v.w as u32, v.h as u32));
         Rc::new(Config {
@@ -113,23 +128,28 @@ impl Config {
     pub fn load(&self) -> UResult<()> {
         let f = if let Ok(f) = File::open("./config.json") {
             f
-        } else { return Ok(()) };
+        } else {
+            return Ok(());
+        };
         let config: ConfigFormat = serde_json::from_reader(f)?;
 
         self.music_volume.set(config.music_volume);
         self.sound_volume.set(config.sound_volume);
         self.target_fps.set(config.target_fps);
-        self.fullscreen_mode.set(match config.fullscreen_mode.as_str() {
-            "borderless" => FullscreenType::Desktop,
-            _ => FullscreenType::Off,
-        });
+        self.fullscreen_mode
+            .set(match config.fullscreen_mode.as_str() {
+                "borderless" => FullscreenType::Desktop,
+                _ => FullscreenType::Off,
+            });
         self.fullscreen_res.set(config.fullscreen_res);
         self.render_shadow_res.set(config.render_shadow_res);
         self.render_ssao.set(config.render_ssao);
         self.render_fxaa.set(config.render_fxaa);
         self.render_scale.set(config.render_scale);
-        self.placement_valid_colour.set(config.placement_valid_colour);
-        self.placement_invalid_colour.set(config.placement_invalid_colour);
+        self.placement_valid_colour
+            .set(config.placement_valid_colour);
+        self.placement_invalid_colour
+            .set(config.placement_invalid_colour);
         self.ui_scale.set(config.ui_scale.max(0.1));
         self.asset_packs.replace(config.asset_packs);
         Ok(())
@@ -138,25 +158,29 @@ impl Config {
     /// Tries to save the configuration from the default location
     pub fn save(&self) -> UResult<()> {
         let f = File::create("./config.json")?;
-        serde_json::to_writer_pretty(f, &ConfigFormat {
-            music_volume: self.music_volume.get(),
-            sound_volume: self.sound_volume.get(),
-            target_fps: self.target_fps.get(),
-            fullscreen_mode: match self.fullscreen_mode.get() {
-                FullscreenType::Off => "windowed",
-                FullscreenType::Desktop => "borderless",
-                FullscreenType::True => "fullscreen", // Disabled for now so shouldn't happen
-            }.to_owned(),
-            fullscreen_res: self.fullscreen_res.get(),
-            render_shadow_res: self.render_shadow_res.get(),
-            render_ssao: self.render_ssao.get(),
-            render_fxaa: self.render_fxaa.get(),
-            render_scale: self.render_scale.get(),
-            ui_scale: self.ui_scale.get(),
-            placement_valid_colour: self.placement_valid_colour.get(),
-            placement_invalid_colour: self.placement_invalid_colour.get(),
-            asset_packs: self.asset_packs.borrow().clone(),
-        })?;
+        serde_json::to_writer_pretty(
+            f,
+            &ConfigFormat {
+                music_volume: self.music_volume.get(),
+                sound_volume: self.sound_volume.get(),
+                target_fps: self.target_fps.get(),
+                fullscreen_mode: match self.fullscreen_mode.get() {
+                    FullscreenType::Off => "windowed",
+                    FullscreenType::Desktop => "borderless",
+                    FullscreenType::True => "fullscreen", // Disabled for now so shouldn't happen
+                }
+                .to_owned(),
+                fullscreen_res: self.fullscreen_res.get(),
+                render_shadow_res: self.render_shadow_res.get(),
+                render_ssao: self.render_ssao.get(),
+                render_fxaa: self.render_fxaa.get(),
+                render_scale: self.render_scale.get(),
+                ui_scale: self.ui_scale.get(),
+                placement_valid_colour: self.placement_valid_colour.get(),
+                placement_invalid_colour: self.placement_invalid_colour.get(),
+                asset_packs: self.asset_packs.borrow().clone(),
+            },
+        )?;
         Ok(())
     }
 }
@@ -198,10 +222,18 @@ impl state::State for OptionsMenuState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/options"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/options"));
 
         if let Some(fullscreen) = query!(node, fullscreen).next() {
             fullscreen.set_property("pause_menu", self.paused);
@@ -214,7 +246,7 @@ impl state::State for OptionsMenuState {
         let display = assume!(state.global_logger, state.window.display_index());
         let vid = state.window.subsystem().clone();
         let num_modes = assume!(state.global_logger, vid.num_display_modes(display));
-        for i in 0 .. num_modes {
+        for i in 0..num_modes {
             let mode = assume!(state.global_logger, vid.display_mode(display, i));
             frame_rates.push(mode.refresh_rate);
             res.push((mode.w, mode.h));
@@ -231,7 +263,10 @@ impl state::State for OptionsMenuState {
         res.sort();
         res.dedup();
 
-        let fullscreen = assume!(state.global_logger, query!(node, dropdown(id="fullscreen")).next());
+        let fullscreen = assume!(
+            state.global_logger,
+            query!(node, dropdown(id = "fullscreen")).next()
+        );
         self.current_mode = match state.config.fullscreen_mode.get() {
             FullscreenType::Off => 1,
             FullscreenType::Desktop => 2,
@@ -251,23 +286,35 @@ impl state::State for OptionsMenuState {
         //     dres.set_property(&format!("option{}_height", i + 1), r.1);
         // }
 
-        let dfps = assume!(state.global_logger, query!(node, dropdown(id="fps")).next());
+        let dfps = assume!(
+            state.global_logger,
+            query!(node, dropdown(id = "fps")).next()
+        );
         dfps.set_property("options", frame_rates.len() as i32);
         for (i, f) in frame_rates.into_iter().enumerate() {
             if f == state.config.target_fps.get() as i32 {
                 dfps.set_property("value", (i + 1) as i32);
             }
-            dfps.set_property(&format!("option{}", i + 1), if f == i32::max_value() {
-                "Unlimited".to_owned()
-            } else { format!("{}", f) });
+            dfps.set_property(
+                &format!("option{}", i + 1),
+                if f == i32::max_value() {
+                    "Unlimited".to_owned()
+                } else {
+                    format!("{}", f)
+                },
+            );
             dfps.set_property(&format!("option{}_value", i + 1), f as i32);
         }
 
-        let music_volume = assume!(state.global_logger, query!(node, slider(id="music_volume"))
-            .next());
+        let music_volume = assume!(
+            state.global_logger,
+            query!(node, slider(id = "music_volume")).next()
+        );
         music_volume.set_property("value", state.config.music_volume.get() * 100.0);
-        let sound_volume = assume!(state.global_logger, query!(node, slider(id="sound_volume"))
-            .next());
+        let sound_volume = assume!(
+            state.global_logger,
+            query!(node, slider(id = "sound_volume")).next()
+        );
         sound_volume.set_property("value", state.config.sound_volume.get() * 100.0);
 
         if let Some(list) = query!(node, options_list > scroll_panel > content).next() {
@@ -280,12 +327,15 @@ impl state::State for OptionsMenuState {
                 keybinds::KeyCollection::EditRoom,
                 keybinds::KeyCollection::PlaceObject,
                 keybinds::KeyCollection::PlaceStaff,
-            ].iter().cloned() {
+            ]
+            .iter()
+            .cloned()
+            {
                 let collection = state.keybinds.collections.get(&col).unwrap();
                 if collection.binds.is_empty() {
                     continue;
                 }
-                let header = node!{
+                let header = node! {
                     opt_sub_header {
                         cell {
                             line
@@ -308,7 +358,8 @@ impl state::State for OptionsMenuState {
                     up.map(|a| used_actions.insert(a));
                 }
 
-                let mut used_actions = used_actions.into_iter()
+                let mut used_actions = used_actions
+                    .into_iter()
                     .filter(|a| !a.hidden())
                     .collect::<Vec<_>>();
                 used_actions.sort();
@@ -335,25 +386,33 @@ impl state::State for OptionsMenuState {
                         }
                     }
 
-                    if let (Some(first), Some(second)) = (first_bind.as_mut(), second_bind.as_mut()) {
+                    if let (Some(first), Some(second)) = (first_bind.as_mut(), second_bind.as_mut())
+                    {
                         if first.1.as_string().len() > second.1.as_string().len() {
                             ::std::mem::swap(first, second);
                         }
                     }
 
-                    fn format(action: keybinds::KeyAction, bind: Option<(bool, keybinds::BindType)>) -> String {
+                    fn format(
+                        action: keybinds::KeyAction,
+                        bind: Option<(bool, keybinds::BindType)>,
+                    ) -> String {
                         if let Some(bind) = bind {
                             if action.standard_direction().is_some() {
                                 bind.1.as_string()
                             } else {
-                                format!("{} - {}", bind.1.as_string(), if bind.0 { "Up" } else { "Down" })
+                                format!(
+                                    "{} - {}",
+                                    bind.1.as_string(),
+                                    if bind.0 { "Up" } else { "Down" }
+                                )
                             }
                         } else {
                             "Unset".to_owned()
                         }
                     }
 
-                    let node = node!{
+                    let node = node! {
                         option(is_key=true) {
                             label_center(
                                 key = action.as_str().to_owned(),
@@ -376,17 +435,23 @@ impl state::State for OptionsMenuState {
                         }
                     };
 
-                    if let Some(btn) = query!(node, button(first=true)).next() {
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
-                            evts.emit(ChangeBindingEvent(col, action, first_bind));
-                            true
-                        }));
+                    if let Some(btn) = query!(node, button(first = true)).next() {
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
+                                evts.emit(ChangeBindingEvent(col, action, first_bind));
+                                true
+                            }),
+                        );
                     }
-                    if let Some(btn) = query!(node, button(second=true)).next() {
-                        btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
-                            evts.emit(ChangeBindingEvent(col, action, second_bind));
-                            true
-                        }));
+                    if let Some(btn) = query!(node, button(second = true)).next() {
+                        btn.set_property(
+                            "on_click",
+                            ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
+                                evts.emit(ChangeBindingEvent(col, action, second_bind));
+                                true
+                            }),
+                        );
                     }
 
                     list.add_child(node);
@@ -395,10 +460,13 @@ impl state::State for OptionsMenuState {
         }
 
         if let Some(btn) = query!(node, button(id = "advance")).next() {
-            btn.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
-                evts.emit(GraphicsSettings);
-                true
-            }));
+            btn.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(move |evts, _node, _evt| {
+                    evts.emit(GraphicsSettings);
+                    true
+                }),
+            );
         }
 
         self.ui = Some(OptionsUI {
@@ -413,8 +481,11 @@ impl state::State for OptionsMenuState {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         let ui = assume!(state.global_logger, self.ui.as_ref());
 
         let music_volume = ui.music_volume.get_property::<f64>("value").unwrap_or(0.0) / 100.0;
@@ -429,13 +500,14 @@ impl state::State for OptionsMenuState {
             state.audio.update_settings(&state.config);
         }
 
-        let fps = ui.fps.get_property::<i32>("value")
+        let fps = ui
+            .fps
+            .get_property::<i32>("value")
             .and_then(|v| ui.fps.get_property::<i32>(&format!("option{}_value", v)))
             .unwrap_or(60) as u32;
         state.config.target_fps.set(fps);
 
-        let mode = ui.fullscreen.get_property::<i32>("value")
-            .unwrap_or(1);
+        let mode = ui.fullscreen.get_property::<i32>("value").unwrap_or(1);
         if mode != self.current_mode {
             self.current_mode = mode;
             state.config.fullscreen_mode.set(match mode {
@@ -460,18 +532,27 @@ impl state::State for OptionsMenuState {
     }
 
     /// Called whenever a ui event is fired whilst the state is active
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.as_ref());
         evt.handle_event::<ChangeBindingEvent, _>(|ChangeBindingEvent(col, act, bind)| {
-            action = state::Action::Switch(Box::new(KeyCaptureState::new(col, act, bind, self.paused)));
+            action =
+                state::Action::Switch(Box::new(KeyCaptureState::new(col, act, bind, self.paused)));
         });
         evt.handle_event::<GraphicsSettings, _>(|_| {
             action = state::Action::Switch(Box::new(graphics::GraphicsMenuState::new(self.paused)));
         });
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui.root), |_| {
-            action = state::Action::Pop;
-        });
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui.root),
+            |_| {
+                action = state::Action::Pop;
+            },
+        );
         action
     }
 
@@ -488,7 +569,7 @@ struct GraphicsSettings;
 struct ChangeBindingEvent(
     keybinds::KeyCollection,
     keybinds::KeyAction,
-    Option<(bool, keybinds::BindType)>
+    Option<(bool, keybinds::BindType)>,
 );
 
 struct KeyCaptureState {
@@ -501,7 +582,12 @@ struct KeyCaptureState {
 }
 
 impl KeyCaptureState {
-    fn new(collection: keybinds::KeyCollection, action: keybinds::KeyAction, previous: Option<(bool, keybinds::BindType)>, paused: bool) -> KeyCaptureState {
+    fn new(
+        collection: keybinds::KeyCollection,
+        action: keybinds::KeyAction,
+        previous: Option<(bool, keybinds::BindType)>,
+        paused: bool,
+    ) -> KeyCaptureState {
         KeyCaptureState {
             ui: None,
             collection,
@@ -523,10 +609,18 @@ impl state::State for KeyCaptureState {
         })
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/options_key_capture"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/options_key_capture"));
         if let Some(fullscreen) = query!(node, full_center).next() {
             fullscreen.set_property("pause_menu", self.paused);
         }
@@ -538,13 +632,21 @@ impl state::State for KeyCaptureState {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         use sdl2::keyboard::Keycode;
         if let Some(bind) = state.keybinds.captured_bind.take() {
             // Remove the old binding
 
             if bind != keybinds::BindType::Key(Keycode::Backspace) {
-                let collection = state.keybinds.collections.get_mut(&self.collection).unwrap();
+                let collection = state
+                    .keybinds
+                    .collections
+                    .get_mut(&self.collection)
+                    .unwrap();
 
                 if let Some(prev) = self.previous {
                     if let Some(key) = collection.binds.get_mut(&prev.1) {

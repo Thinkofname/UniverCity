@@ -1,50 +1,52 @@
-
-use std::io::{Read, Seek};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::sync::atomic::{
-    AtomicBool,
-    Ordering,
-};
-use std::time;
 use lewton::inside_ogg::OggStreamReader;
+use std::io::{Read, Seek};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::time;
 
 pub trait AudioDataSource {
     fn next(&mut self) -> Option<(i16, i16)>;
     fn sample_rate(&self) -> u32;
 
     fn resampled(self, output: u32) -> ResampleStream<Self>
-        where Self: Sized
+    where
+        Self: Sized,
     {
         ResampleStream::new(self, output)
     }
 
     fn pitched(self, rate: f32) -> ResampleStream<Self>
-        where Self: Sized
+    where
+        Self: Sized,
     {
         ResampleStream::pitch(self, rate)
     }
 
     fn volume(self, volume: f32) -> VolumeStream<Self>
-        where Self: Sized
+    where
+        Self: Sized,
     {
         VolumeStream::new(self, volume, volume)
     }
 
     fn volume_sides(self, left: f32, right: f32) -> VolumeStream<Self>
-        where Self: Sized
+    where
+        Self: Sized,
     {
         VolumeStream::new(self, left, right)
     }
 
     fn mix<A>(self, other: A) -> MixStream<Self, A>
-        where Self: Sized,
-              A: AudioDataSource
+    where
+        Self: Sized,
+        A: AudioDataSource,
     {
         MixStream::new(self, other)
     }
 
     fn into_buffer(mut self) -> AudioBuffer
-        where Self: Sized
+    where
+        Self: Sized,
     {
         let sample_rate = self.sample_rate();
         let mut data = Vec::new();
@@ -52,10 +54,7 @@ pub trait AudioDataSource {
             data.push(p);
         }
         AudioBuffer {
-            data: Arc::new(BufferData {
-                data,
-                sample_rate,
-            }),
+            data: Arc::new(BufferData { data, sample_rate }),
         }
     }
 
@@ -111,9 +110,7 @@ impl AudioDataSource for BufferedSource {
         data
     }
 
-    fn set_volume_sides(&mut self, _left: f32, _right: f32) {
-
-    }
+    fn set_volume_sides(&mut self, _left: f32, _right: f32) {}
 }
 
 #[derive(Clone)]
@@ -136,25 +133,29 @@ impl AudioMixer {
     pub fn tick(&self) -> MutexGuard<AudioMixerData> {
         let mut data = self.data.lock().unwrap();
         let diff = data.last_time.elapsed();
-        let delta = (diff.as_secs() * 1_000_000_000 + u64::from(diff.subsec_nanos())) as f32 / 1_000_000_000.0;
+        let delta = (diff.as_secs() * 1_000_000_000 + u64::from(diff.subsec_nanos())) as f32
+            / 1_000_000_000.0;
         data.last_time = time::Instant::now();
         for sound in &mut data.sounds {
             if sound.time_to_play > 0.0 {
                 sound.time_to_play -= delta;
             }
         }
-        data.sounds.retain(|v| !v.shared.ended.load(Ordering::Relaxed));
+        data.sounds
+            .retain(|v| !v.shared.ended.load(Ordering::Relaxed));
         data
     }
 
     pub fn play<A>(&self, audio: A) -> SoundRef
-        where A: AudioDataSource + Send + 'static
+    where
+        A: AudioDataSource + Send + 'static,
     {
         self.play_later(audio, 0.0)
     }
 
     pub fn play_later<A>(&self, audio: A, delay: f32) -> SoundRef
-        where A: AudioDataSource + Send + 'static
+    where
+        A: AudioDataSource + Send + 'static,
     {
         let mut data = self.data.lock().unwrap();
         assert_eq!(self.sample_rate, audio.sample_rate());
@@ -171,9 +172,7 @@ impl AudioMixer {
             shared: shared.clone(),
         });
 
-        SoundRef {
-            shared,
-        }
+        SoundRef { shared }
     }
 }
 
@@ -262,22 +261,21 @@ pub struct MixStream<A, B> {
     b: B,
 }
 
-impl <A, B> MixStream<A, B>
-    where A: AudioDataSource,
-          B: AudioDataSource
+impl<A, B> MixStream<A, B>
+where
+    A: AudioDataSource,
+    B: AudioDataSource,
 {
     fn new(a: A, b: B) -> MixStream<A, B> {
         assert_eq!(a.sample_rate(), b.sample_rate());
-        MixStream {
-            a,
-            b,
-        }
+        MixStream { a, b }
     }
 }
 
-impl <A, B> AudioDataSource for MixStream<A, B>
-    where A: AudioDataSource,
-          B: AudioDataSource
+impl<A, B> AudioDataSource for MixStream<A, B>
+where
+    A: AudioDataSource,
+    B: AudioDataSource,
 {
     fn sample_rate(&self) -> u32 {
         self.a.sample_rate()
@@ -294,13 +292,10 @@ impl <A, B> AudioDataSource for MixStream<A, B>
         } else {
             return None;
         };
-        Some((
-            al.saturating_add(bl),
-            ar.saturating_add(br),
-        ))
+        Some((al.saturating_add(bl), ar.saturating_add(br)))
     }
 
-    fn set_volume_sides(&mut self, left: f32, right: f32){
+    fn set_volume_sides(&mut self, left: f32, right: f32) {
         self.a.set_volume_sides(left, right);
         self.b.set_volume_sides(left, right);
     }
@@ -316,8 +311,9 @@ pub struct ResampleStream<A> {
     force: bool,
 }
 
-impl <A> ResampleStream<A>
-    where A: AudioDataSource
+impl<A> ResampleStream<A>
+where
+    A: AudioDataSource,
 {
     fn new(stream: A, output: u32) -> ResampleStream<A> {
         ResampleStream {
@@ -344,8 +340,9 @@ impl <A> ResampleStream<A>
     }
 }
 
-impl <A> AudioDataSource for ResampleStream<A>
-    where A: AudioDataSource
+impl<A> AudioDataSource for ResampleStream<A>
+where
+    A: AudioDataSource,
 {
     fn sample_rate(&self) -> u32 {
         self.output_rate
@@ -367,7 +364,7 @@ impl <A> AudioDataSource for ResampleStream<A>
             } else {
                 self.end = true;
                 None
-            }
+            };
         }
         let (mut last, mut cur) = self.current.unwrap();
         while self.current_pos >= 1.0 {
@@ -383,8 +380,10 @@ impl <A> AudioDataSource for ResampleStream<A>
         }
 
         let output = (
-            (f32::from(last.0) * (1.0 - self.current_pos) + f32::from(cur.0) * self.current_pos) as i16,
-            (f32::from(last.1) * (1.0 - self.current_pos) + f32::from(cur.1) * self.current_pos) as i16,
+            (f32::from(last.0) * (1.0 - self.current_pos) + f32::from(cur.0) * self.current_pos)
+                as i16,
+            (f32::from(last.1) * (1.0 - self.current_pos) + f32::from(cur.1) * self.current_pos)
+                as i16,
         );
         self.current_pos += self.step;
         Some(output)
@@ -395,15 +394,15 @@ impl <A> AudioDataSource for ResampleStream<A>
     }
 }
 
-
 pub struct VolumeStream<A> {
     inner: A,
     left: f32,
     right: f32,
 }
 
-impl <A> VolumeStream<A>
-    where A: AudioDataSource
+impl<A> VolumeStream<A>
+where
+    A: AudioDataSource,
 {
     fn new(stream: A, left: f32, right: f32) -> VolumeStream<A> {
         VolumeStream {
@@ -414,8 +413,9 @@ impl <A> VolumeStream<A>
     }
 }
 
-impl <A> AudioDataSource for VolumeStream<A>
-    where A: AudioDataSource
+impl<A> AudioDataSource for VolumeStream<A>
+where
+    A: AudioDataSource,
 {
     fn sample_rate(&self) -> u32 {
         self.inner.sample_rate()
@@ -446,11 +446,13 @@ pub struct OggStream<R: Read + Seek> {
     finished: bool,
 }
 
-impl <R> OggStream<R>
-    where R: Read + Seek
+impl<R> OggStream<R>
+where
+    R: Read + Seek,
 {
     pub fn load(r: R) -> Result<OggStream<R>, lewton::VorbisError>
-        where R: Read + Seek + 'static
+    where
+        R: Read + Seek + 'static,
     {
         let ogg = OggStreamReader::new(r)?;
 
@@ -464,8 +466,9 @@ impl <R> OggStream<R>
     }
 }
 
-impl <R> AudioDataSource for OggStream<R>
-    where R: Read + Seek
+impl<R> AudioDataSource for OggStream<R>
+where
+    R: Read + Seek,
 {
     fn sample_rate(&self) -> u32 {
         self.ogg.ident_hdr.audio_sample_rate
@@ -477,7 +480,9 @@ impl <R> AudioDataSource for OggStream<R>
         }
         let next = if let Some(last) = self.last_packet.as_ref() {
             last[0].len() <= self.offset
-        } else { true };
+        } else {
+            true
+        };
         if next {
             self.last_packet = None;
             loop {
@@ -497,7 +502,7 @@ impl <R> AudioDataSource for OggStream<R>
                 } else {
                     return None;
                 }
-            };
+            }
         }
         if let Some(last) = self.last_packet.as_mut() {
             let offset = self.offset;
@@ -506,10 +511,7 @@ impl <R> AudioDataSource for OggStream<R>
                 let val = last[0][offset];
                 Some((val, val))
             } else {
-                Some((
-                    last[0][offset],
-                    last[1][offset]
-                ))
+                Some((last[0][offset], last[1][offset]))
             }
         } else {
             self.finished = true;
@@ -517,6 +519,5 @@ impl <R> AudioDataSource for OggStream<R>
         }
     }
 
-    fn set_volume_sides(&mut self, _left: f32, _right: f32) {
-    }
+    fn set_volume_sides(&mut self, _left: f32, _right: f32) {}
 }

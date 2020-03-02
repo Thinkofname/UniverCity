@@ -1,6 +1,5 @@
-
-use fungui;
 use crate::ui::*;
+use fungui;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Color {
@@ -45,9 +44,7 @@ impl fungui::ConvertValue<UniverCityUI> for Color {
 
 impl Color {
     pub fn from_val(obj: Value) -> Option<Color> {
-        if let Some(col) = obj.convert_ref::<String>()
-            .and_then(|v| parse_color(v))
-        {
+        if let Some(col) = obj.convert_ref::<String>().and_then(|v| parse_color(v)) {
             Some(col)
         } else if let Some(col) = obj.convert::<Color>() {
             Some(col)
@@ -57,23 +54,28 @@ impl Color {
     }
 }
 
-pub fn rgb<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let r = args.next()
+pub fn rgb<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let r = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "r"
+            name: "r",
         })
         .and_then(|v| v)?;
-    let g = args.next()
+    let g = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 1,
-            name: "g"
+            name: "g",
         })
         .and_then(|v| v)?;
-    let b = args.next()
+    let b = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 2,
-            name: "b"
+            name: "b",
         })
         .and_then(|v| v)?;
 
@@ -81,51 +83,63 @@ pub fn rgb<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)
         r: match r {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
         g: match g {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
         b: match b {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
-        a: 1.0
+        a: 1.0,
     })))
 }
 
-pub fn rgba<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let r = args.next()
+pub fn rgba<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let r = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "r"
+            name: "r",
         })
         .and_then(|v| v)?;
-    let g = args.next()
+    let g = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 1,
-            name: "g"
+            name: "g",
         })
         .and_then(|v| v)?;
-    let b = args.next()
+    let b = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 2,
-            name: "b"
+            name: "b",
         })
         .and_then(|v| v)?;
-    let a = args.next()
+    let a = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 3,
-            name: "a"
+            name: "a",
         })
         .and_then(|v| v)?;
 
@@ -133,30 +147,38 @@ pub fn rgba<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a
         r: match r {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
         g: match g {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
         b: match b {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
         a: match a {
             fungui::Value::Integer(v) => v as f32 / 255.0,
             fungui::Value::Float(v) => v as f32,
-            _ =>return Err(fungui::Error::CustomStatic {
-                reason: "Expected integer or float"
-            }),
+            _ => {
+                return Err(fungui::Error::CustomStatic {
+                    reason: "Expected integer or float",
+                })
+            }
         },
     })))
 }
@@ -167,16 +189,14 @@ pub fn parse_color(v: &str) -> Option<Color> {
         let col = &v[1..];
         if col.len() == 6 || col.len() == 8 {
             Some(Color {
-                r: f32::from(u8::from_str_radix(&col[..2], 16)
-                    .ok()?) / 255.0,
-                g: f32::from(u8::from_str_radix(&col[2..4], 16)
-                    .ok()?) / 255.0,
-                b: f32::from(u8::from_str_radix(&col[4..6], 16)
-                    .ok()?) / 255.0,
+                r: f32::from(u8::from_str_radix(&col[..2], 16).ok()?) / 255.0,
+                g: f32::from(u8::from_str_radix(&col[2..4], 16).ok()?) / 255.0,
+                b: f32::from(u8::from_str_radix(&col[4..6], 16).ok()?) / 255.0,
                 a: f32::from(if col.len() == 8 {
-                    u8::from_str_radix(&col[6..8], 16)
-                        .ok()?
-                } else { 255 }) / 255.0,
+                    u8::from_str_radix(&col[6..8], 16).ok()?
+                } else {
+                    255
+                }) / 255.0,
             })
         } else {
             None
@@ -186,15 +206,9 @@ pub fn parse_color(v: &str) -> Option<Color> {
         let mut col = col.split(',').map(|v| v.trim());
 
         Some(Color {
-            r: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
-            g: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
-            b: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
+            r: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
+            g: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
+            b: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
             a: 1.0,
         })
     } else if v.starts_with("rgba(") && v.ends_with(')') {
@@ -202,18 +216,10 @@ pub fn parse_color(v: &str) -> Option<Color> {
         let mut col = col.split(',').map(|v| v.trim());
 
         Some(Color {
-            r: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
-            g: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
-            b: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
-            a: f32::from(col.next()
-                .and_then(|v| v.parse::<u8>().ok())
-                .unwrap_or(0)) / 255.0,
+            r: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
+            g: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
+            b: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
+            a: f32::from(col.next().and_then(|v| v.parse::<u8>().ok()).unwrap_or(0)) / 255.0,
         })
     } else {
         None

@@ -2,11 +2,11 @@
 
 use super::*;
 
-use std::sync::{mpsc, Arc, Mutex};
-use std::fmt::{self, Debug};
-use std::time::Duration;
-use crate::prelude::*;
 use crate::errors;
+use crate::prelude::*;
+use std::fmt::{self, Debug};
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::Duration;
 use steamworks;
 
 /// A client steam socket connection
@@ -18,20 +18,23 @@ pub struct SteamClientSocket {
 
 impl SteamClientSocket {
     /// Creates a udp socket client
-    pub fn connect(log: &Logger, steam: steamworks::Client, single: &steamworks::SingleClient, lobby: steamworks::LobbyId) -> UResult<SteamClientSocket> {
+    pub fn connect(
+        log: &Logger,
+        steam: steamworks::Client,
+        single: &steamworks::SingleClient,
+        lobby: steamworks::LobbyId,
+    ) -> UResult<SteamClientSocket> {
         {
             let log = log.clone();
             let (lobby_send, lobby_read) = mpsc::channel();
-            steam.matchmaking().join_lobby(lobby, move |res| {
-                match res {
-                    Ok(lobby_id) => {
-                        info!(log, "Lobby joined"; "lobby" => ?lobby_id);
-                        assume!(log, lobby_send.send(true));
-                    },
-                    Err(_) => {
-                        error!(log, "Failed to join a lobby");
-                        assume!(log, lobby_send.send(false));
-                    },
+            steam.matchmaking().join_lobby(lobby, move |res| match res {
+                Ok(lobby_id) => {
+                    info!(log, "Lobby joined"; "lobby" => ?lobby_id);
+                    assume!(log, lobby_send.send(true));
+                }
+                Err(_) => {
+                    error!(log, "Failed to join a lobby");
+                    assume!(log, lobby_send.send(false));
                 }
             });
             loop {
@@ -45,10 +48,7 @@ impl SteamClientSocket {
                 single.run_callbacks();
             }
         }
-        Ok(SteamClientSocket {
-            steam,
-            lobby,
-        })
+        Ok(SteamClientSocket { steam, lobby })
     }
 }
 
@@ -70,7 +70,9 @@ impl Socket for SteamClientSocket {
     fn is_local() -> bool {
         false
     }
-    fn needs_verify() -> bool { true }
+    fn needs_verify() -> bool {
+        true
+    }
 
     /// Returns the unique id for this connection
     fn id(&mut self) -> Self::Id {
@@ -89,11 +91,12 @@ impl Socket for SteamClientSocket {
 
         let req_cb = {
             let steam = self.steam.clone();
-            self.steam.register_callback::<steamworks::P2PSessionRequest, _>(move |req| {
-                if owner == req.remote {
-                    steam.networking().accept_p2p_session(req.remote);
-                }
-            })
+            self.steam
+                .register_callback::<steamworks::P2PSessionRequest, _>(move |req| {
+                    if owner == req.remote {
+                        steam.networking().accept_p2p_session(req.remote);
+                    }
+                })
         };
         {
             let log = log.clone();
@@ -101,8 +104,7 @@ impl Socket for SteamClientSocket {
             thread::spawn(move || {
                 let mut buf = vec![0; 1_000_000];
                 let _req_cb = req_cb; // Keep alive whilst the thread is running
-                'main:
-                loop {
+                'main: loop {
                     while let Some((remote, count)) = steam.networking().read_p2p_packet(&mut buf) {
                         if remote != owner {
                             continue;
@@ -113,7 +115,7 @@ impl Socket for SteamClientSocket {
                                 if input_send.send(val).is_err() {
                                     break 'main;
                                 }
-                            },
+                            }
                             Err(e) => {
                                 error!(log, "Failed to decode packet: {}", e);
                                 break 'main;
@@ -129,31 +131,32 @@ impl Socket for SteamClientSocket {
             let steam = self.steam.clone();
             thread::spawn(move || {
                 while let Ok((ensure, pck)) = output_read.recv() {
-                    let data = if let Ok(data) = packet_to_bytes(pck, if ensure {
-                        1_000_000
-                    } else {
-                        1200
-                    }) {
+                    let data = if let Ok(data) =
+                        packet_to_bytes(pck, if ensure { 1_000_000 } else { 1200 })
+                    {
                         data
                     } else {
-                        break
+                        break;
                     };
-                    if !steam.networking().send_p2p_packet(owner, if ensure {
-                        steamworks::SendType::Reliable
-                    } else {
-                        steamworks::SendType::Unreliable
-                    }, &data) {
-                        break
+                    if !steam.networking().send_p2p_packet(
+                        owner,
+                        if ensure {
+                            steamworks::SendType::Reliable
+                        } else {
+                            steamworks::SendType::Unreliable
+                        },
+                        &data,
+                    ) {
+                        break;
                     }
                 }
             });
         }
 
-        (Sender::Unreliable {
-            inner: output_send,
-        }, Receiver {
-            inner: input_read
-        })
+        (
+            Sender::Unreliable { inner: output_send },
+            Receiver { inner: input_read },
+        )
     }
 }
 
@@ -176,16 +179,15 @@ pub enum SteamSocket {
         send: mpsc::Sender<(bool, packet::Packet)>,
         #[doc(hidden)]
         recv: mpsc::Receiver<packet::Packet>,
-    }
+    },
 }
 
 impl Debug for SteamSocket {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match *self {
-            SteamSocket::Local{..} => write!(f, "SteamSocket(localhost)"),
-            SteamSocket::Remote{steam_id, ..} => write!(f, "SteamSocket({:?})", steam_id),
+            SteamSocket::Local { .. } => write!(f, "SteamSocket(localhost)"),
+            SteamSocket::Remote { steam_id, .. } => write!(f, "SteamSocket({:?})", steam_id),
         }
-
     }
 }
 
@@ -196,30 +198,28 @@ pub struct SteamKey(steamworks::SteamId);
 impl Socket for SteamSocket {
     type Id = SteamKey;
 
-    fn is_local() -> bool { false }
-    fn needs_verify() -> bool { true }
+    fn is_local() -> bool {
+        false
+    }
+    fn needs_verify() -> bool {
+        true
+    }
 
     fn id(&mut self) -> SteamKey {
         match *self {
-            SteamSocket::Local{steam_id, ..} => SteamKey(steam_id),
-            SteamSocket::Remote{steam_id, ..} => SteamKey(steam_id),
+            SteamSocket::Local { steam_id, .. } => SteamKey(steam_id),
+            SteamSocket::Remote { steam_id, .. } => SteamKey(steam_id),
         }
     }
 
     fn split(self, _log: &Logger) -> (Sender, Receiver) {
         match self {
-            SteamSocket::Local{send, recv, ..} =>
-                (Sender::Reliable {
-                    inner: send,
-                }, Receiver {
-                    inner: recv,
-                }),
-            SteamSocket::Remote{send, recv, ..} =>
-                (Sender::Unreliable {
-                    inner: send,
-                }, Receiver {
-                    inner: recv,
-                }),
+            SteamSocket::Local { send, recv, .. } => {
+                (Sender::Reliable { inner: send }, Receiver { inner: recv })
+            }
+            SteamSocket::Remote { send, recv, .. } => {
+                (Sender::Unreliable { inner: send }, Receiver { inner: recv })
+            }
         }
     }
 }
@@ -241,7 +241,10 @@ impl SocketListener for SteamSocketListener {
     type Address = steamworks::Client;
     type Socket = SteamSocket;
 
-    fn listen<A: Into<Self::Address>>(log: &Logger, steam: A) -> errors::Result<SteamSocketListener> {
+    fn listen<A: Into<Self::Address>>(
+        log: &Logger,
+        steam: A,
+    ) -> errors::Result<SteamSocketListener> {
         use std::thread;
         let (to_server, from_client) = mpsc::channel();
         let (to_client, from_server) = mpsc::channel();
@@ -263,17 +266,19 @@ impl SocketListener for SteamSocketListener {
         {
             let lobby = lobby.clone();
             let log = log.clone();
-            steam.matchmaking().create_lobby(steamworks::LobbyType::Public, 32, move |res| {
-                match res {
+            steam.matchmaking().create_lobby(
+                steamworks::LobbyType::Public,
+                32,
+                move |res| match res {
                     Ok(lobby_id) => {
                         info!(log, "Lobby created"; "lobby" => ?lobby_id);
                         *assume!(log, lobby.lock()) = Some(lobby_id);
-                    },
+                    }
                     Err(err) => {
                         error!(log, "Failed to create a lobby"; "error" => %err);
-                    },
-                }
-            });
+                    }
+                },
+            );
         }
 
         let req_cb = {
@@ -295,19 +300,19 @@ impl SocketListener for SteamSocketListener {
             thread::spawn(move || {
                 let mut buf = vec![0; 1_000_000];
                 let mut active_sockets: FNVMap<steamworks::SteamId, _> = FNVMap::default();
-            'main:
-                loop {
+                'main: loop {
                     loop {
                         match read_drop.try_recv() {
                             Ok(d) => {
                                 active_sockets.remove(&d);
                                 steam2.networking().close_p2p_session(d);
-                            },
+                            }
                             Err(mpsc::TryRecvError::Empty) => break,
                             Err(mpsc::TryRecvError::Disconnected) => break 'main,
                         }
                     }
-                    while let Some((remote, count)) = steam2.networking().read_p2p_packet(&mut buf) {
+                    while let Some((remote, count)) = steam2.networking().read_p2p_packet(&mut buf)
+                    {
                         let entry = active_sockets.entry(remote).or_insert_with(|| {
                             let (input_send, input_read) = mpsc::channel();
                             let (output_send, output_read) = mpsc::channel();
@@ -322,21 +327,24 @@ impl SocketListener for SteamSocketListener {
                                 let steam = steam2.clone();
                                 thread::spawn(move || {
                                     while let Ok((ensure, pck)) = output_read.recv() {
-                                        let data = if let Ok(data) = packet_to_bytes(pck, if ensure {
-                                            1_000_000
-                                        } else {
-                                            1200
-                                        }) {
+                                        let data = if let Ok(data) = packet_to_bytes(
+                                            pck,
+                                            if ensure { 1_000_000 } else { 1200 },
+                                        ) {
                                             data
                                         } else {
-                                            break
+                                            break;
                                         };
-                                        if !steam.networking().send_p2p_packet(remote, if ensure {
-                                            steamworks::SendType::Reliable
-                                        } else {
-                                            steamworks::SendType::Unreliable
-                                        }, &data) {
-                                            break
+                                        if !steam.networking().send_p2p_packet(
+                                            remote,
+                                            if ensure {
+                                                steamworks::SendType::Reliable
+                                            } else {
+                                                steamworks::SendType::Unreliable
+                                            },
+                                            &data,
+                                        ) {
+                                            break;
                                         }
                                     }
                                 });
@@ -351,7 +359,7 @@ impl SocketListener for SteamSocketListener {
                                 if entry.send(val).is_err() {
                                     continue;
                                 }
-                            },
+                            }
                             Err(e) => {
                                 error!(log, "Failed to decode packet: {}", e);
                                 continue;

@@ -31,16 +31,15 @@ pub unsafe trait ComponentStorage<T: Component>: internal::BoxedStorage {
 
     /// Gets the component or inserts it if it doesn't exist
     fn get_component_or_insert<F>(&mut self, id: u32, f: F) -> &mut T
-        where F: FnOnce() -> T
+    where
+        F: FnOnce() -> T,
     {
         use std::mem;
         // Transmute is used here due to weirdness with lifetimes
         if let Some(val) = unsafe { mem::transmute(self.get_component_mut(id)) } {
             val
         } else {
-            unsafe {
-                self.add_and_get_component(id, f())
-            }
+            unsafe { self.add_and_get_component(id, f()) }
         }
     }
 
@@ -68,7 +67,7 @@ pub struct MapStorage<T: Component> {
     data: fnv::FnvHashMap<u32, T>,
 }
 
-unsafe impl <T: Component> ComponentStorage<T> for MapStorage<T> {
+unsafe impl<T: Component> ComponentStorage<T> for MapStorage<T> {
     fn new() -> Self {
         MapStorage {
             data: fnv::FnvHashMap::default(),
@@ -94,7 +93,8 @@ unsafe impl <T: Component> ComponentStorage<T> for MapStorage<T> {
     }
 
     fn get_component_or_insert<F>(&mut self, id: u32, f: F) -> &mut T
-        where F: FnOnce() -> T
+    where
+        F: FnOnce() -> T,
     {
         self.data.entry(id).or_insert_with(f)
     }
@@ -104,11 +104,12 @@ unsafe impl <T: Component> ComponentStorage<T> for MapStorage<T> {
     }
 
     #[inline]
-    fn self_bookkeeps() -> bool { true }
-
+    fn self_bookkeeps() -> bool {
+        true
+    }
 }
 
-impl <T: Component> internal::BoxedStorage for MapStorage<T> {
+impl<T: Component> internal::BoxedStorage for MapStorage<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -127,7 +128,7 @@ pub struct VecStorage<T: Component> {
     data: Vec<T>,
 }
 
-impl <T: Component> Drop for VecStorage<T> {
+impl<T: Component> Drop for VecStorage<T> {
     fn drop(&mut self) {
         unsafe {
             // Prevent it from dropping uninit data
@@ -136,7 +137,7 @@ impl <T: Component> Drop for VecStorage<T> {
     }
 }
 
-unsafe impl <T: Component> ComponentStorage<T> for VecStorage<T> {
+unsafe impl<T: Component> ComponentStorage<T> for VecStorage<T> {
     fn new() -> Self {
         VecStorage {
             data: Vec::with_capacity(1),
@@ -156,9 +157,7 @@ unsafe impl <T: Component> ComponentStorage<T> for VecStorage<T> {
     #[inline]
     fn remove_component(&mut self, id: u32) -> Option<T> {
         debug_assert!(self.data.capacity() > id as usize);
-        unsafe {
-            Some(self.data.as_mut_ptr().offset(id as isize).read())
-        }
+        unsafe { Some(self.data.as_mut_ptr().offset(id as isize).read()) }
     }
     #[inline]
     unsafe fn get_unchecked_component(&self, id: u32) -> &T {
@@ -172,7 +171,8 @@ unsafe impl <T: Component> ComponentStorage<T> for VecStorage<T> {
     }
 
     fn get_component_or_insert<F>(&mut self, _id: u32, _f: F) -> &mut T
-        where F: FnOnce() -> T
+    where
+        F: FnOnce() -> T,
     {
         panic!("Shouldn't be used")
     }
@@ -199,10 +199,12 @@ unsafe impl <T: Component> ComponentStorage<T> for VecStorage<T> {
     }
 
     #[inline]
-    fn self_bookkeeps() -> bool { false }
+    fn self_bookkeeps() -> bool {
+        false
+    }
 }
 
-impl <T: Component> internal::BoxedStorage for VecStorage<T> {
+impl<T: Component> internal::BoxedStorage for VecStorage<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -221,19 +223,15 @@ impl <T: Component> internal::BoxedStorage for VecStorage<T> {
 
 /// Always returns the `Default::default()` value for a component.
 pub struct DefaultStorage<T: Component> {
-    val: T
+    val: T,
 }
 
-unsafe impl <T: Component + Default> ComponentStorage<T> for DefaultStorage<T> {
+unsafe impl<T: Component + Default> ComponentStorage<T> for DefaultStorage<T> {
     fn new() -> Self {
-        DefaultStorage {
-            val: T::default(),
-        }
+        DefaultStorage { val: T::default() }
     }
     #[inline]
-    fn add_component(&mut self, _id: u32, _val: T) {
-
-    }
+    fn add_component(&mut self, _id: u32, _val: T) {}
     #[inline]
     fn remove_component(&mut self, _id: u32) -> Option<T> {
         None
@@ -250,7 +248,7 @@ unsafe impl <T: Component + Default> ComponentStorage<T> for DefaultStorage<T> {
     }
 }
 
-impl <T: Component> internal::BoxedStorage for DefaultStorage<T> {
+impl<T: Component> internal::BoxedStorage for DefaultStorage<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -259,21 +257,18 @@ impl <T: Component> internal::BoxedStorage for DefaultStorage<T> {
         self
     }
 
-    fn free_id(&mut self, _id: u32) {
-    }
+    fn free_id(&mut self, _id: u32) {}
 }
 
 /// Stores a const ptr for the world entity
 pub struct ConstWorldStore<T: Component> {
-    pub(crate) val: *const T
+    pub(crate) val: *const T,
 }
 
-unsafe impl <T: Component> ComponentStorage<T> for ConstWorldStore<T> {
+unsafe impl<T: Component> ComponentStorage<T> for ConstWorldStore<T> {
     fn new() -> Self {
         use std::ptr;
-        ConstWorldStore {
-            val: ptr::null(),
-        }
+        ConstWorldStore { val: ptr::null() }
     }
     #[inline]
     fn add_component(&mut self, _id: u32, _val: T) {
@@ -299,7 +294,7 @@ unsafe impl <T: Component> ComponentStorage<T> for ConstWorldStore<T> {
     }
 }
 
-impl <T: Component> internal::BoxedStorage for ConstWorldStore<T> {
+impl<T: Component> internal::BoxedStorage for ConstWorldStore<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -313,10 +308,10 @@ impl <T: Component> internal::BoxedStorage for ConstWorldStore<T> {
 
 /// Stores a mut ptr for the world entity
 pub struct MutWorldStore<T: Component> {
-    pub(crate) val: *mut T
+    pub(crate) val: *mut T,
 }
 
-unsafe impl <T: Component> ComponentStorage<T> for MutWorldStore<T> {
+unsafe impl<T: Component> ComponentStorage<T> for MutWorldStore<T> {
     fn new() -> Self {
         use std::ptr;
         MutWorldStore {
@@ -344,17 +339,19 @@ unsafe impl <T: Component> ComponentStorage<T> for MutWorldStore<T> {
     #[inline]
     fn get_component_mut(&mut self, id: u32) -> Option<&mut T> {
         if id == 0 {
-            Some(unsafe { &mut*self.val })
+            Some(unsafe { &mut *self.val })
         } else {
             None
         }
     }
 
     #[inline]
-    fn self_bookkeeps() -> bool { true }
+    fn self_bookkeeps() -> bool {
+        true
+    }
 }
 
-impl <T: Component> internal::BoxedStorage for MutWorldStore<T> {
+impl<T: Component> internal::BoxedStorage for MutWorldStore<T> {
     fn as_any(&self) -> &dyn Any {
         self
     }

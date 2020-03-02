@@ -3,36 +3,53 @@ use super::super::*;
 use crate::util::BitSet;
 
 impl Level {
-
     /// Builds the requested room at the target location if possible
     pub fn place_room<'a, EC, E, P>(
-            &mut self,
-            engine: &E, entities: &mut Container,
-            p: &P, room_key: ResourceKey<'a>, bound: Bound
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        p: &P,
+        room_key: ResourceKey<'a>,
+        bound: Bound,
     ) -> Option<room::Id>
-        where E: Invokable,
-              P: player::Player,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        P: player::Player,
+        EC: EntityCreator,
     {
-        self.place_room_id::<EC, _>(engine, entities, room::Id(-p.get_uid().0), p.get_uid(), room_key, bound)
+        self.place_room_id::<EC, _>(
+            engine,
+            entities,
+            room::Id(-p.get_uid().0),
+            p.get_uid(),
+            room_key,
+            bound,
+        )
     }
 
     /// Builds the requested room at the target location if possible
     /// with the given id
     pub fn place_room_id<EC, E>(
-            &mut self,
-            engine: &E, entities: &mut Container,
-            id: room::Id, owner_id: player::Id,
-            room_key: ResourceKey<'_>, bound: Bound
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        id: room::Id,
+        owner_id: player::Id,
+        room_key: ResourceKey<'_>,
+        bound: Bound,
     ) -> Option<room::Id>
-        where E: Invokable,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
         if !self.can_place_room(owner_id, room_key.borrow(), bound) {
             return None;
         }
         let mut virt = self.capture_area(id, bound);
-        if self.build_room(engine, &mut virt, id, room_key.borrow(), bound).is_err() {
+        if self
+            .build_room(engine, &mut virt, id, room_key.borrow(), bound)
+            .is_err()
+        {
             return None;
         }
         let original_tiles = self.clear_room_area(bound, id);
@@ -40,27 +57,30 @@ impl Level {
         {
             let mut rooms = self.rooms.borrow_mut();
             rooms.room_order.push(id);
-            rooms.rooms.insert(id, RoomPlacement {
+            rooms.rooms.insert(
                 id,
-                owner: owner_id,
-                area: bound,
-                key: room_key.into_owned(),
-                state: RoomState::Planning,
-                building_level: Some(Box::new(virt)),
-                objects: vec![],
-                controller: Entity::INVALID,
-                placement_map: BitSet::new(0),
-                collision_map: BitSet::new(0),
-                blocked_map: BitSet::new(0),
-                needs_update: true,
-                original_tiles,
-                temp_placement: None,
-                limited_editing: false,
-                lower_walls: false,
-                placement_cost: UniDollar(0),
-                tile_update_state: None,
-                required_tiles: vec![],
-            });
+                RoomPlacement {
+                    id,
+                    owner: owner_id,
+                    area: bound,
+                    key: room_key.into_owned(),
+                    state: RoomState::Planning,
+                    building_level: Some(Box::new(virt)),
+                    objects: vec![],
+                    controller: Entity::INVALID,
+                    placement_map: BitSet::new(0),
+                    collision_map: BitSet::new(0),
+                    blocked_map: BitSet::new(0),
+                    needs_update: true,
+                    original_tiles,
+                    temp_placement: None,
+                    limited_editing: false,
+                    lower_walls: false,
+                    placement_cost: UniDollar(0),
+                    tile_update_state: None,
+                    required_tiles: vec![],
+                },
+            );
         }
 
         self.do_update_room::<EC, _>(engine, entities, id);
@@ -69,18 +89,26 @@ impl Level {
 
     /// Attempts to resize the room with the given id with the new size
     pub fn resize_room_id<EC, E>(
-            &mut self,
-            engine: &E, entities: &mut Container,
-            owner: player::Id, room_id: room::Id, bound: Bound
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        owner: player::Id,
+        room_id: room::Id,
+        bound: Bound,
     ) -> bool
-        where E: Invokable,
-              EC: EntityCreator,
+    where
+        E: Invokable,
+        EC: EntityCreator,
     {
         use std::mem::replace;
         let (mut original_tiles, orig_bound, key) = {
             let mut rooms = self.rooms.borrow_mut();
             let room = assume!(self.log, rooms.rooms.get_mut(room_id));
-            (replace(&mut room.original_tiles, vec![]), room.area, room.key.clone())
+            (
+                replace(&mut room.original_tiles, vec![]),
+                room.area,
+                room.key.clone(),
+            )
         };
         {
             let mut tiles = self.tiles.borrow_mut();
@@ -97,7 +125,10 @@ impl Level {
 
         {
             let mut virt = self.capture_area(room_id, selected_bound);
-            assume!(self.log, self.build_room(engine, &mut virt, room_id, key, selected_bound));
+            assume!(
+                self.log,
+                self.build_room(engine, &mut virt, room_id, key, selected_bound)
+            );
             let original_tiles = self.clear_room_area(selected_bound, room_id);
             let mut rooms = self.rooms.borrow_mut();
             let room = assume!(self.log, rooms.rooms.get_mut(room_id));
@@ -116,9 +147,15 @@ impl Level {
 
     /// Cancels the placement of the room returning the area back to its
     /// original state
-    pub fn cancel_placement<EC, E>(&mut self, engine: &E, entities: &mut Container, room_id: room::Id) -> RoomPlacement
-        where EC: EntityCreator,
-              E: Invokable,
+    pub fn cancel_placement<EC, E>(
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        room_id: room::Id,
+    ) -> RoomPlacement
+    where
+        EC: EntityCreator,
+        E: Invokable,
     {
         let room = {
             let mut rooms = self.rooms.borrow_mut();
@@ -126,7 +163,8 @@ impl Level {
             let mut room = assume!(self.log, rooms.rooms.remove(room_id));
             rooms.room_order.retain(|v| *v != room_id);
             for loc in room.area {
-                tiles.tiles[LevelTiles::location_index(loc, self.width)] = room.original_tiles.remove(0);
+                tiles.tiles[LevelTiles::location_index(loc, self.width)] =
+                    room.original_tiles.remove(0);
                 tiles.flag_dirty(loc.x, loc.y);
             }
             room
@@ -159,7 +197,7 @@ impl Level {
             let lvl = assume!(self.log, room.building_level.as_mut());
             lvl.dirty = true; // Force a redraw
             lvl.id = id; // Update the room id
-            // Update the ownership to the new id
+                         // Update the ownership to the new id
             for loc in room.area {
                 let idx = RoomVirtualLevel::location_index(loc - lvl.offset, lvl.width);
                 // Take ownership of the tile.
@@ -196,18 +234,26 @@ impl Level {
     }
 
     fn build_room<E>(
-            &mut self,
-            engine: &E,
-            lvl: &mut RoomVirtualLevel, id: room::Id,
-            room_key: ResourceKey<'_>, bound: Bound,
+        &mut self,
+        engine: &E,
+        lvl: &mut RoomVirtualLevel,
+        id: room::Id,
+        room_key: ResourceKey<'_>,
+        bound: Bound,
     ) -> UResult<()>
-        where E: Invokable,
+    where
+        E: Invokable,
     {
         use lua::Ref;
         // Build the room
 
-        let room: &room::Room = &*self.asset_manager.loader_open::<room::Loader>(room_key.borrow())?;
-        let border = room.border_tile.as_ref().map_or(room.tile.borrow(), |v| v.borrow());
+        let room: &room::Room = &*self
+            .asset_manager
+            .loader_open::<room::Loader>(room_key.borrow())?;
+        let border = room
+            .border_tile
+            .as_ref()
+            .map_or(room.tile.borrow(), |v| v.borrow());
         lvl.has_border = room.border_tile.is_some();
         for loc in bound {
             let idx = RoomVirtualLevel::location_index(loc - lvl.offset, lvl.width);
@@ -218,7 +264,12 @@ impl Level {
                 // then we shouldn't replace it as it would introduce an
                 // a break in the room.
                 // This case will only happen when a room is extendable.
-                if (loc.x == bound.min.x || loc.y == bound.min.y || loc.x == bound.max.x || loc.y == bound.max.y) && (*orig != room.tile){
+                if (loc.x == bound.min.x
+                    || loc.y == bound.min.y
+                    || loc.x == bound.max.x
+                    || loc.y == bound.max.y)
+                    && (*orig != room.tile)
+                {
                     border.borrow()
                 } else {
                     room.tile.borrow()
@@ -237,7 +288,13 @@ impl Level {
             }
 
             #[allow(clippy::needless_pass_by_value)] // Lua requirements
-            fn set_tile(_: &lua::Lua, p: Ref<RefCell<Placer>>, x: i32, y: i32, tile: Ref<String>) -> UResult<()> {
+            fn set_tile(
+                _: &lua::Lua,
+                p: Ref<RefCell<Placer>>,
+                x: i32,
+                y: i32,
+                tile: Ref<String>,
+            ) -> UResult<()> {
                 let loc = Location::new(x, y);
                 let mut p = p.borrow_mut();
                 if !p.bound.in_bounds(loc) {
@@ -253,13 +310,16 @@ impl Level {
                 }
             }
 
-            let placer = lua::Ref::new(engine, RefCell::new(Placer {
-                bound: Bound::new(
-                    Location::new(0, 0),
-                    Location::new(bound.width(), bound.height()),
-                ),
-                tiles: vec![],
-            }));
+            let placer = lua::Ref::new(
+                engine,
+                RefCell::new(Placer {
+                    bound: Bound::new(
+                        Location::new(0, 0),
+                        Location::new(bound.width(), bound.height()),
+                    ),
+                    tiles: vec![],
+                }),
+            );
 
             engine.invoke_function::<(Ref<String>, Ref<String>, Ref<String>, lua::Ref<_>, i32, i32), ()>("invoke_module_method", (
                 Ref::new_string(engine, placer_script.0.module()),
@@ -271,8 +331,7 @@ impl Level {
 
             let p = placer.borrow();
             for tile_info in &p.tiles {
-                let tile = LazyResourceKey::parse(&*tile_info.1)
-                    .or_module(room_key.module_key());
+                let tile = LazyResourceKey::parse(&*tile_info.1).or_module(room_key.module_key());
                 let loc = tile_info.0.offset(bound.min.x, bound.min.y);
                 lvl.set_tile(loc, tile);
                 // Take ownership of the tile.
@@ -287,13 +346,21 @@ impl Level {
                 let was_wall = lvl.get_wall_info(loc, *dir).is_some();
                 let is_wall = {
                     lvl.get_tile(loc).should_place_wall(lvl, loc, *dir)
-                        || lvl.get_tile(loc.shift(*dir)).should_place_wall(lvl, loc.shift(*dir), dir.reverse())
+                        || lvl.get_tile(loc.shift(*dir)).should_place_wall(
+                            lvl,
+                            loc.shift(*dir),
+                            dir.reverse(),
+                        )
                 };
                 if was_wall != is_wall {
                     if is_wall {
-                        lvl.set_wall_info(loc, *dir, Some(WallInfo {
-                            flag: TileWallFlag::None,
-                        }));
+                        lvl.set_wall_info(
+                            loc,
+                            *dir,
+                            Some(WallInfo {
+                                flag: TileWallFlag::None,
+                            }),
+                        );
                     } else {
                         lvl.set_wall_info(loc, *dir, None);
                     }

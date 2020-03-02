@@ -1,17 +1,10 @@
-
-use std::ops::*;
-use std::fmt;
-use serde::{
-    Serialize,
-    Serializer,
-    Deserialize,
-    Deserializer,
-};
 use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
+use std::ops::*;
 
 /// Represents the currency used by the game
-#[derive(Clone, Copy, Hash, Debug, Default)]
-#[derive(PartialEq, Eq, PartialOrd, Ord, DeltaEncode)]
+#[derive(Clone, Copy, Hash, Debug, Default, PartialEq, Eq, PartialOrd, Ord, DeltaEncode)]
 pub struct UniDollar(pub i64);
 
 impl Add for UniDollar {
@@ -48,7 +41,7 @@ impl Div for UniDollar {
 }
 
 macro_rules! impl_unidollar_num_ty {
-    ($ty:ty) => (
+    ($ty:ty) => {
         impl Div<$ty> for UniDollar {
             type Output = UniDollar;
             fn div(self, rhs: $ty) -> Self {
@@ -81,7 +74,7 @@ macro_rules! impl_unidollar_num_ty {
                 UniDollar(i64::from(self) * rhs.0)
             }
         }
-    )
+    };
 }
 impl_unidollar_num_ty!(i8);
 impl_unidollar_num_ty!(i16);
@@ -101,15 +94,17 @@ impl Neg for UniDollar {
 
 impl Serialize for UniDollar {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: Serializer
+    where
+        S: Serializer,
     {
         serializer.serialize_i64(self.0)
     }
 }
 
-impl <'de> Deserialize<'de> for UniDollar {
+impl<'de> Deserialize<'de> for UniDollar {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>
+    where
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_i64(UniDollarVisitor)
     }
@@ -118,16 +113,17 @@ impl <'de> Deserialize<'de> for UniDollar {
 struct UniDollarVisitor;
 
 macro_rules! impl_vist {
-    ($name:ident, $ty:ty) => (
+    ($name:ident, $ty:ty) => {
         fn $name<E>(self, val: $ty) -> Result<UniDollar, E>
-            where E: de::Error
+        where
+            E: de::Error,
         {
             Ok(UniDollar(i64::from(val)))
         }
-    )
+    };
 }
 
-impl <'de> Visitor<'de> for UniDollarVisitor {
+impl<'de> Visitor<'de> for UniDollarVisitor {
     type Value = UniDollar;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -143,12 +139,12 @@ impl <'de> Visitor<'de> for UniDollarVisitor {
     impl_vist!(visit_u32, u32);
 
     fn visit_u64<E>(self, val: u64) -> Result<UniDollar, E>
-        where E: de::Error
+    where
+        E: de::Error,
     {
         Ok(UniDollar(val as i64))
     }
 }
-
 
 impl fmt::Display for UniDollar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

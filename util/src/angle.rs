@@ -1,6 +1,5 @@
-
-use std::ops::*;
 use std::fmt::{self, Display};
+use std::ops::*;
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd, Serialize, Deserialize, DeltaEncode)]
 pub struct Angle(f32);
@@ -17,7 +16,8 @@ impl Angle {
     }
 
     pub fn difference<A>(self, other: A) -> Angle
-        where A: Into<Angle>
+    where
+        A: Into<Angle>,
     {
         let a = other.into();
         let diff = self.0 - a.0;

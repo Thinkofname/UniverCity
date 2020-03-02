@@ -1,9 +1,8 @@
-
-use fungui;
-use super::*;
 use super::color::Color;
-use crate::ui::*;
+use super::*;
 use crate::ui::Value;
+use crate::ui::*;
+use fungui;
 
 #[derive(Clone, PartialEq)]
 pub struct BorderWidthInfo {
@@ -35,36 +34,44 @@ impl fungui::ConvertValue<UniverCityUI> for BorderWidthInfo {
     }
 }
 
-pub fn border_width<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let left: f32 = args.next()
+pub fn border_width<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let left: f32 = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "left"
+            name: "left",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected float"
+            reason: "Expected float",
         })?;
-    let top: f32 = args.next()
+    let top: f32 = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(left);
-    let right: f32 = args.next()
+    let right: f32 = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(left);
-    let bottom: f32 = args.next()
+    let bottom: f32 = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(top);
 
-    Ok(fungui::Value::ExtValue(UValue::BorderWidth(BorderWidthInfo {
-        left,
-        top,
-        right,
-        bottom,
-    })))
+    Ok(fungui::Value::ExtValue(UValue::BorderWidth(
+        BorderWidthInfo {
+            left,
+            top,
+            right,
+            bottom,
+        },
+    )))
 }
 
 #[derive(Clone, PartialEq)]
@@ -80,7 +87,7 @@ pub enum Border {
         width: u32,
         height: u32,
         fill: bool,
-    }
+    },
 }
 
 impl fungui::ConvertValue<UniverCityUI> for Border {
@@ -142,26 +149,32 @@ pub enum BorderStyle {
     Outset,
 }
 
-pub fn border<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let left: BorderSide = args.next()
+pub fn border<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let left: BorderSide = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "left"
+            name: "left",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected float"
+            reason: "Expected float",
         })?;
-    let top: BorderSide = args.next()
+    let top: BorderSide = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(left);
-    let right: BorderSide = args.next()
+    let right: BorderSide = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(left);
-    let bottom: BorderSide = args.next()
+    let bottom: BorderSide = args
+        .next()
         .and_then(|v| v.ok())
         .and_then(|v| v.convert())
         .unwrap_or(top);
@@ -174,41 +187,46 @@ pub fn border<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 
     })))
 }
 
-
-pub fn border_image<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let image: String = args.next()
+pub fn border_image<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let image: String = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "image"
+            name: "image",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected string"
+            reason: "Expected string",
         })?;
 
-    let pwidth: i32 = args.next()
+    let pwidth: i32 = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 1,
-            name: "width"
+            name: "width",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected integer"
+            reason: "Expected integer",
         })?;
-    let pheight: i32 = args.next()
+    let pheight: i32 = args
+        .next()
         .unwrap_or_else(|| Ok(fungui::Value::Integer(pwidth)))?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected integer"
+            reason: "Expected integer",
         })?;
 
-    let fill: bool = args.next()
+    let fill: bool = args
+        .next()
         .unwrap_or(Ok(fungui::Value::Boolean(false)))?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected boolean"
+            reason: "Expected boolean",
         })?;
 
     Ok(fungui::Value::ExtValue(UValue::Border(Border::Image {
@@ -219,22 +237,26 @@ pub fn border_image<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Valu
     })))
 }
 
-pub fn border_side<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let color: Color = Color::from_val(args.next()
-        .ok_or(fungui::Error::MissingParameter {
-            position: 0,
-            name: "color"
-        })
-        .and_then(|v| v)?)
-        .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected color"
-        })?;
+pub fn border_side<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let color: Color = Color::from_val(
+        args.next()
+            .ok_or(fungui::Error::MissingParameter {
+                position: 0,
+                name: "color",
+            })
+            .and_then(|v| v)?,
+    )
+    .ok_or(fungui::Error::CustomStatic {
+        reason: "Expected color",
+    })?;
 
     let style = if let Some(v) = args.next() {
         match v?
             .convert::<String>()
             .ok_or(fungui::Error::CustomStatic {
-                reason: "Expected style"
+                reason: "Expected style",
             })?
             .as_str()
         {
@@ -254,16 +276,20 @@ pub fn border_side<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value
     })))
 }
 
-impl <'a, 'b> Builder<'a, 'b> {
+impl<'a, 'b> Builder<'a, 'b> {
     pub fn border_image(
-        &mut self, position: (f32, f32), width: f32, height: f32,
+        &mut self,
+        position: (f32, f32),
+        width: f32,
+        height: f32,
         tint: (u8, u8, u8, u8),
-        widths: &BorderWidthInfo, image: &str,
-        iwidth: u32, iheight: u32, fill: bool,
+        widths: &BorderWidthInfo,
+        image: &str,
+        iwidth: u32,
+        iheight: u32,
+        fill: bool,
     ) -> BorderRender {
-        let (
-            attrib_position, attrib_texture_info, attrib_atlas, attrib_uv, attrib_color
-        ) = {
+        let (attrib_position, attrib_texture_info, attrib_atlas, attrib_uv, attrib_color) = {
             let program = self.ctx.program("ui/border_image");
             program.use_program();
             (
@@ -282,22 +308,50 @@ impl <'a, 'b> Builder<'a, 'b> {
         buffer.bind(gl::BufferTarget::Array);
 
         attrib_position.enable();
-        attrib_position.vertex_pointer(2, gl::Type::Float, false, mem::size_of::<ImageVertex>() as i32, 0);
+        attrib_position.vertex_pointer(
+            2,
+            gl::Type::Float,
+            false,
+            mem::size_of::<ImageVertex>() as i32,
+            0,
+        );
         attrib_texture_info.enable();
-        attrib_texture_info.vertex_pointer(4, gl::Type::UnsignedShort, false, mem::size_of::<ImageVertex>() as i32, 8);
+        attrib_texture_info.vertex_pointer(
+            4,
+            gl::Type::UnsignedShort,
+            false,
+            mem::size_of::<ImageVertex>() as i32,
+            8,
+        );
         attrib_atlas.enable();
-        attrib_atlas.vertex_int_pointer(1, gl::Type::UnsignedShort, mem::size_of::<ImageVertex>() as i32, 16);
+        attrib_atlas.vertex_int_pointer(
+            1,
+            gl::Type::UnsignedShort,
+            mem::size_of::<ImageVertex>() as i32,
+            16,
+        );
         attrib_uv.enable();
-        attrib_uv.vertex_pointer(2, gl::Type::Float, false, mem::size_of::<ImageVertex>() as i32, 20);
+        attrib_uv.vertex_pointer(
+            2,
+            gl::Type::Float,
+            false,
+            mem::size_of::<ImageVertex>() as i32,
+            20,
+        );
         attrib_color.enable();
-        attrib_color.vertex_pointer(4, gl::Type::UnsignedByte, true, mem::size_of::<ImageVertex>() as i32, 28);
+        attrib_color.vertex_pointer(
+            4,
+            gl::Type::UnsignedByte,
+            true,
+            mem::size_of::<ImageVertex>() as i32,
+            28,
+        );
 
         let (atlas, rect) = crate::render::RenderState::texture_info_for(
             self.log,
             self.assets,
             self.global_atlas,
-            LazyResourceKey::parse(&image)
-                .or_module(ModuleKey::new("base")),
+            LazyResourceKey::parse(&image).or_module(ModuleKey::new("base")),
         );
 
         let atlas = atlas as u16;
@@ -393,18 +447,106 @@ impl <'a, 'b> Builder<'a, 'b> {
             ]};
         }
 
-
         let a;
         let b;
         let verts: &[ImageVertex] = if fill {
             a = gen_image_verts![
-                ImageVertex { x: position.0 + widths.left, y: position.1 + height - widths.bottom, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: 0.0, uy: height_uv, r: tint.0, g: tint.1, b: tint.2, a: tint.3},
-                ImageVertex { x: position.0 + widths.left, y: position.1 + widths.top, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: 0.0, uy: 0.0, r: tint.0, g: tint.1, b: tint.2, a: tint.3},
-                ImageVertex { x: position.0 + width - widths.right, y: position.1 + height - widths.bottom, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: width_uv, uy: height_uv, r: tint.0, g: tint.1, b: tint.2, a: tint.3},
-
-                ImageVertex { x: position.0 + widths.left, y: position.1 + widths.top, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: 0.0, uy: 0.0, r: tint.0, g: tint.1, b: tint.2, a: tint.3},
-                ImageVertex { x: position.0 + width - widths.right, y: position.1 + widths.top, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: width_uv, uy: 0.0, r: tint.0, g: tint.1, b: tint.2, a: tint.3},
-                ImageVertex { x: position.0 + width - widths.right, y: position.1 + height - widths.bottom, atlas, texture_x: texture_x + texture_w, texture_y: texture_y + texture_h, texture_w, texture_h, _padding: 0, ux: width_uv, uy: height_uv, r: tint.0, g: tint.1, b: tint.2, a: tint.3}
+                ImageVertex {
+                    x: position.0 + widths.left,
+                    y: position.1 + height - widths.bottom,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: 0.0,
+                    uy: height_uv,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                },
+                ImageVertex {
+                    x: position.0 + widths.left,
+                    y: position.1 + widths.top,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: 0.0,
+                    uy: 0.0,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                },
+                ImageVertex {
+                    x: position.0 + width - widths.right,
+                    y: position.1 + height - widths.bottom,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: width_uv,
+                    uy: height_uv,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                },
+                ImageVertex {
+                    x: position.0 + widths.left,
+                    y: position.1 + widths.top,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: 0.0,
+                    uy: 0.0,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                },
+                ImageVertex {
+                    x: position.0 + width - widths.right,
+                    y: position.1 + widths.top,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: width_uv,
+                    uy: 0.0,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                },
+                ImageVertex {
+                    x: position.0 + width - widths.right,
+                    y: position.1 + height - widths.bottom,
+                    atlas,
+                    texture_x: texture_x + texture_w,
+                    texture_y: texture_y + texture_h,
+                    texture_w,
+                    texture_h,
+                    _padding: 0,
+                    ux: width_uv,
+                    uy: height_uv,
+                    r: tint.0,
+                    g: tint.1,
+                    b: tint.2,
+                    a: tint.3
+                }
             ];
             &a
         } else {
@@ -422,16 +564,17 @@ impl <'a, 'b> Builder<'a, 'b> {
     }
 
     pub fn border(
-        &mut self, position: (f32, f32), width: f32, height: f32,
+        &mut self,
+        position: (f32, f32),
+        width: f32,
+        height: f32,
         widths: &BorderWidthInfo,
         left: &BorderSide,
         top: &BorderSide,
         right: &BorderSide,
         bottom: &BorderSide,
     ) -> BorderRender {
-        let (
-            attrib_position, attrib_rel_position, attrib_color, attrib_style
-        ) = {
+        let (attrib_position, attrib_rel_position, attrib_color, attrib_style) = {
             let program = self.ctx.program("ui/border_solid");
             program.use_program();
             (
@@ -449,13 +592,36 @@ impl <'a, 'b> Builder<'a, 'b> {
         buffer.bind(gl::BufferTarget::Array);
 
         attrib_position.enable();
-        attrib_position.vertex_pointer(2, gl::Type::Float, false, mem::size_of::<BorderVertex>() as i32, 0);
+        attrib_position.vertex_pointer(
+            2,
+            gl::Type::Float,
+            false,
+            mem::size_of::<BorderVertex>() as i32,
+            0,
+        );
         attrib_rel_position.enable();
-        attrib_rel_position.vertex_pointer(3, gl::Type::Float, false, mem::size_of::<BorderVertex>() as i32, 8);
+        attrib_rel_position.vertex_pointer(
+            3,
+            gl::Type::Float,
+            false,
+            mem::size_of::<BorderVertex>() as i32,
+            8,
+        );
         attrib_color.enable();
-        attrib_color.vertex_pointer(4, gl::Type::UnsignedByte, true, mem::size_of::<BorderVertex>() as i32, 20);
+        attrib_color.vertex_pointer(
+            4,
+            gl::Type::UnsignedByte,
+            true,
+            mem::size_of::<BorderVertex>() as i32,
+            20,
+        );
         attrib_style.enable();
-        attrib_style.vertex_int_pointer(4, gl::Type::Byte, mem::size_of::<BorderVertex>() as i32, 24);
+        attrib_style.vertex_int_pointer(
+            4,
+            gl::Type::Byte,
+            mem::size_of::<BorderVertex>() as i32,
+            24,
+        );
 
         let mut widths = Clone::clone(widths);
         widths.left = widths.left.min(width);
@@ -464,18 +630,37 @@ impl <'a, 'b> Builder<'a, 'b> {
         widths.bottom = widths.bottom.min(height);
 
         let mut verts = Vec::with_capacity(
-            if top.style != BorderStyle::None { 12 } else { 0 }
-            + if bottom.style != BorderStyle::None { 12 } else { 0 }
-            + if left.style != BorderStyle::None { 12 } else { 0 }
-            + if right.style != BorderStyle::None { 12 } else { 0 }
+            if top.style != BorderStyle::None {
+                12
+            } else {
+                0
+            } + if bottom.style != BorderStyle::None {
+                12
+            } else {
+                0
+            } + if left.style != BorderStyle::None {
+                12
+            } else {
+                0
+            } + if right.style != BorderStyle::None {
+                12
+            } else {
+                0
+            },
         );
 
         #[inline(always)]
         fn do_border(
             verts: &mut Vec<BorderVertex>,
-            position: (f32, f32), width: f32, height: f32,
+            position: (f32, f32),
+            width: f32,
+            height: f32,
             widths: &BorderWidthInfo,
-            side: &BorderSide, dx: f32, dy: f32, ex: f32, ey: f32,
+            side: &BorderSide,
+            dx: f32,
+            dy: f32,
+            ex: f32,
+            ey: f32,
         ) {
             let style = match side.style {
                 BorderStyle::None => return,
@@ -546,42 +731,42 @@ impl <'a, 'b> Builder<'a, 'b> {
                 y: position.1 + by + bh,
                 rel_x: 0.0,
                 rel_y: 0.0 + bh,
-                .. params
+                ..params
             });
             verts.push(BorderVertex {
                 x: position.0 + bx,
                 y: position.1 + by,
                 rel_x: 0.0,
                 rel_y: 0.0,
-                .. params
+                ..params
             });
             verts.push(BorderVertex {
                 x: position.0 + bx + bw,
                 y: position.1 + by + bh,
                 rel_x: 0.0 + bw,
                 rel_y: 0.0 + bh,
-                .. params
+                ..params
             });
             verts.push(BorderVertex {
                 x: position.0 + bx,
                 y: position.1 + by,
                 rel_x: 0.0,
                 rel_y: 0.0,
-                .. params
+                ..params
             });
             verts.push(BorderVertex {
                 x: position.0 + bx + bw,
                 y: position.1 + by,
                 rel_x: 0.0 + bw,
                 rel_y: 0.0,
-                .. params
+                ..params
             });
             verts.push(BorderVertex {
                 x: position.0 + bx + bw,
                 y: position.1 + by + bh,
                 rel_x: 0.0 + bw,
                 rel_y: 0.0 + bh,
-                .. params
+                ..params
             });
 
             if ey.abs() > 0.5 {
@@ -593,43 +778,42 @@ impl <'a, 'b> Builder<'a, 'b> {
                         y: position.1 + by + top,
                         rel_x: 0.0,
                         rel_y: 0.0 + top,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx - widths.left,
                         y: position.1 + by + top,
                         rel_x: 0.0 - widths.left,
                         rel_y: 0.0 + top,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx,
                         y: position.1 + by + bottom,
                         rel_x: 0.0,
                         rel_y: 0.0 + bottom,
-                        .. params
+                        ..params
                     },
-
                     BorderVertex {
                         x: position.0 + bx + bw,
                         y: position.1 + by + top,
                         rel_x: 0.0 + bw,
                         rel_y: 0.0 + top,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + bw,
                         y: position.1 + by + bottom,
                         rel_x: 0.0 + bw,
                         rel_y: 0.0 + bottom,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + bw + widths.right,
                         y: position.1 + by + top,
                         rel_x: 0.0 + bw + widths.right,
                         rel_y: 0.0 + top,
-                        .. params
+                        ..params
                     },
                 ];
                 if ey < 0.0 {
@@ -648,43 +832,42 @@ impl <'a, 'b> Builder<'a, 'b> {
                         y: position.1 + by,
                         rel_x: 0.0 + top,
                         rel_y: 0.0,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + bottom,
                         y: position.1 + by,
                         rel_x: 0.0 + bottom,
                         rel_y: 0.0,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + top,
                         y: position.1 + by - widths.top,
                         rel_x: 0.0 + top,
                         rel_y: 0.0 - widths.top,
-                        .. params
+                        ..params
                     },
-
                     BorderVertex {
                         x: position.0 + bx + top,
                         y: position.1 + by + bh,
                         rel_x: 0.0 + top,
                         rel_y: 0.0 + bh,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + top,
                         y: position.1 + by + bh + widths.bottom,
                         rel_x: 0.0 + top,
                         rel_y: 0.0 + bh + widths.bottom,
-                        .. params
+                        ..params
                     },
                     BorderVertex {
                         x: position.0 + bx + bottom,
                         y: position.1 + by + bh,
                         rel_x: 0.0 + bottom,
                         rel_y: 0.0 + bh,
-                        .. params
+                        ..params
                     },
                 ];
                 if ex < 0.0 {
@@ -695,11 +878,19 @@ impl <'a, 'b> Builder<'a, 'b> {
             }
         }
 
-        do_border(&mut verts, position, width, height, &widths, top, 1.0, 0.0, 0.0, -1.0);
-        do_border(&mut verts, position, width, height, &widths, bottom, -1.0, 0.0, 0.0, 1.0);
+        do_border(
+            &mut verts, position, width, height, &widths, top, 1.0, 0.0, 0.0, -1.0,
+        );
+        do_border(
+            &mut verts, position, width, height, &widths, bottom, -1.0, 0.0, 0.0, 1.0,
+        );
 
-        do_border(&mut verts, position, width, height, &widths, left, 0.0, 1.0, -1.0, 0.0);
-        do_border(&mut verts, position, width, height, &widths, right, 0.0, -1.0, 1.0, 0.0);
+        do_border(
+            &mut verts, position, width, height, &widths, left, 0.0, 1.0, -1.0, 0.0,
+        );
+        do_border(
+            &mut verts, position, width, height, &widths, right, 0.0, -1.0, 1.0, 0.0,
+        );
 
         buffer.set_data(gl::BufferTarget::Array, &verts, gl::BufferUsage::Static);
         BorderRender {

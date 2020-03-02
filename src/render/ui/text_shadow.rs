@@ -1,7 +1,6 @@
-
-use fungui;
 use super::color::*;
 use crate::ui::*;
+use fungui;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TShadow {
@@ -32,45 +31,48 @@ impl fungui::ConvertValue<UniverCityUI> for TShadow {
     }
 }
 
-
-pub fn text_shadow<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
-    let offset_x: f32 = args.next()
+pub fn text_shadow<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
+    let offset_x: f32 = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 0,
-            name: "offset_x"
+            name: "offset_x",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected float"
+            reason: "Expected float",
         })?;
-    let offset_y: f32 = args.next()
+    let offset_y: f32 = args
+        .next()
         .ok_or(fungui::Error::MissingParameter {
             position: 1,
-            name: "offset_y"
+            name: "offset_y",
         })
         .and_then(|v| v)?
         .convert()
         .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected float"
+            reason: "Expected float",
         })?;
 
-    let color: Color = Color::from_val(args.next()
-        .ok_or(fungui::Error::MissingParameter {
-            position: 2,
-            name: "color"
-        })
-        .and_then(|v| v)?)
-        .ok_or(fungui::Error::CustomStatic {
-            reason: "Expected color"
-        })?;
+    let color: Color = Color::from_val(
+        args.next()
+            .ok_or(fungui::Error::MissingParameter {
+                position: 2,
+                name: "color",
+            })
+            .and_then(|v| v)?,
+    )
+    .ok_or(fungui::Error::CustomStatic {
+        reason: "Expected color",
+    })?;
 
     let blur_radius: f32 = if let Some(b) = args.next() {
-        b?
-            .convert()
-            .ok_or(fungui::Error::CustomStatic {
-                reason: "Expected float"
-            })?
+        b?.convert().ok_or(fungui::Error::CustomStatic {
+            reason: "Expected float",
+        })?
     } else {
         1.0
     };

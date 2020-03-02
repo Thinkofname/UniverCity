@@ -1,13 +1,13 @@
 //! Handles transforming key/mouse events into
 //! events.
 
+use crate::prelude::*;
+use crate::util::FNVMap;
+use sdl2::event::Event as SDLEvent;
 use sdl2::keyboard::Keycode;
 use sdl2::mouse::MouseButton;
-use sdl2::event::Event as SDLEvent;
-use crate::util::FNVMap;
 use serde_json;
 use std::fs::File;
-use crate::prelude::*;
 
 /// A collection of keybinds to be used for certain game states
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
@@ -130,7 +130,6 @@ pub enum KeyAction {
     /// Inspect's a student or staff member
     /// under the mouse
     InspectMember,
-
 }
 
 impl KeyAction {
@@ -147,24 +146,11 @@ impl KeyAction {
     pub(crate) fn standard_direction(self) -> Option<bool> {
         use self::KeyAction::*;
         match self {
-            RenderZoomIn
-            | RenderZoomOut
-            | RenderCameraLeft
-            | RenderCameraRight
-            | RenderCameraUp
-            | RenderCameraDown
-            | RoomStartAreaSelect
-            | RoomStartRoomResize
+            RenderZoomIn | RenderZoomOut | RenderCameraLeft | RenderCameraRight
+            | RenderCameraUp | RenderCameraDown | RoomStartAreaSelect | RoomStartRoomResize
             | PlacementDragStart => Some(false),
-            SystemMenu
-            | BeginChat
-            | RenderRotateLeft
-            | RenderRotateRight
-            | SelectEditRoom
-            | PlacementMove
-            | PlacementRemove
-            | PlacementFinish
-            | PlacementRotate
+            SystemMenu | BeginChat | RenderRotateLeft | RenderRotateRight | SelectEditRoom
+            | PlacementMove | PlacementRemove | PlacementFinish | PlacementRotate
             | InspectMember => Some(true),
             _ => None,
         }
@@ -187,7 +173,7 @@ impl KeyAction {
     }
 
     /// Hidden actions don't show on the UI
-    pub (crate) fn hidden(self) -> bool {
+    pub(crate) fn hidden(self) -> bool {
         use self::KeyAction::*;
         match self {
             RenderCameraLeftStop
@@ -196,8 +182,7 @@ impl KeyAction {
             | RenderCameraDownStop
             | RoomFinishAreaSelect
             | RoomFinishRoomResize
-            | PlacementDragStart
-              => true,
+            | PlacementDragStart => true,
             _ => false,
         }
     }
@@ -205,20 +190,28 @@ impl KeyAction {
     pub(crate) fn as_tooltip(self) -> &'static str {
         use self::KeyAction::*;
         match self {
-            SystemMenu => "Opens the system menu allowing you to save/exit a game. Pauses in single player",
+            SystemMenu => {
+                "Opens the system menu allowing you to save/exit a game. Pauses in single player"
+            }
             BeginChat => "Begins a chat message",
             RenderZoomIn => "Causes the #camera# to zoom in",
             RenderZoomOut => "Causes the #camera# to zoom out",
             RenderRotateLeft => "Rotates the #camera# to the left",
             RenderRotateRight => "Rotates the #camera# to the right",
             RenderCameraLeft => "Causes the #camera# to start moving to the left",
-            RenderCameraLeftStop => "Stops the #camera# from moving to the left if it was currently moving",
+            RenderCameraLeftStop => {
+                "Stops the #camera# from moving to the left if it was currently moving"
+            }
             RenderCameraRight => "Causes the #camera# to start moving to the right",
-            RenderCameraRightStop => "Stops the #camera# from moving to the right if it was currently moving",
+            RenderCameraRightStop => {
+                "Stops the #camera# from moving to the right if it was currently moving"
+            }
             RenderCameraUp => "Causes the #camera# to start moving up",
             RenderCameraUpStop => "Stops the #camera# from moving up if it was currently moving",
             RenderCameraDown => "Causes the #camera# to start moving down",
-            RenderCameraDownStop => "Stops the #camera# from moving down if it was currently moving",
+            RenderCameraDownStop => {
+                "Stops the #camera# from moving down if it was currently moving"
+            }
             RoomStartAreaSelect => "Starts selecting an area for a *building* or *room*",
             RoomStartAreaSelectStop => "Stops selecting an area for a *building* or *room*",
             RoomFinishAreaSelect => "Finishes selecting an area for a *building* or *room*",
@@ -318,33 +311,50 @@ pub(crate) struct BindCollection {
 }
 
 impl BindCollection {
-
     fn set_bind(&mut self, bind: BindType, down: Option<KeyAction>, up: Option<KeyAction>) {
         self.binds.insert(bind, (down, up));
     }
 
     fn transform(&self, event: &SDLEvent) -> Option<Vec<KeyAction>> {
         match *event {
-            SDLEvent::KeyDown{keycode, ..} => {
-                return keycode.and_then(|v| self.binds.get(&BindType::Key(v))).and_then(|v| v.0).map(|v| vec![v]);
-            },
-            SDLEvent::KeyUp{keycode, ..} => {
-                return keycode.and_then(|v| self.binds.get(&BindType::Key(v))).and_then(|v| v.1).map(|v| vec![v]);
-            },
-            SDLEvent::MouseWheel{y, ..} => {
+            SDLEvent::KeyDown { keycode, .. } => {
+                return keycode
+                    .and_then(|v| self.binds.get(&BindType::Key(v)))
+                    .and_then(|v| v.0)
+                    .map(|v| vec![v]);
+            }
+            SDLEvent::KeyUp { keycode, .. } => {
+                return keycode
+                    .and_then(|v| self.binds.get(&BindType::Key(v)))
+                    .and_then(|v| v.1)
+                    .map(|v| vec![v]);
+            }
+            SDLEvent::MouseWheel { y, .. } => {
                 if let Some(&(ref up, ref down)) = self.binds.get(&BindType::MouseWheel(y > 0)) {
                     let mut out = vec![];
-                    if let Some(up) = up.as_ref() { out.push(*up); }
-                    if let Some(down) = down.as_ref() { out.push(*down); }
+                    if let Some(up) = up.as_ref() {
+                        out.push(*up);
+                    }
+                    if let Some(down) = down.as_ref() {
+                        out.push(*down);
+                    }
                     return Some(out);
                 }
-            },
-            SDLEvent::MouseButtonDown{mouse_btn, ..} => {
-                return self.binds.get(&BindType::Mouse(mouse_btn)).and_then(|v| v.0).map(|v| vec![v]);
-            },
-            SDLEvent::MouseButtonUp{mouse_btn, ..} => {
-                return self.binds.get(&BindType::Mouse(mouse_btn)).and_then(|v| v.1).map(|v| vec![v]);
-            },
+            }
+            SDLEvent::MouseButtonDown { mouse_btn, .. } => {
+                return self
+                    .binds
+                    .get(&BindType::Mouse(mouse_btn))
+                    .and_then(|v| v.0)
+                    .map(|v| vec![v]);
+            }
+            SDLEvent::MouseButtonUp { mouse_btn, .. } => {
+                return self
+                    .binds
+                    .get(&BindType::Mouse(mouse_btn))
+                    .and_then(|v| v.1)
+                    .map(|v| vec![v]);
+            }
             _ => {}
         }
         None
@@ -411,7 +421,8 @@ impl BindTransformer {
             current_collections: vec![KeyCollection::Root],
             collections: Default::default(),
         };
-        let config: ConfigMap = File::open(CONFIG_LOCATION).ok()
+        let config: ConfigMap = File::open(CONFIG_LOCATION)
+            .ok()
             .and_then(|f| serde_json::from_reader(f).ok())
             .unwrap_or_default();
         binds.def_root(&config);
@@ -426,15 +437,23 @@ impl BindTransformer {
     }
 
     /// Returns the matching keys for a given action
-    pub(crate) fn keys_for_action(&'_ self, action: KeyAction) -> impl Iterator<Item=(bool, BindType)> + '_ {
+    pub(crate) fn keys_for_action(
+        &'_ self,
+        action: KeyAction,
+    ) -> impl Iterator<Item = (bool, BindType)> + '_ {
         use std::iter::once;
-        self.current_collections.iter()
+        self.current_collections
+            .iter()
             .filter_map(move |v| self.collections.get(v))
             .flat_map(|v| &v.binds)
             .flat_map(|(btn, (down, up))| once((btn, true, down)).chain(once((btn, false, up))))
-            .filter_map(move |(btn, dir, act)| if *act == Some(action) {
-                Some((dir, *btn))
-            } else { None })
+            .filter_map(move |(btn, dir, act)| {
+                if *act == Some(action) {
+                    Some((dir, *btn))
+                } else {
+                    None
+                }
+            })
     }
 
     /// Causes the keybinds to read keybinds from the passed collection.
@@ -454,16 +473,10 @@ impl BindTransformer {
 
     fn sdl_to_bind_type(event: &SDLEvent) -> Option<BindType> {
         match *event {
-            SDLEvent::KeyUp{keycode, ..} => {
-                keycode.map(BindType::Key)
-            },
-            SDLEvent::MouseWheel{y, ..} => {
-                Some(BindType::MouseWheel(y > 0))
-            },
-            SDLEvent::MouseButtonUp{mouse_btn, ..} => {
-                Some(BindType::Mouse(mouse_btn))
-            },
-            _ => None
+            SDLEvent::KeyUp { keycode, .. } => keycode.map(BindType::Key),
+            SDLEvent::MouseWheel { y, .. } => Some(BindType::MouseWheel(y > 0)),
+            SDLEvent::MouseButtonUp { mouse_btn, .. } => Some(BindType::Mouse(mouse_btn)),
+            _ => None,
         }
     }
 
@@ -494,13 +507,9 @@ impl BindTransformer {
                 keys.insert(
                     ty.as_string().to_owned(),
                     ConfigKeys {
-                        up: up
-                            .map(KeyAction::as_str)
-                            .map(|v| v.to_owned()),
-                        down: down
-                            .map(KeyAction::as_str)
-                            .map(|v| v.to_owned()),
-                    }
+                        up: up.map(KeyAction::as_str).map(|v| v.to_owned()),
+                        down: down.map(KeyAction::as_str).map(|v| v.to_owned()),
+                    },
                 );
             }
             config.insert(col.as_str().to_owned(), keys);
@@ -509,19 +518,27 @@ impl BindTransformer {
         Ok(())
     }
 
-    fn load_collection(&mut self, config: &ConfigMap, name: KeyCollection, mut def: BindCollection) {
+    fn load_collection(
+        &mut self,
+        config: &ConfigMap,
+        name: KeyCollection,
+        mut def: BindCollection,
+    ) {
         if let Some(col) = config.get(name.as_str()) {
             let orig = def;
             def = BindCollection::default();
             let mut set = FNVSet::default();
             for (k, v) in col {
                 if let Some(key) = BindType::from_str(k) {
-                    let down = v.down.as_ref()
+                    let down = v
+                        .down
+                        .as_ref()
                         .map(String::as_str)
                         .and_then(KeyAction::from_str);
-                    let up = v.up.as_ref()
-                        .map(String::as_str)
-                        .and_then(KeyAction::from_str);
+                    let up =
+                        v.up.as_ref()
+                            .map(String::as_str)
+                            .and_then(KeyAction::from_str);
                     down.map(|v| set.insert(v));
                     up.map(|v| set.insert(v));
                     def.set_bind(key, down, up);
@@ -556,21 +573,69 @@ impl BindTransformer {
     fn def_game(&mut self, config: &ConfigMap) {
         let mut binds = BindCollection::default();
 
-        binds.set_bind(BindType::Key(Keycode::Escape), None, Some(KeyAction::SystemMenu));
-        binds.set_bind(BindType::Key(Keycode::Return), None, Some(KeyAction::BeginChat));
+        binds.set_bind(
+            BindType::Key(Keycode::Escape),
+            None,
+            Some(KeyAction::SystemMenu),
+        );
+        binds.set_bind(
+            BindType::Key(Keycode::Return),
+            None,
+            Some(KeyAction::BeginChat),
+        );
 
-        binds.set_bind(BindType::MouseWheel(true), Some(KeyAction::RenderZoomIn), None);
-        binds.set_bind(BindType::MouseWheel(false), Some(KeyAction::RenderZoomOut), None);
-        binds.set_bind(BindType::Key(Keycode::PageDown), None, Some(KeyAction::RenderRotateLeft));
-        binds.set_bind(BindType::Key(Keycode::PageUp), None, Some(KeyAction::RenderRotateRight));
-        binds.set_bind(BindType::Mouse(MouseButton::Left), None, Some(KeyAction::InspectMember));
+        binds.set_bind(
+            BindType::MouseWheel(true),
+            Some(KeyAction::RenderZoomIn),
+            None,
+        );
+        binds.set_bind(
+            BindType::MouseWheel(false),
+            Some(KeyAction::RenderZoomOut),
+            None,
+        );
+        binds.set_bind(
+            BindType::Key(Keycode::PageDown),
+            None,
+            Some(KeyAction::RenderRotateLeft),
+        );
+        binds.set_bind(
+            BindType::Key(Keycode::PageUp),
+            None,
+            Some(KeyAction::RenderRotateRight),
+        );
+        binds.set_bind(
+            BindType::Mouse(MouseButton::Left),
+            None,
+            Some(KeyAction::InspectMember),
+        );
 
         // Camera controls
         for &(a, b, action, stop) in &[
-            (Keycode::Left, Keycode::A, KeyAction::RenderCameraLeft, KeyAction::RenderCameraLeftStop),
-            (Keycode::Right, Keycode::D, KeyAction::RenderCameraRight, KeyAction::RenderCameraRightStop),
-            (Keycode::Up, Keycode::W, KeyAction::RenderCameraUp, KeyAction::RenderCameraUpStop),
-            (Keycode::Down, Keycode::S, KeyAction::RenderCameraDown, KeyAction::RenderCameraDownStop),
+            (
+                Keycode::Left,
+                Keycode::A,
+                KeyAction::RenderCameraLeft,
+                KeyAction::RenderCameraLeftStop,
+            ),
+            (
+                Keycode::Right,
+                Keycode::D,
+                KeyAction::RenderCameraRight,
+                KeyAction::RenderCameraRightStop,
+            ),
+            (
+                Keycode::Up,
+                Keycode::W,
+                KeyAction::RenderCameraUp,
+                KeyAction::RenderCameraUpStop,
+            ),
+            (
+                Keycode::Down,
+                Keycode::S,
+                KeyAction::RenderCameraDown,
+                KeyAction::RenderCameraDownStop,
+            ),
         ] {
             binds.set_bind(BindType::Key(a), Some(action), Some(stop));
             binds.set_bind(BindType::Key(b), Some(action), Some(stop));
@@ -585,7 +650,7 @@ impl BindTransformer {
         binds.set_bind(
             BindType::Mouse(MouseButton::Left),
             Some(KeyAction::RoomStartAreaSelect),
-            Some(KeyAction::RoomFinishAreaSelect)
+            Some(KeyAction::RoomFinishAreaSelect),
         );
         self.load_collection(config, KeyCollection::RoomPlacement, binds);
     }
@@ -596,7 +661,7 @@ impl BindTransformer {
         binds.set_bind(
             BindType::Mouse(MouseButton::Left),
             Some(KeyAction::RoomStartRoomResize),
-            Some(KeyAction::RoomFinishRoomResize)
+            Some(KeyAction::RoomFinishRoomResize),
         );
         self.load_collection(config, KeyCollection::RoomResize, binds);
     }
@@ -607,12 +672,12 @@ impl BindTransformer {
         binds.set_bind(
             BindType::Mouse(MouseButton::Left),
             None,
-            Some(KeyAction::PlacementMove)
+            Some(KeyAction::PlacementMove),
         );
         binds.set_bind(
             BindType::Mouse(MouseButton::Right),
             None,
-            Some(KeyAction::PlacementRemove)
+            Some(KeyAction::PlacementRemove),
         );
         self.load_collection(config, KeyCollection::BuildRoom, binds);
     }
@@ -623,12 +688,12 @@ impl BindTransformer {
         binds.set_bind(
             BindType::Mouse(MouseButton::Left),
             Some(KeyAction::PlacementDragStart),
-            Some(KeyAction::PlacementFinish)
+            Some(KeyAction::PlacementFinish),
         );
         binds.set_bind(
             BindType::Mouse(MouseButton::Right),
             None,
-            Some(KeyAction::PlacementRotate)
+            Some(KeyAction::PlacementRotate),
         );
         self.load_collection(config, KeyCollection::PlaceObject, binds);
     }
@@ -639,7 +704,7 @@ impl BindTransformer {
         binds.set_bind(
             BindType::Mouse(MouseButton::Left),
             None,
-            Some(KeyAction::PlacementFinish)
+            Some(KeyAction::PlacementFinish),
         );
         self.load_collection(config, KeyCollection::PlaceStaff, binds);
     }
@@ -648,7 +713,11 @@ impl BindTransformer {
     fn def_edit_room(&mut self, config: &ConfigMap) {
         let mut binds = BindCollection::default();
 
-        binds.set_bind(BindType::Mouse(MouseButton::Left), None, Some(KeyAction::SelectEditRoom));
+        binds.set_bind(
+            BindType::Mouse(MouseButton::Left),
+            None,
+            Some(KeyAction::SelectEditRoom),
+        );
 
         self.load_collection(config, KeyCollection::EditRoom, binds);
     }

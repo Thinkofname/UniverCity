@@ -1,6 +1,6 @@
 extern crate gl_generator;
 
-use gl_generator::{Registry, Api, Profile, Fallbacks, GlobalGenerator};
+use gl_generator::{Api, Fallbacks, GlobalGenerator, Profile, Registry};
 use std::env;
 use std::fs::File;
 use std::io::BufWriter;
@@ -12,6 +12,6 @@ fn main() {
 
     let mut file = BufWriter::new(File::create(&dest.join("bindings.rs")).unwrap());
     Registry::new(Api::Gl, (3, 3), Profile::Core, Fallbacks::All, [])
-         .write_bindings(GlobalGenerator, &mut file)
-         .unwrap();
+        .write_bindings(GlobalGenerator, &mut file)
+        .unwrap();
 }

@@ -1,6 +1,5 @@
-
-use std::ops::{RangeInclusive, Sub, SubAssign, Add, AddAssign};
 use super::Direction;
+use std::ops::{Add, AddAssign, RangeInclusive, Sub, SubAssign};
 
 /// A location in the level
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, DeltaEncode, Serialize, Deserialize)]
@@ -14,10 +13,7 @@ pub struct Location {
 impl Location {
     /// Creates a new location for the given coordinates.
     pub fn new(x: i32, y: i32) -> Location {
-        Location {
-            x,
-            y,
-        }
+        Location { x, y }
     }
 
     /// Returns a location for 0, 0
@@ -82,10 +78,7 @@ impl Bound {
         use std::cmp;
         let min = Location::new(cmp::min(loc_a.x, loc_b.x), cmp::min(loc_a.y, loc_b.y));
         let max = Location::new(cmp::max(loc_a.x, loc_b.x), cmp::max(loc_a.y, loc_b.y));
-        Bound {
-            min,
-            max,
-        }
+        Bound { min, max }
     }
 
     /// Insets the bound by the passed amount
@@ -107,13 +100,13 @@ impl Bound {
     /// Returns a range of all the tiles coordinates along the x axis
     #[inline]
     pub fn x_range(self) -> RangeInclusive<i32> {
-        self.min.x ..= self.max.x
+        self.min.x..=self.max.x
     }
 
     /// Returns a range of all the tiles coordinates along the y axis
     #[inline]
     pub fn y_range(self) -> RangeInclusive<i32> {
-        self.min.y ..= self.max.y
+        self.min.y..=self.max.y
     }
 
     /// Returns an iterator that iterates over all the locations within the bound.
@@ -143,16 +136,17 @@ impl Bound {
     /// Returns whether the given location is in bounds
     #[inline]
     pub fn in_bounds(self, loc: Location) -> bool {
-        loc.x >= self.min.x && loc.x <= self.max.x
-            && loc.y >= self.min.y && loc.y <= self.max.y
+        loc.x >= self.min.x && loc.x <= self.max.x && loc.y >= self.min.y && loc.y <= self.max.y
     }
 
     /// Returns whether the given bound is fully contained
     /// within this bound.
     #[inline]
     pub fn contains_bound(self, other: Bound) -> bool {
-        other.min.x >= self.min.x && other.max.x <= self.max.x
-            && other.min.y >= self.min.y && other.max.y <= self.max.y
+        other.min.x >= self.min.x
+            && other.max.x <= self.max.x
+            && other.min.y >= self.min.y
+            && other.max.y <= self.max.y
     }
 }
 

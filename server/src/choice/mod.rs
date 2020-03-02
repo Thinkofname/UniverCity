@@ -4,8 +4,8 @@
 //! as rules.
 
 use crate::prelude::*;
-use std::fmt::{self, Debug};
 use rand::Rng;
+use std::fmt::{self, Debug};
 
 use serde::de::DeserializeOwned;
 
@@ -128,7 +128,7 @@ pub struct VMem<'a> {
     global_memory: &'a [u32],
 }
 
-impl <'a> VariableAccess for VMem<'a>  {
+impl<'a> VariableAccess for VMem<'a> {
     #[inline]
     unsafe fn get(&self, idx: u16) -> u32 {
         *self.memory.get_unchecked(idx as usize)
@@ -146,32 +146,34 @@ pub struct ChoiceSelector<E> {
     by_name: FNVMap<ResourceKey<'static>, usize>,
 }
 
-impl <E> ChoiceSelector<E> {
+impl<E> ChoiceSelector<E> {
     /// Creates a new `ChoiceSelector` from the named
     /// lists of rules
     pub fn new<F, R: DeserializeOwned>(
-        log: &Logger, assets: &AssetManager,
+        log: &Logger,
+        assets: &AssetManager,
         valloc: &mut impl VariableAllocator,
         resource: &str,
         convert: F,
     ) -> ChoiceSelector<E>
-        where F: for<'a> Fn(ModuleKey<'a>, R) -> E
+    where
+        F: for<'a> Fn(ModuleKey<'a>, R) -> E,
     {
         let mut choices = Vec::new();
         for pack in assets.get_packs() {
-            let f = if let Ok(f) = assets.open_from_pack(
-                    pack.borrow(),
-                    &format!("choice/{}.json", resource)
-            ) {
+            let f = if let Ok(f) =
+                assets.open_from_pack(pack.borrow(), &format!("choice/{}.json", resource))
+            {
                 f
             } else {
-                continue
+                continue;
             };
             let c: ChoiceFile<R> = assume!(log, ::serde_json::from_reader(f));
             for (k, t) in c.vars {
                 assume!(log, valloc.storage_loc(t, &k));
             }
-            c.choices.into_iter()
+            c.choices
+                .into_iter()
                 .map(|v| Choice {
                     name: LazyResourceKey::parse(&v.name)
                         .or_module(pack.borrow())
@@ -184,14 +186,12 @@ impl <E> ChoiceSelector<E> {
                 .for_each(|v| choices.push(v));
         }
         choices.sort_by_key(|v| v.order);
-        let by_name = choices.iter()
+        let by_name = choices
+            .iter()
             .enumerate()
             .map(|(idx, c)| (c.name.clone(), idx))
             .collect();
-        ChoiceSelector {
-            choices,
-            by_name,
-        }
+        ChoiceSelector { choices, by_name }
     }
 
     /// Selects a choice based on the passed list of variables
@@ -210,8 +210,12 @@ impl <E> ChoiceSelector<E> {
 
     /// Returns all matching choices based on the passed list of variables
     #[inline]
-    pub fn matching<'a>(&'a self, vars: &'a impl VariableAccess) -> impl Iterator<Item=(usize, &'a E)> + 'a {
-        self.choices.iter()
+    pub fn matching<'a>(
+        &'a self,
+        vars: &'a impl VariableAccess,
+    ) -> impl Iterator<Item = (usize, &'a E)> + 'a {
+        self.choices
+            .iter()
             .enumerate()
             .filter(move |(_, c)| c.when.execute(vars))
             .map(|(idx, c)| (idx, &c.execute))
@@ -244,7 +248,7 @@ impl <E> ChoiceSelector<E> {
 
     /// Iterates over all choices
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item=(usize, &E)> {
+    pub fn iter(&self) -> impl Iterator<Item = (usize, &E)> {
         self.choices.iter().map(|v| &v.execute).enumerate()
     }
 }
@@ -271,17 +275,26 @@ impl Component for JanitorVars {
     type Storage = EntityVarStorage<JanitorVars>;
 }
 
-
 /// Helper for accessing vars from any type of entity
 pub fn get_vars(entities: &mut Container, e: Entity) -> Option<choice::EntityVars<()>> {
-    entities.get_custom::<StudentVars>(e)
+    entities
+        .get_custom::<StudentVars>(e)
         .map(|v| v.remove_type())
-        .or_else(|| entities.get_custom::<ProfessorVars>(e)
-            .map(|v| v.remove_type()))
-        .or_else(|| entities.get_custom::<OfficeWorkerVars>(e)
-            .map(|v| v.remove_type()))
-        .or_else(|| entities.get_custom::<JanitorVars>(e)
-            .map(|v| v.remove_type()))
+        .or_else(|| {
+            entities
+                .get_custom::<ProfessorVars>(e)
+                .map(|v| v.remove_type())
+        })
+        .or_else(|| {
+            entities
+                .get_custom::<OfficeWorkerVars>(e)
+                .map(|v| v.remove_type())
+        })
+        .or_else(|| {
+            entities
+                .get_custom::<JanitorVars>(e)
+                .map(|v| v.remove_type())
+        })
 }
 
 struct Choice<E> {

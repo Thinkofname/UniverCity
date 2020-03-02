@@ -1,10 +1,7 @@
-
 #![windows_subsystem = "windows"]
-#![recursion_limit="128"]
-#![type_length_limit="8388608"]
-
+#![recursion_limit = "128"]
+#![type_length_limit = "8388608"]
 #![warn(missing_docs)]
-
 // # Clippy lints
 // Mostly happens in the rendering code. Clippy's
 // limit is pretty arbitrary.
@@ -53,9 +50,9 @@ extern crate fungui;
 use url;
 #[macro_use]
 extern crate slog;
-use slog_term;
 use slog_async;
 use slog_json;
+use slog_term;
 
 #[cfg(feature = "steam")]
 use server::steamworks;
@@ -63,35 +60,35 @@ use server::steamworks;
 try_force_gpu!();
 
 pub mod audio;
-pub mod render;
-pub mod ui;
+mod campaign;
 pub mod config;
-pub mod instance;
-pub mod state;
-pub mod script;
+mod credits;
 pub mod entity;
 pub mod errors;
+pub mod instance;
+mod main_menu;
 pub mod math;
 mod multiplayer;
-mod save_file;
-mod campaign;
-mod credits;
 pub mod prelude;
-mod main_menu;
+pub mod render;
+mod save_file;
+pub mod script;
+pub mod state;
+pub mod ui;
 
 use crate::instance::*;
 pub(crate) use crate::multiplayer::MultiPlayer;
 
-use std::sync::mpsc::channel;
-use crate::prelude::*;
 use crate::config::keybinds;
+use crate::prelude::*;
 use sdl2::event::Event;
 use sdl2::video::FullscreenType;
-use std::thread;
-use std::rc::Rc;
-use std::time;
-use std::path::Path;
 use slog::Drain;
+use std::path::Path;
+use std::rc::Rc;
+use std::sync::mpsc::channel;
+use std::thread;
+use std::time;
 
 use crate::server::saving::filesystem::*;
 
@@ -107,18 +104,17 @@ pub const STEAM_APP_ID: steamworks::AppId = steamworks::AppId(808160);
 fn main() {
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
-    let json_drain = slog_json::Json::default(::std::fs::File::create("log.json").expect("Failed to create the log file")).fuse();
-    let (drain, _guard) = slog_async::Async::new(slog::Duplicate::new(
-        drain,
-        json_drain
-    ).fuse())
-        .build_with_guard();
+    let json_drain = slog_json::Json::default(
+        ::std::fs::File::create("log.json").expect("Failed to create the log file"),
+    )
+    .fuse();
+    let (drain, _guard) =
+        slog_async::Async::new(slog::Duplicate::new(drain, json_drain).fuse()).build_with_guard();
     let drain = drain.fuse();
     // TODO: Filter debug logging at some point
 
     let log = slog::Logger::root(drain, o!());
     log_panics(&log, server::GAME_HASH, true);
-
 
     // TODO: Make steam optional?
     #[cfg(feature = "steam")]
@@ -128,18 +124,23 @@ fn main() {
         }
 
         let (steam, single_steam) = assume!(log, steamworks::Client::init());
-        steam.utils().set_overlay_notification_position(steamworks::NotificationPosition::TopRight);
+        steam
+            .utils()
+            .set_overlay_notification_position(steamworks::NotificationPosition::TopRight);
         (steam, single_steam)
     };
 
     // HACK: Try and stop optimizations/lto from removing these
-    info!(log, "Starting UniverCity. Flags: {} {}", NvOptimusEnablement, AmdPowerXpressRequestHighPerformance);
+    info!(
+        log,
+        "Starting UniverCity. Flags: {} {}",
+        NvOptimusEnablement,
+        AmdPowerXpressRequestHighPerformance
+    );
 
-    let sdl = sdl2::init()
-        .expect("Failed to initialize SDL2");
+    let sdl = sdl2::init().expect("Failed to initialize SDL2");
     sdl2::hint::set_video_minimize_on_focus_loss(false);
-    let video = sdl.video()
-        .expect("Failed to create a video backend");
+    let video = sdl.video().expect("Failed to create a video backend");
 
     let gl_attr = video.gl_attr();
     gl_attr.set_stencil_size(8);
@@ -149,7 +150,8 @@ fn main() {
     gl_attr.set_context_profile(sdl2::video::GLProfile::Core);
 
     loop {
-        let mut window = video.window("UniverCity", 800, 480)
+        let mut window = video
+            .window("UniverCity", 800, 480)
             .position_centered()
             .opengl()
             .resizable()
@@ -191,18 +193,31 @@ fn main() {
             .register::<server::entity::Loader<entity::ClientComponent>>()
             .build();
 
-        let audio = sdl.audio()
-            .expect("Failed to load the audio backend");
+        let audio = sdl.audio().expect("Failed to load the audio backend");
         let audio = audio::AudioManager::new(&log, audio, asset_manager.clone());
 
-        if let Some(renderer) = render::Renderer::new(&log, &window, asset_manager.clone(), config.clone()) {
-            match tick_game(log.clone(), window, renderer, audio, &asset_manager, #[cfg(feature = "steam")] steam.clone(), #[cfg(feature = "steam")] single_steam, config, waiting_for_workshop) {
+        if let Some(renderer) =
+            render::Renderer::new(&log, &window, asset_manager.clone(), config.clone())
+        {
+            match tick_game(
+                log.clone(),
+                window,
+                renderer,
+                audio,
+                &asset_manager,
+                #[cfg(feature = "steam")]
+                steam.clone(),
+                #[cfg(feature = "steam")]
+                single_steam,
+                config,
+                waiting_for_workshop,
+            ) {
                 TickExitReason::GameEnd => return,
                 #[cfg(feature = "steam")]
                 TickExitReason::ReloadAssets(steam) => {
                     single_steam = steam;
                     continue;
-                },
+                }
                 #[cfg(not(feature = "steam"))]
                 TickExitReason::ReloadAssets() => continue,
             }
@@ -261,13 +276,15 @@ pub struct GameState {
 }
 
 fn make_filesystem(#[cfg(feature = "steam")] steam: &steamworks::Client) -> BoxedFileSystem {
-    #[cfg(feature = "steam")] {
+    #[cfg(feature = "steam")]
+    {
         let rs = steam.remote_storage();
         if rs.is_cloud_enabled_for_account() && rs.is_cloud_enabled_for_app() {
             return JoinedFileSystem::new(
                 SubfolderFileSystem::new(crate::server::steam::SteamCloud::new(rs), "saves"),
-                NativeFileSystem::new(Path::new("./saves/")) // Fallback to legacy location
-            ).into_boxed();
+                NativeFileSystem::new(Path::new("./saves/")), // Fallback to legacy location
+            )
+            .into_boxed();
         }
     }
     return NativeFileSystem::new(Path::new("./saves/")).into_boxed();
@@ -280,14 +297,23 @@ fn update_window(state: &mut GameState) {
     } else {
         state.window.maximize();
     }
-    assume!(state.global_logger, state.window.set_fullscreen(state.config.fullscreen_mode.get()));
+    assume!(
+        state.global_logger,
+        state
+            .window
+            .set_fullscreen(state.config.fullscreen_mode.get())
+    );
     assume!(state.global_logger, state.window.set_display_mode(None));
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "sse2")]
 #[inline]
-unsafe fn pause_sse2(timer: &mut sdl2::TimerSubsystem, start: time::Instant, target: time::Duration) {
+unsafe fn pause_sse2(
+    timer: &mut sdl2::TimerSubsystem,
+    start: time::Instant,
+    target: time::Duration,
+) {
     let frame_time = start.elapsed();
     if frame_time < target {
         let ms = (target - frame_time).subsec_millis();
@@ -311,16 +337,22 @@ unsafe fn pause_sse2(timer: &mut sdl2::TimerSubsystem, start: time::Instant, tar
 }
 
 #[inline]
-fn get_pause_fn(log: &Logger) -> unsafe fn(&mut sdl2::TimerSubsystem, time::Instant, time::Duration) {
+fn get_pause_fn(
+    log: &Logger,
+) -> unsafe fn(&mut sdl2::TimerSubsystem, time::Instant, time::Duration) {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
         if is_x86_feature_detected!("sse2") {
             info!(log, "Using sse2 frame timing");
-            return pause_sse2
+            return pause_sse2;
         }
     }
     info!(log, "Using standard frame timing");
-    unsafe fn pause(timer: &mut sdl2::TimerSubsystem, start: time::Instant, target: time::Duration) {
+    unsafe fn pause(
+        timer: &mut sdl2::TimerSubsystem,
+        start: time::Instant,
+        target: time::Duration,
+    ) {
         let frame_time = start.elapsed();
         if frame_time < target {
             let ms = (target - frame_time).subsec_millis();
@@ -341,26 +373,24 @@ enum TickExitReason {
 }
 
 fn tick_game(
-        log: Logger,
-        window: sdl2::video::Window, mut renderer: render::Renderer,
-        audio: audio::AudioManager, asset_manager: &AssetManager,
-        #[cfg(feature = "steam")]
-        steam: steamworks::Client,
-        #[cfg(feature = "steam")]
-        single_steam: steamworks::SingleClient,
-        config: Rc<Config>, waiting_for_workshop: bool,
+    log: Logger,
+    window: sdl2::video::Window,
+    mut renderer: render::Renderer,
+    audio: audio::AudioManager,
+    asset_manager: &AssetManager,
+    #[cfg(feature = "steam")] steam: steamworks::Client,
+    #[cfg(feature = "steam")] single_steam: steamworks::SingleClient,
+    config: Rc<Config>,
+    waiting_for_workshop: bool,
 ) -> TickExitReason {
     use crate::server::network;
     use std::env;
     let sdl = window.subsystem().sdl();
     let mut timer = sdl.timer().expect("Failed to get the timer");
-    let mut sdl_events = sdl.event_pump()
-        .expect("Failed to get the event pump");
+    let mut sdl_events = sdl.event_pump().expect("Failed to get the event pump");
 
-    let mut ui_manager = ui::Manager::new(
-        log.new(o!("source" => "ui_manager")),
-        asset_manager.clone()
-    );
+    let mut ui_manager =
+        ui::Manager::new(log.new(o!("source" => "ui_manager")), asset_manager.clone());
     renderer.init_ui(&mut *ui_manager.manager.borrow_mut());
     renderer.set_ui_scale(1.0 / config.ui_scale.get());
     ui_manager.set_ui_scale(1.0 / config.ui_scale.get());
@@ -379,19 +409,28 @@ fn tick_game(
     {
         let args = env::args();
         if let Some(lobby) = args.skip_while(|v| v != "+connect_lobby").nth(1) {
-            target_lobby = u64::from_str_radix(&lobby, 10).ok().map(steamworks::LobbyId::from_raw);
+            target_lobby = u64::from_str_radix(&lobby, 10)
+                .ok()
+                .map(steamworks::LobbyId::from_raw);
         }
     }
 
     #[cfg(feature = "steam")]
     let state = if let Some(lobby) = target_lobby {
-        state::StateManager::new(multiplayer::ConnectingState::<multiplayer::MenuState, network::SteamClientSocket, _>::new(
-            move |state| SteamClientSocket::connect(&state.global_logger, state.steam.clone(), &state.steam_single, lobby)
-        ))
+        state::StateManager::new(multiplayer::ConnectingState::<
+            multiplayer::MenuState,
+            network::SteamClientSocket,
+            _,
+        >::new(move |state| {
+            SteamClientSocket::connect(
+                &state.global_logger,
+                state.steam.clone(),
+                &state.steam_single,
+                lobby,
+            )
+        }))
     } else if waiting_for_workshop {
-        state::StateManager::new(main_menu::ModDownloadWait {
-            ui: None,
-        })
+        state::StateManager::new(main_menu::ModDownloadWait { ui: None })
     } else {
         state::StateManager::new(main_menu::MainMenuState::new())
     };
@@ -429,22 +468,30 @@ fn tick_game(
         },
     };
 
-    assume!(game.game_state.global_logger, game.game_state.keybinds.save());
+    assume!(
+        game.game_state.global_logger,
+        game.game_state.keybinds.save()
+    );
 
     let mut last_frame = Instant::now();
     let mut draw_ui = true;
 
     // Apply loaded settings
-    game.game_state.audio.update_settings(&game.game_state.config);
+    game.game_state
+        .audio
+        .update_settings(&game.game_state.config);
     update_window(&mut game.game_state);
 
     // Capture steam events
     #[cfg(feature = "steam")]
     let (tx, rx) = channel();
     #[cfg(feature = "steam")]
-    let _cb = game.game_state.steam.register_callback::<steamworks::GameLobbyJoinRequested, _>(move |join| {
-        let _ = tx.send(SteamRequestJoinLobby(join.lobby_steam_id));
-    });
+    let _cb = game
+        .game_state
+        .steam
+        .register_callback::<steamworks::GameLobbyJoinRequested, _>(move |join| {
+            let _ = tx.send(SteamRequestJoinLobby(join.lobby_steam_id));
+        });
 
     while game.running {
         let start = Instant::now();
@@ -473,28 +520,42 @@ fn tick_game(
         game.game_state.audio.tick(cx, cy, rot);
 
         {
-            'events:
-            for sdlevent in sdl_events.poll_iter() {
+            'events: for sdlevent in sdl_events.poll_iter() {
                 let sdlevent = &sdlevent;
 
                 // Core events that can't be handled by the bind system
                 match *sdlevent {
-                    Event::TextInput{ref text, ..} => {
+                    Event::TextInput { ref text, .. } => {
                         for c in text.chars() {
-                            game.game_state.ui_manager.focused_event::<ui::CharInputEvent>(ui::CharInput {
-                                input: c,
-                            });
+                            game.game_state
+                                .ui_manager
+                                .focused_event::<ui::CharInputEvent>(ui::CharInput { input: c });
                         }
-                    },
-                    Event::MouseMotion{x, y, xrel, yrel, mousestate, ..} => {
+                    }
+                    Event::MouseMotion {
+                        x,
+                        y,
+                        xrel,
+                        yrel,
+                        mousestate,
+                        ..
+                    } => {
                         game.mouse_pos = (x, y);
                         game.game_state.renderer.set_mouse_position(x, y);
                         // UI always is handled first
                         if game.game_state.ui_manager.mouse_move(x, y) {
-                            game.state.mouse_move_ui(&mut game.instance, &mut game.game_state, game.mouse_pos);
+                            game.state.mouse_move_ui(
+                                &mut game.instance,
+                                &mut game.game_state,
+                                game.mouse_pos,
+                            );
                             continue 'events;
                         }
-                        game.state.mouse_move(&mut game.instance, &mut game.game_state, game.mouse_pos);
+                        game.state.mouse_move(
+                            &mut game.instance,
+                            &mut game.game_state,
+                            game.mouse_pos,
+                        );
                         // If the game is active move the selection cursor to where we are looking at.
                         if let Some(instance) = game.instance.as_mut() {
                             if mousestate.middle() {
@@ -507,76 +568,119 @@ fn tick_game(
 
                             instance.mouse_move_event(&mut game.game_state, game.mouse_pos);
                             let (lx, ly) = game.game_state.renderer.mouse_to_level(x, y);
-                            game.game_state.renderer.cursor.model_matrix = cgmath::Matrix4::from_translation(cgmath::Vector3::new(
-                                lx.floor(),
-                                0.001,
-                                ly.floor(),
-                            ));
+                            game.game_state.renderer.cursor.model_matrix =
+                                cgmath::Matrix4::from_translation(cgmath::Vector3::new(
+                                    lx.floor(),
+                                    0.001,
+                                    ly.floor(),
+                                ));
                         }
-                    },
-                    Event::MouseButtonDown{x, y, mouse_btn, ..} => {
-                        if game.game_state.ui_manager.mouse_event::<ui::MouseDownEvent>(
-                            x, y,
-                            ui::MouseClick { button: mouse_btn.into(), x: x, y: y },
-                        ) {
+                    }
+                    Event::MouseButtonDown {
+                        x, y, mouse_btn, ..
+                    } => {
+                        if game
+                            .game_state
+                            .ui_manager
+                            .mouse_event::<ui::MouseDownEvent>(
+                                x,
+                                y,
+                                ui::MouseClick {
+                                    button: mouse_btn.into(),
+                                    x: x,
+                                    y: y,
+                                },
+                            )
+                        {
                             continue 'events;
                         }
                     }
-                    Event::MouseButtonUp{x, y, mouse_btn, ..} => {
+                    Event::MouseButtonUp {
+                        x, y, mouse_btn, ..
+                    } => {
                         if game.game_state.ui_manager.mouse_event::<ui::MouseUpEvent>(
-                            x, y,
-                            ui::MouseClick { button: mouse_btn.into(), x: x, y: y },
-                        ) {
-                            continue 'events;
-                        }
-                    }
-                    Event::MouseWheel{y, ..} => {
-                        if game.game_state.ui_manager.mouse_event::<ui::MouseScrollEvent>(
-                            game.mouse_pos.0,
-                            game.mouse_pos.1,
-                            ui::MouseScroll {
-                                x: game.mouse_pos.0,
-                                y: game.mouse_pos.1,
-                                scroll_amount: y
+                            x,
+                            y,
+                            ui::MouseClick {
+                                button: mouse_btn.into(),
+                                x: x,
+                                y: y,
                             },
                         ) {
                             continue 'events;
                         }
                     }
-                    Event::KeyDown{scancode: Some(sdl2::keyboard::Scancode::Grave), ..} => {
+                    Event::MouseWheel { y, .. } => {
+                        if game
+                            .game_state
+                            .ui_manager
+                            .mouse_event::<ui::MouseScrollEvent>(
+                                game.mouse_pos.0,
+                                game.mouse_pos.1,
+                                ui::MouseScroll {
+                                    x: game.mouse_pos.0,
+                                    y: game.mouse_pos.1,
+                                    scroll_amount: y,
+                                },
+                            )
+                        {
+                            continue 'events;
+                        }
+                    }
+                    Event::KeyDown {
+                        scancode: Some(sdl2::keyboard::Scancode::Grave),
+                        ..
+                    } => {
                         for pack in game.game_state.asset_manager.get_packs() {
-                            game.game_state.ui_manager.load_styles(ResourceKey::new(pack, "default"));
+                            game.game_state
+                                .ui_manager
+                                .load_styles(ResourceKey::new(pack, "default"));
                         }
                         continue 'events;
-                    },
-                    Event::KeyUp{scancode: Some(sdl2::keyboard::Scancode::Grave), ..} => {
+                    }
+                    Event::KeyUp {
+                        scancode: Some(sdl2::keyboard::Scancode::Grave),
+                        ..
+                    } => {
                         continue 'events;
-                    },
-                    Event::KeyDown{keycode: Some(sdl2::keyboard::Keycode::Tab), ..} => {
+                    }
+                    Event::KeyDown {
+                        keycode: Some(sdl2::keyboard::Keycode::Tab),
+                        ..
+                    } => {
                         game.game_state.ui_manager.cycle_focus();
-                    },
-                    Event::KeyDown{scancode: Some(sdl2::keyboard::Scancode::F10), ..} => {
-                        draw_ui = !draw_ui
-                    },
-                    Event::KeyUp{keycode: Some(key), ..} => {
-                        if game.game_state.ui_manager.focused_event::<ui::KeyUpEvent>(ui::KeyInput {
-                            input: key
-                        }) {
+                    }
+                    Event::KeyDown {
+                        scancode: Some(sdl2::keyboard::Scancode::F10),
+                        ..
+                    } => draw_ui = !draw_ui,
+                    Event::KeyUp {
+                        keycode: Some(key), ..
+                    } => {
+                        if game
+                            .game_state
+                            .ui_manager
+                            .focused_event::<ui::KeyUpEvent>(ui::KeyInput { input: key })
+                        {
                             continue 'events;
                         }
-                    },
-                    Event::KeyDown{keycode: Some(key), ..} => {
-                        if game.game_state.ui_manager.focused_event::<ui::KeyDownEvent>(ui::KeyInput {
-                            input: key
-                        }) {
+                    }
+                    Event::KeyDown {
+                        keycode: Some(key), ..
+                    } => {
+                        if game
+                            .game_state
+                            .ui_manager
+                            .focused_event::<ui::KeyDownEvent>(ui::KeyInput { input: key })
+                        {
                             continue 'events;
                         }
-                    },
-                    Event::Quit{..} => {
+                    }
+                    Event::Quit { .. } => {
                         game.running = false;
                         return TickExitReason::GameEnd;
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
                 // Handle general input actions
                 if let Some(actions) = game.game_state.keybinds.transform(sdlevent) {
@@ -591,7 +695,10 @@ fn tick_game(
         if let Err(err) = game.handle_packets() {
             // TODO: This duplicates instance's disconnect
             //       handling.
-            info!(game.game_state.global_logger, "Disconnected from the game: {:?}", err);
+            info!(
+                game.game_state.global_logger,
+                "Disconnected from the game: {:?}", err
+            );
             // Disconnect the instance
             while !game.state.is_empty() {
                 game.state.pop_state();
@@ -606,29 +713,42 @@ fn tick_game(
             game.game_state.renderer.update_level(level);
         }
 
-        game.game_state.ui_manager.update(&mut game.game_state.renderer, delta);
+        game.game_state
+            .ui_manager
+            .update(&mut game.game_state.renderer, delta);
 
         {
             let dummy = game.dummy_instance.as_mut();
-            let entities = game.instance.as_mut()
+            let entities = game
+                .instance
+                .as_mut()
                 .map(|v| &mut v.entities)
-                .or_else(|| {
-                    dummy.map(|v| &mut v.entities)
-                });
-            game.game_state.renderer.tick(entities, Some(&mut *game.game_state.ui_manager.manager.borrow_mut()), delta, width, height);
+                .or_else(|| dummy.map(|v| &mut v.entities));
+            game.game_state.renderer.tick(
+                entities,
+                Some(&mut *game.game_state.ui_manager.manager.borrow_mut()),
+                delta,
+                width,
+                height,
+            );
         }
 
         // Take a screenshot before the UI is rendered for save icons
-        if let Some(scr) = game.instance.as_mut().and_then(|v| v.screenshot_helper.as_mut()) {
+        if let Some(scr) = game
+            .instance
+            .as_mut()
+            .and_then(|v| v.screenshot_helper.as_mut())
+        {
             if scr.req.try_recv().is_ok() {
                 let screenshot = take_screenshot(&game.game_state.global_logger, width, height);
                 let _ = scr.reply.send(screenshot);
             }
         }
 
-
         if draw_ui {
-            game.game_state.renderer.draw_ui(&mut *game.game_state.ui_manager.manager.borrow_mut());
+            game.game_state
+                .renderer
+                .draw_ui(&mut *game.game_state.ui_manager.manager.borrow_mut());
         }
 
         game.game_state.window.gl_swap_window();
@@ -641,7 +761,10 @@ fn tick_game(
         }
 
         if game.game_state.should_restart {
-            return TickExitReason::ReloadAssets(#[cfg(feature = "steam")] game.game_state.steam_single);
+            return TickExitReason::ReloadAssets(
+                #[cfg(feature = "steam")]
+                game.game_state.steam_single,
+            );
         }
 
         let target = game.game_state.config.target_fps.get();
@@ -659,9 +782,7 @@ fn tick_game(
 impl Game {
     fn tick(&mut self, delta: f64) {
         use crate::server::network;
-        let events = {
-            self.game_state.ui_manager.events().handle_events()
-        };
+        let events = { self.game_state.ui_manager.events().handle_events() };
         for mut evt in events {
             evt.handle_event::<ui::FocusNode, _>(|f| self.game_state.ui_manager.focus_node(f.0));
             evt.handle_event::<ExitGame, _>(|_| self.running = false);
@@ -671,11 +792,21 @@ impl Game {
             evt.handle_event::<SteamRequestJoinLobby, _>(|e| {
                 let lobby = e.0;
                 self.state.pop_all();
-                self.state.add_state(multiplayer::ConnectingState::<multiplayer::MenuState, network::SteamClientSocket, _>::new(
-                    move |state| SteamClientSocket::connect(&state.global_logger, state.steam.clone(), &state.steam_single, lobby)
-                ));
+                self.state.add_state(multiplayer::ConnectingState::<
+                    multiplayer::MenuState,
+                    network::SteamClientSocket,
+                    _,
+                >::new(move |state| {
+                    SteamClientSocket::connect(
+                        &state.global_logger,
+                        state.steam.clone(),
+                        &state.steam_single,
+                        lobby,
+                    )
+                }));
             });
-            self.state.ui_event(&mut self.instance, &mut self.game_state, &mut evt);
+            self.state
+                .ui_event(&mut self.instance, &mut self.game_state, &mut evt);
             if let Some(instance) = self.instance.as_mut() {
                 instance.handle_ui_event(&mut evt, &mut self.game_state, &mut self.state);
             }
@@ -694,7 +825,12 @@ impl Game {
     }
 
     fn handle_key_action(&mut self, action: keybinds::KeyAction) {
-        self.state.key_action(&mut self.instance, &mut self.game_state, action, self.mouse_pos);
+        self.state.key_action(
+            &mut self.instance,
+            &mut self.game_state,
+            action,
+            self.mouse_pos,
+        );
         if let Some(instance) = self.instance.as_mut() {
             instance.handle_key_action(action, &mut self.game_state, self.mouse_pos);
         }
@@ -711,10 +847,17 @@ impl Game {
             "singleplayer" => self.state.add_state(save_file::MenuState::new(
                 server::saving::SaveType::FreePlay,
                 |state, name| {
-                    let (instance, _hosted_server) = GameInstance::single_player(&state.global_logger, &state.asset_manager, #[cfg(feature = "steam")] state.steam.clone(), name.to_owned(), None)
-                        .expect("Failed to connect to single player instance");
+                    let (instance, _hosted_server) = GameInstance::single_player(
+                        &state.global_logger,
+                        &state.asset_manager,
+                        #[cfg(feature = "steam")]
+                        state.steam.clone(),
+                        name.to_owned(),
+                        None,
+                    )
+                    .expect("Failed to connect to single player instance");
                     Box::new(instance::BaseState::new(instance))
-                }
+                },
             )),
             "campaign" => self.state.add_state(campaign::MenuState::new()),
             "multiplayer" => self.state.add_state(multiplayer::MenuState::new(None)),
@@ -728,19 +871,21 @@ impl Game {
         server::entity::register_components(&mut entities);
         entity::register_components(&mut entities);
 
-        let level = assume!(self.game_state.global_logger, main_menu::create_level(
-            &self.game_state.global_logger,
-            &self.game_state.asset_manager,
-            &mut self.game_state.ui_manager,
-            &mut entities,
-        ));
+        let level = assume!(
+            self.game_state.global_logger,
+            main_menu::create_level(
+                &self.game_state.global_logger,
+                &self.game_state.asset_manager,
+                &mut self.game_state.ui_manager,
+                &mut entities,
+            )
+        );
         self.game_state.renderer.set_level(&level);
-        self.game_state.renderer.set_camera(32.0 + 17.0, 32.0 + 17.0 + 50.0);
+        self.game_state
+            .renderer
+            .set_camera(32.0 + 17.0, 32.0 + 17.0 + 50.0);
 
-        self.dummy_instance = Some(main_menu::DummyInstance {
-            entities,
-            level,
-        });
+        self.dummy_instance = Some(main_menu::DummyInstance { entities, level });
     }
 }
 
@@ -748,7 +893,15 @@ fn take_screenshot(log: &Logger, width: u32, height: u32) -> Vec<u8> {
     use crate::render::gl;
     let mut buffer = vec![0; (width * height * 3) as usize];
     unsafe {
-        gl::read_pixels(0, 0, width as _, height as _, gl::TextureFormat::Rgb, gl::Type::UnsignedByte, &mut buffer);
+        gl::read_pixels(
+            0,
+            0,
+            width as _,
+            height as _,
+            gl::TextureFormat::Rgb,
+            gl::Type::UnsignedByte,
+            &mut buffer,
+        );
     }
     let mut output = vec![];
     {
@@ -759,8 +912,8 @@ fn take_screenshot(log: &Logger, width: u32, height: u32) -> Vec<u8> {
         let mut writer = assume!(log, enc.write_header());
 
         let mut out_pix = vec![0; (out_size.0 * out_size.1 * 3) as usize];
-        for y in 0 .. out_size.1 {
-            for x in  0 .. out_size.0 {
+        for y in 0..out_size.1 {
+            for x in 0..out_size.0 {
                 let o_idx = ((x + y * out_size.0) * 3) as usize;
                 let i_x = (x * width) / out_size.0;
                 let i_y = height - 1 - ((y * height) / out_size.1);
@@ -782,9 +935,7 @@ fn take_screenshot(log: &Logger, width: u32, height: u32) -> Vec<u8> {
 #[cfg(target_os = "linux")]
 pub fn open_url(url: &url::Url) -> UResult<()> {
     use std::process::Command;
-    Command::new("xdg-open")
-        .arg(url.to_string())
-        .status()?;
+    Command::new("xdg-open").arg(url.to_string()).status()?;
     Ok(())
 }
 
@@ -806,9 +957,7 @@ pub fn open_url(url: &url::Url) -> UResult<()> {
 #[cfg(target_os = "macos")]
 pub fn open_url(url: &url::Url) -> UResult<()> {
     use std::process::Command;
-    Command::new("open")
-        .arg(url.to_string())
-        .status()?;
+    Command::new("open").arg(url.to_string()).status()?;
     Ok(())
 }
 

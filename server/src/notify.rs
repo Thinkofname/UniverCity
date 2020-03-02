@@ -1,7 +1,7 @@
 //! Notification related types
 
-use crate::prelude::*;
 use crate::common::ScriptData;
+use crate::prelude::*;
 
 /// A notification that can be displayed to the player
 #[derive(Debug, DeltaEncode, PartialEq, Clone)]
@@ -50,5 +50,5 @@ pub enum Notification {
         func: String,
         /// The serialized data to pass to the script
         data: ScriptData,
-    }
+    },
 }

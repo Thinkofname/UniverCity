@@ -2,7 +2,7 @@ extern crate rustc_demangle;
 
 use std::env;
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 
 use symbolic::debuginfo::*;
 
@@ -49,7 +49,8 @@ fn main() {
     // First find the `base_anchor` address to use as a base
     let data = std::fs::read(&binary).unwrap();
     let obj = Object::parse(&data).unwrap();
-    let base_addr = obj.symbols()
+    let base_addr = obj
+        .symbols()
         .find(|v| v.name() == Some("base_anchor"))
         .map(|v| v.address)
         .unwrap();
@@ -62,7 +63,8 @@ fn main() {
     for ip in stack.iter().cloned() {
         let ip = ip.0 - diff;
 
-        let func = debug.functions()
+        let func = debug
+            .functions()
             .filter_map(|v| v.ok())
             .find(|v| ip >= v.address && ip <= v.address + v.size);
         if let Some(func) = func {
@@ -72,7 +74,8 @@ fn main() {
             } else {
                 println!("{}", sym);
             }
-            if let Some(line) = func.lines
+            if let Some(line) = func
+                .lines
                 .iter()
                 .skip_while(|v| v.address < ip || v.line == 0)
                 .next()

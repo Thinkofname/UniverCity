@@ -1,4 +1,3 @@
-
 use std::cmp;
 
 #[allow(many_single_char_names)]

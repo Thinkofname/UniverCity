@@ -1,10 +1,9 @@
-
 extern crate cc;
 
-use std::path::{Path, PathBuf};
 use std::env;
-use std::process::{Stdio, Command};
 use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 fn main() {
     let cur_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
@@ -23,14 +22,16 @@ fn main() {
             fs::create_dir_all("./target").unwrap();
             assert!(Command::new("git")
                 .arg("clone")
-                .arg("-b").arg("v2.1")
+                .arg("-b")
+                .arg("v2.1")
                 .arg("--single-branch")
                 .arg("https://github.com/LuaJIT/LuaJIT.git")
                 .arg(&source_dir)
                 .stdout(Stdio::inherit())
                 .stderr(Stdio::inherit())
                 .status()
-                .expect("Failed to run git clone").success());
+                .expect("Failed to run git clone")
+                .success());
 
             if triple.contains("windows") && host.contains("linux") {
                 assert!(Command::new("git")
@@ -38,7 +39,8 @@ fn main() {
                     .arg("am")
                     .arg(cur_path.join("patches/0001-clang-cl-build-fixes.patch"))
                     .status()
-                    .expect("Failed to run git am").success());
+                    .expect("Failed to run git am")
+                    .success());
             }
         }
         if triple.contains("windows") && host.contains("linux") {
@@ -54,7 +56,10 @@ fn main() {
         println!("cargo:rustc-link-lib=static=luajit");
     }
 
-    println!("cargo:rustc-link-search=native={}", source_dir.join("src").to_string_lossy());
+    println!(
+        "cargo:rustc-link-search=native={}",
+        source_dir.join("src").to_string_lossy()
+    );
 }
 
 fn build_msvc(source_dir: &Path) {
@@ -108,7 +113,6 @@ fn build_msvc(source_dir: &Path) {
         .unwrap()
         .success());
 
-
     assert!(Command::new(src.join("buildvm"))
         .current_dir(&src)
         .arg("-m")
@@ -133,11 +137,18 @@ fn build_msvc(source_dir: &Path) {
             .arg("-o")
             .arg(h)
             .args(&[
-                "lib_base.c", "lib_math.c",
-                "lib_bit.c", "lib_string.c",
-                "lib_table.c", "lib_io.c", "lib_os.c",
-                "lib_package.c", "lib_debug.c",
-                "lib_jit.c", "lib_ffi.c"])
+                "lib_base.c",
+                "lib_math.c",
+                "lib_bit.c",
+                "lib_string.c",
+                "lib_table.c",
+                "lib_io.c",
+                "lib_os.c",
+                "lib_package.c",
+                "lib_debug.c",
+                "lib_jit.c",
+                "lib_ffi.c"
+            ])
             .status()
             .unwrap()
             .success());
@@ -155,7 +166,12 @@ fn build_msvc(source_dir: &Path) {
         .success());
 
     cc::Build::new()
-        .files(glob::glob(&src.join("lj_*.c").to_string_lossy()).unwrap().chain(glob::glob(&src.join("lib_*.c").to_string_lossy()).unwrap()).filter_map(Result::ok))
+        .files(
+            glob::glob(&src.join("lj_*.c").to_string_lossy())
+                .unwrap()
+                .chain(glob::glob(&src.join("lib_*.c").to_string_lossy()).unwrap())
+                .filter_map(Result::ok),
+        )
         .object(src.join("lj_vm.obj"))
         .flag("-fms-compatibility")
         .flag("/D_CRT_SECURE_NO_DEPRECATE")
@@ -171,7 +187,8 @@ fn build(_cur_path: &Path, source_dir: &Path) {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .expect("Failed to run make").success());
+        .expect("Failed to run make")
+        .success());
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -189,14 +206,22 @@ fn build(_cur_path: &Path, source_dir: &Path) {
     let source_dir = source_dir.canonicalize().unwrap();
     let mut cmd = Command::new("make");
     cmd.current_dir(&source_dir)
-       .arg(format!("TARGET_SYS={}", target_sys));
+        .arg(format!("TARGET_SYS={}", target_sys));
     if target_triple != env::var("HOST").unwrap() {
         let config = cc::Build::new();
         let tool = config.get_compiler();
         let path = tool.path().to_string_lossy().to_owned();
-        let mut cross_args = format!("{}", tool.args().iter()
+        let mut cross_args = format!(
+            "{}",
+            tool.args()
+                .iter()
                 .map(|v| v.to_string_lossy())
-                .fold("".to_owned(), |mut a, b| {a.push_str(&*b); a.push(' '); a}));
+                .fold("".to_owned(), |mut a, b| {
+                    a.push_str(&*b);
+                    a.push(' ');
+                    a
+                })
+        );
         if path == "cc" {
             cmd.arg(format!("CC=cc {}", cross_args));
         } else {
@@ -222,8 +247,10 @@ fn build(_cur_path: &Path, source_dir: &Path) {
     }
 
     println!("Executing: {:?}", cmd);
-    assert!(cmd.stdout(Stdio::inherit())
+    assert!(cmd
+        .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .expect("Failed to run make").success());
+        .expect("Failed to run make")
+        .success());
 }

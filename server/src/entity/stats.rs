@@ -1,11 +1,9 @@
-
 /// Stats for an entity
 ///
 /// Stats modify some aspects of an entity or
 /// track something about the entity (e.g.
 /// happiness).
-pub struct Stats {
-}
+pub struct Stats {}
 
 /// Marks the variant of stats used by this entity
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -26,7 +24,9 @@ pub struct Stat {
 }
 
 macro_rules! consume_ident {
-    ($thing:ident) => (0)
+    ($thing:ident) => {
+        0
+    };
 }
 
 macro_rules! count_idents {

@@ -1,4 +1,3 @@
-
 use std::marker::PhantomData;
 
 #[derive(Clone)]
@@ -14,8 +13,9 @@ pub trait IntKey: Sized + Clone + Copy {
     fn to_key(offset: isize, index: usize) -> Self;
 }
 
-impl <K, V> IntMap<K, V>
-    where K: IntKey
+impl<K, V> IntMap<K, V>
+where
+    K: IntKey,
 {
     #[inline]
     pub fn new() -> IntMap<K, V> {
@@ -29,7 +29,9 @@ impl <K, V> IntMap<K, V>
     #[inline]
     pub fn insert(&mut self, key: K, val: V) {
         use std::ptr;
-        if let Some((offset, new_size, before)) = K::should_resize(self.offset, self.data.len(), key) {
+        if let Some((offset, new_size, before)) =
+            K::should_resize(self.offset, self.data.len(), key)
+        {
             let diff = new_size - self.data.len();
             self.data.reserve(diff);
             if before {
@@ -38,12 +40,12 @@ impl <K, V> IntMap<K, V>
                     self.data.set_len(new_size);
                     let ptr = self.data.as_mut_ptr();
                     ptr::copy(ptr, ptr.add(diff), old_len);
-                    for i in 0 .. diff {
+                    for i in 0..diff {
                         ptr::write(ptr.add(i), None);
                     }
                 }
             } else {
-                for _ in 0 .. diff {
+                for _ in 0..diff {
                     self.data.push(None);
                 }
             }
@@ -54,27 +56,31 @@ impl <K, V> IntMap<K, V>
 
     #[inline]
     pub fn get(&self, key: K) -> Option<&V> {
-        self.data.get(K::index(self.offset, key))
+        self.data
+            .get(K::index(self.offset, key))
             .and_then(|v| v.as_ref())
     }
 
     #[inline]
     pub fn get_mut(&mut self, key: K) -> Option<&mut V> {
-        self.data.get_mut(K::index(self.offset, key))
+        self.data
+            .get_mut(K::index(self.offset, key))
             .and_then(|v| v.as_mut())
     }
 
     #[inline]
     pub fn remove(&mut self, key: K) -> Option<V> {
-        self.data.get_mut(K::index(self.offset, key))
+        self.data
+            .get_mut(K::index(self.offset, key))
             .map(|v| v.take())
             .and_then(|v| v)
     }
 
     #[inline]
-    pub fn keys<'a>(&'a self) -> impl Iterator<Item=K> + 'a {
+    pub fn keys<'a>(&'a self) -> impl Iterator<Item = K> + 'a {
         let offset = self.offset;
-        self.data.iter()
+        self.data
+            .iter()
             .enumerate()
             .filter(|v| v.1.is_some())
             .map(|v| v.0)
@@ -82,7 +88,7 @@ impl <K, V> IntMap<K, V>
     }
 }
 macro_rules! int_key {
-    ($ty:ty) => (
+    ($ty:ty) => {
         impl IntKey for $ty {
             #[inline]
             fn should_resize(offset: isize, len: usize, new: Self) -> Option<(isize, usize, bool)> {
@@ -109,7 +115,7 @@ macro_rules! int_key {
                 (index as isize - offset) as Self
             }
         }
-    )
+    };
 }
 
 int_key!(i8);

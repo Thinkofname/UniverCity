@@ -3,16 +3,16 @@
 mod layout;
 pub mod prompt;
 
-use crate::server::assets;
-use crate::render;
-use crate::server::event;
-use crate::server::lua::{self, Ref, Table, Scope, Function};
-use crate::script;
 use crate::prelude::*;
+use crate::render;
+use crate::script;
+use crate::server::assets;
+use crate::server::event;
+use crate::server::lua::{self, Function, Ref, Scope, Table};
 
 use sdl2::keyboard::Keycode;
-use std::rc::{Rc, Weak};
 use std::cell::{RefCell, RefMut as CellRefMut};
+use std::rc::{Rc, Weak};
 
 use fungui;
 use fungui::StaticKey;
@@ -50,7 +50,6 @@ impl script::LuaTracked for Events {
         s.upgrade()
     }
 }
-
 
 struct Tooltip {
     key: String,
@@ -154,7 +153,6 @@ pub struct NodeData {
     can_focus: bool,
 
     // Rendering
-
     pub(crate) render_loc: (f32, f32, f32, f32),
 
     pub(crate) image: Option<String>,
@@ -223,14 +221,20 @@ impl fungui::Extension for UniverCityUI {
             text_render: None,
             text_splits: Vec::new(),
             font: None,
-            font_color: Color{r: 0.0, g: 0.0, b: 0.0, a: 1.0},
+            font_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
             font_size: 16.0,
             text_shadow: None,
         }
     }
 
     fn style_properties<'a, F>(mut prop: F)
-        where F: FnMut(fungui::StaticKey) + 'a
+    where
+        F: FnMut(fungui::StaticKey) + 'a,
     {
         // Events
         register_ui_props!(prop);
@@ -256,8 +260,7 @@ impl fungui::Extension for UniverCityUI {
         nc: &fungui::NodeChain<'_, Self>,
         rule: &fungui::Rule<Self>,
         data: &mut Self::NodeData,
-    ) -> fungui::DirtyFlags
-    {
+    ) -> fungui::DirtyFlags {
         let mut flags = fungui::DirtyFlags::empty();
         update_ui_props!(styles, nc, rule, data);
 
@@ -363,7 +366,7 @@ impl fungui::Extension for UniverCityUI {
 
     fn reset_unset_data(
         used_keys: &fungui::FnvHashSet<fungui::StaticKey>,
-        data: &mut Self::NodeData
+        data: &mut Self::NodeData,
     ) -> fungui::DirtyFlags {
         let mut flags = fungui::DirtyFlags::empty();
         let mut events = data.events.borrow_mut();
@@ -400,7 +403,7 @@ impl fungui::Extension for UniverCityUI {
         if !used_keys.contains(&FONT) {
             data.font = None;
             data.text_render = None;
-                    flags |= FONT_FLAG;
+            flags |= FONT_FLAG;
         }
         if !used_keys.contains(&FONT_SIZE) && data.font_size != 16.0 {
             data.font_size = 16.0;
@@ -409,7 +412,12 @@ impl fungui::Extension for UniverCityUI {
             flags |= FONT_FLAG;
         }
         if !used_keys.contains(&FONT_COLOR) {
-            const DEF_COLOR: Color = Color{r: 0.0, g: 0.0, b: 0.0, a: 1.0};
+            const DEF_COLOR: Color = Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            };
             if data.font_color != DEF_COLOR {
                 data.font_color = DEF_COLOR;
                 data.text_render = None;
@@ -429,8 +437,7 @@ impl fungui::Extension for UniverCityUI {
 
     fn check_flags(data: &mut Self::NodeData, flags: fungui::DirtyFlags) {
         // TODO: Handle this without recreating?
-        if flags.contains(fungui::DirtyFlags::POSITION)
-            || flags.contains(fungui::DirtyFlags::SIZE)
+        if flags.contains(fungui::DirtyFlags::POSITION) || flags.contains(fungui::DirtyFlags::SIZE)
         {
             data.image_render = None;
             data.box_render = None;
@@ -471,10 +478,11 @@ pub struct Manager {
     nodes: Vec<Node>,
 }
 
-fn list<'a>(args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a)) -> fungui::FResult<'a, Value> {
+fn list<'a>(
+    args: &mut (dyn Iterator<Item = fungui::FResult<'a, Value>> + 'a),
+) -> fungui::FResult<'a, Value> {
     Ok(fungui::Value::ExtValue(UValue::UntypedList(
-        args
-            .collect::<fungui::FResult<'_, _>>()?
+        args.collect::<fungui::FResult<'_, _>>()?,
     )))
 }
 
@@ -523,19 +531,17 @@ impl Manager {
     /// Handles text boxes
     pub fn update(&mut self, renderer: &mut render::Renderer, delta: f64) {
         crate::server::script::handle_reloads(&self.log, &self.scripting, &self.assets);
-        if let Some(node) = self.manager.borrow().query()
+        if let Some(node) = self
+            .manager
+            .borrow()
+            .query()
             .property("focused", true)
             .next()
         {
             let n = node.borrow();
             if !n.ext.events.borrow().on_char_input.is_empty() {
                 if let Some(rect) = node.render_position() {
-                    renderer.mark_text_input(
-                        rect.x,
-                        rect.y,
-                        rect.width,
-                        rect.height,
-                    );
+                    renderer.mark_text_input(rect.x, rect.y, rect.width, rect.height);
                 }
             }
         } else {
@@ -550,16 +556,32 @@ impl Manager {
             node.raw_set_property("$cycle", self.cycle);
             if node.has_layout() && node.get_property::<bool>("$init").is_none() {
                 node.raw_set_property("$init", true);
-                invoke_event(&self.log, &mut events, &scripting, &node, |v| &mut v.on_init, &());
+                invoke_event(
+                    &self.log,
+                    &mut events,
+                    &scripting,
+                    &node,
+                    |v| &mut v.on_init,
+                    &(),
+                );
                 self.nodes.push(node.clone());
             }
-            invoke_event(&self.log, &mut events, &scripting, &node, |v| &mut v.on_update, &delta);
+            invoke_event(
+                &self.log,
+                &mut events,
+                &scripting,
+                &node,
+                |v| &mut v.on_update,
+                &delta,
+            );
         }
 
         let cycle = self.cycle;
         let log = &self.log;
         self.nodes.retain(|v| {
-            if v.get_property::<bool>("$cycle").map_or(true, |c| c != cycle) {
+            if v.get_property::<bool>("$cycle")
+                .map_or(true, |c| c != cycle)
+            {
                 if v.get_property::<bool>("$init").is_some() {
                     invoke_event(log, &mut events, &scripting, v, |v| &mut v.on_deinit, &());
                 }
@@ -579,17 +601,25 @@ impl Manager {
         let manager: &mut fungui::Manager<_> = &mut *self.manager.borrow_mut();
 
         // Remove the old styles in this group if they exist
-        for old in self.style_groups.remove(&key.borrow().into_owned()).into_iter().flat_map(|v| v) {
+        for old in self
+            .style_groups
+            .remove(&key.borrow().into_owned())
+            .into_iter()
+            .flat_map(|v| v)
+        {
             manager.remove_styles(&old);
         }
 
         let mut group = Vec::new();
         let mut styles = String::new();
-        let mut res = if let Ok(res) = self.assets.open_from_pack(key.module_key(), &format!("ui/{}.list", key.resource())) {
+        let mut res = if let Ok(res) = self
+            .assets
+            .open_from_pack(key.module_key(), &format!("ui/{}.list", key.resource()))
+        {
             res
         } else {
             error!(self.log, "Missing style rule list {:?}", key);
-            return
+            return;
         };
         assume!(self.log, res.read_to_string(&mut styles));
         for line in styles.lines() {
@@ -599,23 +629,32 @@ impl Manager {
                 continue;
             }
             // Support cross module loading
-            let s_key = LazyResourceKey::parse(line)
-                .or_module(key.module_key());
+            let s_key = LazyResourceKey::parse(line).or_module(key.module_key());
             group.push(s_key.as_string());
 
             let mut style = String::new();
-            let mut res = assume!(self.log, self.assets.open_from_pack(s_key.module_key(), &format!("ui/{}.style", s_key.resource())));
+            let mut res = assume!(
+                self.log,
+                self.assets.open_from_pack(
+                    s_key.module_key(),
+                    &format!("ui/{}.style", s_key.resource())
+                )
+            );
             assume!(self.log, res.read_to_string(&mut style));
             // Instead of failing on error just report it in the console.
             // TODO: Maybe report on screen somewhere?
             if let Err(err) = manager.load_styles(&s_key.as_string(), &style) {
                 let mut out: Vec<u8> = Vec::new();
-                assume!(self.log, fungui::format_parse_error(
-                    &mut out,
-                    style.lines(),
-                    err,
-                ));
-                warn!(self.log, "Failed to parse {:?}\n{}", s_key, String::from_utf8_lossy(&out));
+                assume!(
+                    self.log,
+                    fungui::format_parse_error(&mut out, style.lines(), err,)
+                );
+                warn!(
+                    self.log,
+                    "Failed to parse {:?}\n{}",
+                    s_key,
+                    String::from_utf8_lossy(&out)
+                );
             }
         }
 
@@ -624,30 +663,31 @@ impl Manager {
 
     /// Loads and adds the node as described by the resource.
     pub fn create_node(&self, key: ResourceKey<'_>) -> Node {
-        let node = Self::create_node_impl(&self.log, &self.assets, key)
-            .expect("Failed to load node");
+        let node =
+            Self::create_node_impl(&self.log, &self.assets, key).expect("Failed to load node");
         self.manager.borrow_mut().add_node(node.clone());
         node
     }
 
-    fn create_node_impl(log: &Logger, assets: &AssetManager, key: ResourceKey<'_>) -> UResult<Node> {
+    fn create_node_impl(
+        log: &Logger,
+        assets: &AssetManager,
+        key: ResourceKey<'_>,
+    ) -> UResult<Node> {
         use std::io::Read;
         let mut desc = String::new();
-        let mut res = assets.open_from_pack(key.module_key(), &format!("ui/{}.desc", key.resource()))?;
+        let mut res =
+            assets.open_from_pack(key.module_key(), &format!("ui/{}.desc", key.resource()))?;
         res.read_to_string(&mut desc)?;
-        Node::from_str(&desc)
-            .map_err(|err| {
-                let mut out: Vec<u8> = Vec::new();
-                assume!(log, fungui::format_parse_error(
-                    &mut out,
-                    desc.lines(),
-                    err,
-                ));
-                ErrorKind::UINodeLoadError(
-                    key.into_owned(),
-                    String::from_utf8_lossy(&out).into_owned(),
-                ).into()
-            })
+        Node::from_str(&desc).map_err(|err| {
+            let mut out: Vec<u8> = Vec::new();
+            assume!(
+                log,
+                fungui::format_parse_error(&mut out, desc.lines(), err,)
+            );
+            ErrorKind::UINodeLoadError(key.into_owned(), String::from_utf8_lossy(&out).into_owned())
+                .into()
+        })
     }
 
     /// Adds the passed node to the root node
@@ -662,11 +702,19 @@ impl Manager {
 
     /// Handles events targetting the focused element
     pub fn focused_event<E>(&mut self, param: E::Param) -> bool
-        where E: Event + 'static,
+    where
+        E: Event + 'static,
     {
         let mut events = event::Container::new();
         if let Some(node) = self.current_focus.as_ref().and_then(|v| v.upgrade()) {
-            if invoke_event(&self.log, &mut events, &self.scripting, &node, E::event_funcs, &param) {
+            if invoke_event(
+                &self.log,
+                &mut events,
+                &self.scripting,
+                &node,
+                E::event_funcs,
+                &param,
+            ) {
                 self.events.borrow_mut().join(events);
                 return true;
             }
@@ -677,7 +725,8 @@ impl Manager {
 
     /// Handles mouse move events
     pub fn mouse_event<E>(&mut self, x: i32, y: i32, param: E::Param) -> bool
-        where E: Event + 'static,
+    where
+        E: Event + 'static,
     {
         let x = ((x as f32) * self.ui_scale) as i32;
         let y = ((y as f32) * self.ui_scale) as i32;
@@ -687,7 +736,14 @@ impl Manager {
         };
         let mut events = event::Container::new();
         for node in matches {
-            if invoke_event(&self.log, &mut events, &self.scripting, &node, E::event_funcs, &param) {
+            if invoke_event(
+                &self.log,
+                &mut events,
+                &self.scripting,
+                &node,
+                E::event_funcs,
+                &param,
+            ) {
                 self.events.borrow_mut().join(events);
                 return true;
             }
@@ -707,42 +763,56 @@ impl Manager {
         let mut events = event::Container::new();
         for node in matches {
             if node.borrow().ext.can_hover {
-                if self.last_hover.as_ref()
+                if self
+                    .last_hover
+                    .as_ref()
                     .and_then(|v| v.upgrade())
                     .map_or(true, |v| !v.is_same(&node))
                 {
-                    if let Some(last_hover) = self.last_hover.take()
-                        .and_then(|v| v.upgrade())
-                    {
+                    if let Some(last_hover) = self.last_hover.take().and_then(|v| v.upgrade()) {
                         last_hover.set_property("hover", false);
-                        invoke_event(&self.log, &mut events, &self.scripting, &last_hover, |v| &mut v.on_mouse_move_out, &MouseMove {
-                            x,
-                            y,
-                        });
+                        invoke_event(
+                            &self.log,
+                            &mut events,
+                            &self.scripting,
+                            &last_hover,
+                            |v| &mut v.on_mouse_move_out,
+                            &MouseMove { x, y },
+                        );
                     }
                     node.set_property("hover", true);
                     self.last_hover = Some(node.weak());
-                    invoke_event(&self.log, &mut events, &self.scripting, &node, |v| &mut v.on_mouse_move_over, &MouseMove {
-                        x,
-                        y,
-                    });
+                    invoke_event(
+                        &self.log,
+                        &mut events,
+                        &self.scripting,
+                        &node,
+                        |v| &mut v.on_mouse_move_over,
+                        &MouseMove { x, y },
+                    );
                 }
-                invoke_event(&self.log, &mut events, &self.scripting, &node, |v| &mut v.on_mouse_move, &MouseMove {
-                    x,
-                    y,
-                });
+                invoke_event(
+                    &self.log,
+                    &mut events,
+                    &self.scripting,
+                    &node,
+                    |v| &mut v.on_mouse_move,
+                    &MouseMove { x, y },
+                );
                 self.events.borrow_mut().join(events);
                 return true;
             }
         }
-        if let Some(last_hover) = self.last_hover.take()
-            .and_then(|v| v.upgrade())
-        {
+        if let Some(last_hover) = self.last_hover.take().and_then(|v| v.upgrade()) {
             last_hover.set_property("hover", false);
-            invoke_event(&self.log, &mut events, &self.scripting, &last_hover, |v| &mut v.on_mouse_move_out, &MouseMove {
-                x,
-                y,
-            });
+            invoke_event(
+                &self.log,
+                &mut events,
+                &self.scripting,
+                &last_hover,
+                |v| &mut v.on_mouse_move_out,
+                &MouseMove { x, y },
+            );
         }
         self.events.borrow_mut().join(events);
         false
@@ -805,16 +875,27 @@ impl Manager {
 
     /// Focuses the passed node
     pub fn focus_node(&mut self, node: Node) {
-        if let Some(current) = self.current_focus
-            .as_ref()
-            .and_then(|v| v.upgrade())
-        {
+        if let Some(current) = self.current_focus.as_ref().and_then(|v| v.upgrade()) {
             current.set_property("focused", false);
-            invoke_event(&self.log, &mut *self.events.borrow_mut(), &self.scripting, &current, |v| &mut v.on_unfocus, &());
+            invoke_event(
+                &self.log,
+                &mut *self.events.borrow_mut(),
+                &self.scripting,
+                &current,
+                |v| &mut v.on_unfocus,
+                &(),
+            );
         }
         self.current_focus = Some(node.weak());
         node.set_property("focused", true);
-        invoke_event(&self.log, &mut *self.events.borrow_mut(), &self.scripting, &node, |v| &mut v.on_focus, &());
+        invoke_event(
+            &self.log,
+            &mut *self.events.borrow_mut(),
+            &self.scripting,
+            &node,
+            |v| &mut v.on_focus,
+            &(),
+        );
     }
 
     /// Cycles the focus to the next element that can take input
@@ -822,25 +903,35 @@ impl Manager {
     pub fn cycle_focus(&mut self) {
         let manager = self.manager.borrow();
         let mut events = event::Container::new();
-        let mut current = self.current_focus
-            .as_ref()
-            .and_then(|v| v.upgrade());
+        let mut current = self.current_focus.as_ref().and_then(|v| v.upgrade());
 
-        let matches = manager.query()
-            .matches()
-            .collect::<Vec<_>>();
+        let matches = manager.query().matches().collect::<Vec<_>>();
         let mut can_loop = true;
         while can_loop {
             can_loop = false;
             for node in matches.iter().rev() {
                 if current.as_ref().map_or(false, |v| v.is_same(node)) {
                     node.set_property("focused", false);
-                    invoke_event(&self.log, &mut events, &self.scripting, node, |v| &mut v.on_unfocus, &());
+                    invoke_event(
+                        &self.log,
+                        &mut events,
+                        &self.scripting,
+                        node,
+                        |v| &mut v.on_unfocus,
+                        &(),
+                    );
                     current = None;
                     can_loop = true;
                 } else if current.is_none() && node.borrow().ext.can_focus {
                     node.set_property("focused", true);
-                    invoke_event(&self.log, &mut events, &self.scripting, node, |v| &mut v.on_focus, &());
+                    invoke_event(
+                        &self.log,
+                        &mut events,
+                        &self.scripting,
+                        node,
+                        |v| &mut v.on_focus,
+                        &(),
+                    );
                     self.current_focus = Some(node.weak());
                     can_loop = false;
                     break;
@@ -876,18 +967,21 @@ impl Manager {
     fn show_tooltip_impl(
         manager: &mut fungui::Manager<UniverCityUI>,
         tooltip: &mut Option<Tooltip>,
-        key: &str, content: Node, x: i32, y: i32
+        key: &str,
+        content: Node,
+        x: i32,
+        y: i32,
     ) {
         if let Some(old) = tooltip.take() {
             if old.key == *key {
                 *tooltip = Some(old);
-                return
+                return;
             } else {
                 manager.remove_node(old.holder);
             }
         }
 
-        let node = node!{
+        let node = node! {
             tooltip_holder {
                 tooltip(x=x + 8, y=y + 8) {
 
@@ -913,10 +1007,7 @@ impl Manager {
         Self::move_tooltip_impl(&*tooltip, key, x, y);
     }
 
-    fn move_tooltip_impl(
-        tooltip: &Option<Tooltip>,
-        key: &str, x: i32, y: i32,
-    ) {
+    fn move_tooltip_impl(tooltip: &Option<Tooltip>, key: &str, x: i32, y: i32) {
         if let Some(tt) = tooltip.as_ref() {
             if tt.key == *key {
                 if let Some(t) = query!(tt.holder, tooltip_holder > tooltip).next() {
@@ -958,91 +1049,170 @@ impl lua::LuaUsable for NodeRef {
     }
 
     fn fields(t: &lua::TypeBuilder) {
-        t.field("get_text", lua::closure1(|lua, this: Ref<NodeRef>| -> Option<Ref<String>> {
-            this.0.text().map(|v| Ref::new_string(lua, &*v))
-        }));
-        t.field("set_text", lua::closure2(|_lua, this: Ref<NodeRef>, txt: Ref<String>| {
-            this.0.set_text(&*txt);
-        }));
-        t.field("query", lua::closure1(|lua, this: Ref<NodeRef>| {
-            Ref::new(lua, QueryRef(RefCell::new(Some(this.0.query().into_owned()))))
-        }));
-        t.field("get_parent", lua::closure1(|lua, this: Ref<NodeRef>| -> Option<Ref<NodeRef>> {
-            this.0.parent().map(|v| Ref::new(lua, NodeRef(v)))
-        }));
-        t.field("render_position", lua::closure1(|_lua, this: Ref<NodeRef>| -> Option<(i32, i32, i32, i32)> {
-            this.0.render_position().map(|v| (v.x, v.y, v.width, v.height))
-        }));
-        t.field("raw_position", lua::closure1(|_lua, this: Ref<NodeRef>| -> (i32, i32, i32, i32) {
-            let v = this.0.raw_position();
-            (v.x, v.y, v.width, v.height)
-        }));
-        t.field("focus", lua::closure1(|lua, this: Ref<NodeRef>| -> UResult<()> {
-            let events = lua.get_tracked::<Events>()
-                .ok_or_else(|| ErrorKind::UINotBound)?;
-            let mut events = events.borrow_mut();
-            events.emit(FocusNode(this.0.clone()));
-            Ok(())
-        }));
-        t.field("add_child", lua::closure2(|_lua, this: Ref<NodeRef>, other: Ref<NodeRef>| {
-            this.0.add_child(other.0.clone())
-        }));
-        t.field("remove_child", lua::closure2(|_lua, this: Ref<NodeRef>, other: Ref<NodeRef>| {
-            this.0.remove_child(other.0.clone())
-        }));
+        t.field(
+            "get_text",
+            lua::closure1(|lua, this: Ref<NodeRef>| -> Option<Ref<String>> {
+                this.0.text().map(|v| Ref::new_string(lua, &*v))
+            }),
+        );
+        t.field(
+            "set_text",
+            lua::closure2(|_lua, this: Ref<NodeRef>, txt: Ref<String>| {
+                this.0.set_text(&*txt);
+            }),
+        );
+        t.field(
+            "query",
+            lua::closure1(|lua, this: Ref<NodeRef>| {
+                Ref::new(
+                    lua,
+                    QueryRef(RefCell::new(Some(this.0.query().into_owned()))),
+                )
+            }),
+        );
+        t.field(
+            "get_parent",
+            lua::closure1(|lua, this: Ref<NodeRef>| -> Option<Ref<NodeRef>> {
+                this.0.parent().map(|v| Ref::new(lua, NodeRef(v)))
+            }),
+        );
+        t.field(
+            "render_position",
+            lua::closure1(|_lua, this: Ref<NodeRef>| -> Option<(i32, i32, i32, i32)> {
+                this.0
+                    .render_position()
+                    .map(|v| (v.x, v.y, v.width, v.height))
+            }),
+        );
+        t.field(
+            "raw_position",
+            lua::closure1(|_lua, this: Ref<NodeRef>| -> (i32, i32, i32, i32) {
+                let v = this.0.raw_position();
+                (v.x, v.y, v.width, v.height)
+            }),
+        );
+        t.field(
+            "focus",
+            lua::closure1(|lua, this: Ref<NodeRef>| -> UResult<()> {
+                let events = lua
+                    .get_tracked::<Events>()
+                    .ok_or_else(|| ErrorKind::UINotBound)?;
+                let mut events = events.borrow_mut();
+                events.emit(FocusNode(this.0.clone()));
+                Ok(())
+            }),
+        );
+        t.field(
+            "add_child",
+            lua::closure2(|_lua, this: Ref<NodeRef>, other: Ref<NodeRef>| {
+                this.0.add_child(other.0.clone())
+            }),
+        );
+        t.field(
+            "remove_child",
+            lua::closure2(|_lua, this: Ref<NodeRef>, other: Ref<NodeRef>| {
+                this.0.remove_child(other.0.clone())
+            }),
+        );
 
         #[allow(clippy::map_clone)]
-        t.field("get_property_table", lua::closure2(|_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<Ref<Table>> {
-            this.0.get_property_ref::<LuaTable>(&key).map(|v| v.clone())
-        }));
-        t.field("set_property_table", lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: Ref<Table>| {
-            if key.starts_with('$') {
-                this.0.raw_set_property(&key, LuaTable(val));
-            } else {
-                this.0.set_property(&key, LuaTable(val));
-            }
-        }));
+        t.field(
+            "get_property_table",
+            lua::closure2(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<Ref<Table>> {
+                    this.0.get_property_ref::<LuaTable>(&key).map(|v| v.clone())
+                },
+            ),
+        );
+        t.field(
+            "set_property_table",
+            lua::closure3(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>, val: Ref<Table>| {
+                    if key.starts_with('$') {
+                        this.0.raw_set_property(&key, LuaTable(val));
+                    } else {
+                        this.0.set_property(&key, LuaTable(val));
+                    }
+                },
+            ),
+        );
 
-        t.field("get_property_int", lua::closure2(|_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<i32> {
-            this.0.get_property::<i32>(&key)
-        }));
-        t.field("set_property_int", lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: i32| {
-            if key.starts_with('$') {
-                this.0.raw_set_property(&key, val);
-            } else {
-                this.0.set_property(&key, val);
-            }
-        }));
-        t.field("get_property_float", lua::closure2(|_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<f64> {
-            this.0.get_property::<f64>(&key)
-        }));
-        t.field("set_property_float", lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: f64| {
-            if key.starts_with('$') {
-                this.0.raw_set_property(&key, val);
-            } else {
-                this.0.set_property(&key, val);
-            }
-        }));
-        t.field("get_property_bool", lua::closure2(|_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<bool> {
-            this.0.get_property::<bool>(&key)
-        }));
-        t.field("set_property_bool", lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: bool| {
-            if key.starts_with('$') {
-                this.0.raw_set_property(&key, val);
-            } else {
-                this.0.set_property(&key, val);
-            }
-        }));
-        t.field("get_property_string", lua::closure2(|lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<Ref<String>> {
-            this.0.get_property::<String>(&key).map(|v| Ref::new_string(lua, v))
-        }));
-        t.field("set_property_string", lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: Ref<String>| {
-            if key.starts_with('$') {
-                this.0.raw_set_property(&key, val.to_string());
-            } else {
-                this.0.set_property(&key, val.to_string());
-            }
-        }));
+        t.field(
+            "get_property_int",
+            lua::closure2(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<i32> {
+                    this.0.get_property::<i32>(&key)
+                },
+            ),
+        );
+        t.field(
+            "set_property_int",
+            lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: i32| {
+                if key.starts_with('$') {
+                    this.0.raw_set_property(&key, val);
+                } else {
+                    this.0.set_property(&key, val);
+                }
+            }),
+        );
+        t.field(
+            "get_property_float",
+            lua::closure2(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<f64> {
+                    this.0.get_property::<f64>(&key)
+                },
+            ),
+        );
+        t.field(
+            "set_property_float",
+            lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: f64| {
+                if key.starts_with('$') {
+                    this.0.raw_set_property(&key, val);
+                } else {
+                    this.0.set_property(&key, val);
+                }
+            }),
+        );
+        t.field(
+            "get_property_bool",
+            lua::closure2(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<bool> {
+                    this.0.get_property::<bool>(&key)
+                },
+            ),
+        );
+        t.field(
+            "set_property_bool",
+            lua::closure3(|_lua, this: Ref<NodeRef>, key: Ref<String>, val: bool| {
+                if key.starts_with('$') {
+                    this.0.raw_set_property(&key, val);
+                } else {
+                    this.0.set_property(&key, val);
+                }
+            }),
+        );
+        t.field(
+            "get_property_string",
+            lua::closure2(
+                |lua, this: Ref<NodeRef>, key: Ref<String>| -> Option<Ref<String>> {
+                    this.0
+                        .get_property::<String>(&key)
+                        .map(|v| Ref::new_string(lua, v))
+                },
+            ),
+        );
+        t.field(
+            "set_property_string",
+            lua::closure3(
+                |_lua, this: Ref<NodeRef>, key: Ref<String>, val: Ref<String>| {
+                    if key.starts_with('$') {
+                        this.0.raw_set_property(&key, val.to_string());
+                    } else {
+                        this.0.set_property(&key, val.to_string());
+                    }
+                },
+            ),
+        );
     }
 }
 
@@ -1053,97 +1223,134 @@ pub struct LuaTable(pub Ref<Table>);
 
 struct QueryRef(RefCell<Option<fungui::Query<'static, UniverCityUI>>>);
 impl lua::LuaUsable for QueryRef {
-
     fn fields(t: &lua::TypeBuilder) {
-        t.field("text", lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.text());
-                } else {
-                    bail!("Query already used")
+        t.field(
+            "text",
+            lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<Ref<QueryRef>> {
+                {
+                    let mut query = this.0.borrow_mut();
+                    if let Some(q) = query.take() {
+                        *query = Some(q.text());
+                    } else {
+                        bail!("Query already used")
+                    }
                 }
-            }
-            Ok(this)
-        }));
-        t.field("name", lua::closure2(|_lua, this: Ref<QueryRef>, name: Ref<String>| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.name(name.to_string()));
-                } else {
-                    bail!("Query already used")
+                Ok(this)
+            }),
+        );
+        t.field(
+            "name",
+            lua::closure2(
+                |_lua, this: Ref<QueryRef>, name: Ref<String>| -> UResult<Ref<QueryRef>> {
+                    {
+                        let mut query = this.0.borrow_mut();
+                        if let Some(q) = query.take() {
+                            *query = Some(q.name(name.to_string()));
+                        } else {
+                            bail!("Query already used")
+                        }
+                    }
+                    Ok(this)
+                },
+            ),
+        );
+        t.field(
+            "child",
+            lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<Ref<QueryRef>> {
+                {
+                    let mut query = this.0.borrow_mut();
+                    if let Some(q) = query.take() {
+                        *query = Some(q.child());
+                    } else {
+                        bail!("Query already used")
+                    }
                 }
-            }
-            Ok(this)
-        }));
-        t.field("child", lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.child());
-                } else {
-                    bail!("Query already used")
-                }
-            }
-            Ok(this)
-        }));
-        t.field("property_bool", lua::closure3(|_lua, this: Ref<QueryRef>, name: Ref<String>, v: bool| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.property(name.to_string(), v));
-                } else {
-                    bail!("Query already used")
-                }
-            }
-            Ok(this)
-        }));
-        t.field("property_int", lua::closure3(|_lua, this: Ref<QueryRef>, name: Ref<String>, v: i32| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.property(name.to_string(), v));
-                } else {
-                    bail!("Query already used")
-                }
-            }
-            Ok(this)
-        }));
-        t.field("property_float", lua::closure3(|_lua, this: Ref<QueryRef>, name: Ref<String>, v: f64| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.property(name.to_string(), v));
-                } else {
-                    bail!("Query already used")
-                }
-            }
-            Ok(this)
-        }));
-        t.field("property_string", lua::closure3(|_lua, this: Ref<QueryRef>, name: Ref<String>, v: Ref<String>| -> UResult<Ref<QueryRef>> {
-            {
-                let mut query = this.0.borrow_mut();
-                if let Some(q) = query.take() {
-                    *query = Some(q.property(name.to_string(), v.to_string()));
-                } else {
-                    bail!("Query already used")
-                }
-            }
-            Ok(this)
-        }));
+                Ok(this)
+            }),
+        );
+        t.field(
+            "property_bool",
+            lua::closure3(
+                |_lua, this: Ref<QueryRef>, name: Ref<String>, v: bool| -> UResult<Ref<QueryRef>> {
+                    {
+                        let mut query = this.0.borrow_mut();
+                        if let Some(q) = query.take() {
+                            *query = Some(q.property(name.to_string(), v));
+                        } else {
+                            bail!("Query already used")
+                        }
+                    }
+                    Ok(this)
+                },
+            ),
+        );
+        t.field(
+            "property_int",
+            lua::closure3(
+                |_lua, this: Ref<QueryRef>, name: Ref<String>, v: i32| -> UResult<Ref<QueryRef>> {
+                    {
+                        let mut query = this.0.borrow_mut();
+                        if let Some(q) = query.take() {
+                            *query = Some(q.property(name.to_string(), v));
+                        } else {
+                            bail!("Query already used")
+                        }
+                    }
+                    Ok(this)
+                },
+            ),
+        );
+        t.field(
+            "property_float",
+            lua::closure3(
+                |_lua, this: Ref<QueryRef>, name: Ref<String>, v: f64| -> UResult<Ref<QueryRef>> {
+                    {
+                        let mut query = this.0.borrow_mut();
+                        if let Some(q) = query.take() {
+                            *query = Some(q.property(name.to_string(), v));
+                        } else {
+                            bail!("Query already used")
+                        }
+                    }
+                    Ok(this)
+                },
+            ),
+        );
+        t.field(
+            "property_string",
+            lua::closure3(
+                |_lua,
+                 this: Ref<QueryRef>,
+                 name: Ref<String>,
+                 v: Ref<String>|
+                 -> UResult<Ref<QueryRef>> {
+                    {
+                        let mut query = this.0.borrow_mut();
+                        if let Some(q) = query.take() {
+                            *query = Some(q.property(name.to_string(), v.to_string()));
+                        } else {
+                            bail!("Query already used")
+                        }
+                    }
+                    Ok(this)
+                },
+            ),
+        );
 
-        t.field("matches", lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<_> {
-            let mut query = this.0.borrow_mut();
-            if let Some(q) = query.take() {
-                let mut iter = q.matches();
-                Ok(lua::closure2(move |lua, _: (), _: ()| {
-                    iter.next().map(|v| Ref::new(lua, NodeRef(v)))
-                }))
-            } else {
-                bail!("Query already used")
-            }
-        }))
+        t.field(
+            "matches",
+            lua::closure1(|_lua, this: Ref<QueryRef>| -> UResult<_> {
+                let mut query = this.0.borrow_mut();
+                if let Some(q) = query.take() {
+                    let mut iter = q.matches();
+                    Ok(lua::closure2(move |lua, _: (), _: ()| {
+                        iter.next().map(|v| Ref::new(lua, NodeRef(v)))
+                    }))
+                } else {
+                    bail!("Query already used")
+                }
+            }),
+        )
     }
 }
 
@@ -1199,7 +1406,10 @@ pub struct MouseClick {
 impl EventParam for MouseClick {
     fn as_lua_table(&self, lua: &lua::Lua) -> Ref<lua::Table> {
         let table = Ref::new_table(lua);
-        table.insert(Ref::new_string(lua, "button"), Ref::new_string(lua, self.button.as_string()));
+        table.insert(
+            Ref::new_string(lua, "button"),
+            Ref::new_string(lua, self.button.as_string()),
+        );
         table.insert(Ref::new_string(lua, "x"), self.x);
         table.insert(Ref::new_string(lua, "y"), self.y);
         table
@@ -1323,7 +1533,10 @@ pub struct KeyInput {
 impl EventParam for KeyInput {
     fn as_lua_table(&self, lua: &lua::Lua) -> Ref<Table> {
         let tbl = Ref::new_table(lua);
-        tbl.insert(Ref::new_string(lua, "input"), Ref::new_string(lua, self.input.name()));
+        tbl.insert(
+            Ref::new_string(lua, "input"),
+            Ref::new_string(lua, self.input.name()),
+        );
         tbl
     }
 }
@@ -1397,7 +1610,6 @@ impl EventParam for f64 {
     }
 }
 
-
 /// A parameter that can be passed to an event
 pub trait EventParam {
     /// Turns this parameter into a table in lua
@@ -1432,46 +1644,53 @@ pub enum MethodDesc<E: Event> {
     Native(Rc<dyn Fn(&mut event::Container, Node, &E::Param) -> bool>),
 }
 
-impl <E: Event> Clone for MethodDesc<E> {
+impl<E: Event> Clone for MethodDesc<E> {
     fn clone(&self) -> Self {
         match *self {
-            MethodDesc::Lua{ref resource, ref exec} => MethodDesc::Lua {
+            MethodDesc::Lua {
+                ref resource,
+                ref exec,
+            } => MethodDesc::Lua {
                 resource: resource.clone(),
                 exec: exec.clone(),
             },
-            MethodDesc::LuaCompiled{ref func} => MethodDesc::LuaCompiled {
-                func: func.clone(),
-            },
+            MethodDesc::LuaCompiled { ref func } => MethodDesc::LuaCompiled { func: func.clone() },
             MethodDesc::Native(ref func) => MethodDesc::Native(func.clone()),
         }
     }
 }
 
-impl <E: Event + 'static> MethodDesc<E> {
+impl<E: Event + 'static> MethodDesc<E> {
     fn from_value(val: fungui::Value<UniverCityUI>) -> Option<Vec<MethodDesc<E>>>
-        where Vec<Self>: fungui::ConvertValue<UniverCityUI>
+    where
+        Vec<Self>: fungui::ConvertValue<UniverCityUI>,
     {
         if let Some(m) = val.convert_ref::<String>() {
             // TODO: Ideally this wouldn't default to base
-            return Some(vec![Self::from_format(ModuleKey::new("base"), m)])
+            return Some(vec![Self::from_format(ModuleKey::new("base"), m)]);
         }
         if val.convert_ref::<Vec<Self>>().is_some() {
             return val.convert::<Vec<Self>>();
         }
         if val.convert_ref::<Vec<Value>>().is_some() {
-            let vals = val.convert::<Vec<Value>>().expect("Failed to convert untyped?");
-            return Some(vals.into_iter()
-                .filter_map(Self::from_value)
-                .flat_map(|v| v)
-                .collect());
+            let vals = val
+                .convert::<Vec<Value>>()
+                .expect("Failed to convert untyped?");
+            return Some(
+                vals.into_iter()
+                    .filter_map(Self::from_value)
+                    .flat_map(|v| v)
+                    .collect(),
+            );
         }
         None
     }
 
     /// Wraps the passed function as a `MethodDesc`
     pub fn native<F>(f: F) -> MethodDesc<E>
-        where E: Event,
-              F: Fn(&mut event::Container, Node, &E::Param) -> bool + 'static
+    where
+        E: Event,
+        F: Fn(&mut event::Container, Node, &E::Param) -> bool + 'static,
     {
         MethodDesc::Native(Rc::new(f))
     }
@@ -1488,15 +1707,16 @@ impl <E: Event + 'static> MethodDesc<E> {
 }
 
 fn invoke_event<E, F>(
-        log: &Logger,
-        events: &mut event::Container,
-        engine: &script::Engine,
-        node: &Node,
-        get_actions: F,
-        param: &E::Param
+    log: &Logger,
+    events: &mut event::Container,
+    engine: &script::Engine,
+    node: &Node,
+    get_actions: F,
+    param: &E::Param,
 ) -> bool
-    where E: Event,
-        F: FnOnce(&mut NodeEvents) -> &mut [MethodDesc<E>]
+where
+    E: Event,
+    F: FnOnce(&mut NodeEvents) -> &mut [MethodDesc<E>],
 {
     let node_events = node.borrow().ext.events.clone();
     let mut node_events = node_events.borrow_mut();
@@ -1512,7 +1732,7 @@ fn invoke_event<E, F>(
     for action in actions {
         let mut replace = None;
         handled |= match action {
-            MethodDesc::Lua{resource, exec} => {
+            MethodDesc::Lua { resource, exec } => {
                 let func = match engine.invoke_function::<(
                     // Resource
                     Ref<String>, Ref<String>,
@@ -1528,8 +1748,11 @@ fn invoke_event<E, F>(
                 ) {
                     Ok(ret) => ret,
                     Err(err) => {
-                        error!(log, "Error compiling lua callback:\nReason: {}\nSource: \n{}", err, exec);
-                        return false
+                        error!(
+                            log,
+                            "Error compiling lua callback:\nReason: {}\nSource: \n{}", err, exec
+                        );
+                        return false;
                     }
                 };
                 let ret = match func.invoke((lua_elem.clone(), lua_param.clone())) {
@@ -1537,23 +1760,21 @@ fn invoke_event<E, F>(
                     Err(err) => {
                         error!(log, "Error invoking lua callback:\nReason: {}", err);
                         false
-                    },
+                    }
                 };
-                replace = Some(MethodDesc::LuaCompiled{func});
+                replace = Some(MethodDesc::LuaCompiled { func });
                 ret
-            },
-            MethodDesc::LuaCompiled{func} => {
+            }
+            MethodDesc::LuaCompiled { func } => {
                 match func.invoke((lua_elem.clone(), lua_param.clone())) {
                     Ok(ret) => ret,
                     Err(err) => {
                         error!(log, "Error invoking lua callback:\nReason: {}", err);
                         false
-                    },
+                    }
                 }
-            },
-            MethodDesc::Native(func) => {
-                (func)(events, node.clone(), param)
             }
+            MethodDesc::Native(func) => (func)(events, node.clone(), param),
         };
         if let Some(r) = replace {
             *action = r;
@@ -1564,156 +1785,240 @@ fn invoke_event<E, F>(
 
 /// Sets up a interface for scripts to interface with the ui
 pub fn init_uilib(state: &lua::Lua) {
+    state.set(
+        Scope::Global,
+        "ui_root_query",
+        lua::closure(|lua| -> UResult<Ref<QueryRef>> {
+            let manager = lua
+                .get_tracked::<SManager>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let manager = manager.borrow();
+            Ok(Ref::new(
+                lua,
+                QueryRef(RefCell::new(Some(manager.query().into_owned()))),
+            ))
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_add_node",
+        lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
+            let manager = lua
+                .get_tracked::<SManager>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut manager = manager.borrow_mut();
+            manager.add_node(node.0.clone());
+            Ok(())
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_remove_node",
+        lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
+            let manager = lua
+                .get_tracked::<SManager>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut manager = manager.borrow_mut();
+            manager.remove_node(node.0.clone());
+            Ok(())
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_load_node",
+        lua::closure1(|lua, key: Ref<String>| -> UResult<_> {
+            let assets = lua
+                .get_tracked::<AssetManager>()
+                .ok_or_else(|| ErrorKind::InvalidState)?;
+            let log = lua
+                .get_tracked::<Logger>()
+                .ok_or_else(|| ErrorKind::InvalidState)?;
 
-    state.set(Scope::Global, "ui_root_query", lua::closure(|lua| -> UResult<Ref<QueryRef>> {
-        let manager = lua.get_tracked::<SManager>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let manager = manager.borrow();
-        Ok(Ref::new(lua, QueryRef(RefCell::new(Some(manager.query().into_owned())))))
-    }));
-    state.set(Scope::Global, "ui_add_node", lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
-        let manager = lua.get_tracked::<SManager>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut manager = manager.borrow_mut();
-        manager.add_node(node.0.clone());
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_remove_node", lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
-        let manager = lua.get_tracked::<SManager>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut manager = manager.borrow_mut();
-        manager.remove_node(node.0.clone());
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_load_node", lua::closure1(|lua, key: Ref<String>| -> UResult<_> {
-        let assets = lua.get_tracked::<AssetManager>()
-            .ok_or_else(|| ErrorKind::InvalidState)?;
-        let log = lua.get_tracked::<Logger>()
-            .ok_or_else(|| ErrorKind::InvalidState)?;
+            let key = assets::LazyResourceKey::parse(&key).or_module(ModuleKey::new("base"));
 
-        let key = assets::LazyResourceKey::parse(&key)
-            .or_module(ModuleKey::new("base"));
+            let node = Manager::create_node_impl(&log, &assets, key)?;
+            Ok(Ref::new(lua, NodeRef(node)))
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_new_node",
+        lua::closure1(|lua, name: Ref<String>| -> UResult<Ref<NodeRef>> {
+            Ok(Ref::new(lua, NodeRef(Node::new(&*name))))
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_new_text_node",
+        lua::closure1(|lua, value: Ref<String>| -> UResult<Ref<NodeRef>> {
+            Ok(Ref::new(lua, NodeRef(Node::new_text(&*value))))
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_new_node_str",
+        lua::closure1(|lua, s: Ref<String>| -> UResult<Ref<NodeRef>> {
+            Ok(Ref::new(
+                lua,
+                NodeRef(Node::from_str(&*s).map_err(|e| ErrorKind::Msg(e.to_string()))?),
+            ))
+        }),
+    );
 
-        let node = Manager::create_node_impl(&log, &assets, key)?;
-        Ok(Ref::new(lua, NodeRef(node)))
-    }));
-    state.set(Scope::Global, "ui_new_node", lua::closure1(|lua, name: Ref<String>| -> UResult<Ref<NodeRef>> {
-        Ok(Ref::new(lua, NodeRef(Node::new(&*name))))
-    }));
-    state.set(Scope::Global, "ui_new_text_node", lua::closure1(|lua, value: Ref<String>| -> UResult<Ref<NodeRef>> {
-        Ok(Ref::new(lua, NodeRef(Node::new_text(&*value))))
-    }));
-    state.set(Scope::Global, "ui_new_node_str", lua::closure1(|lua, s: Ref<String>| -> UResult<Ref<NodeRef>> {
-        Ok(Ref::new(lua, NodeRef(Node::from_str(&*s).map_err(|e| ErrorKind::Msg(e.to_string()))?)))
-    }));
+    state.set(
+        Scope::Global,
+        "ui_show_tooltip",
+        lua::closure4(
+            |lua, key: Ref<String>, content: Ref<NodeRef>, x: i32, y: i32| -> UResult<()> {
+                let tooltip = lua
+                    .get_tracked::<Tooltip>()
+                    .ok_or_else(|| ErrorKind::UINotBound)?;
+                let manager = lua
+                    .get_tracked::<SManager>()
+                    .ok_or_else(|| ErrorKind::UINotBound)?;
 
-    state.set(Scope::Global, "ui_show_tooltip", lua::closure4(|lua, key: Ref<String>, content: Ref<NodeRef>, x: i32, y: i32| -> UResult<()> {
-        let tooltip = lua.get_tracked::<Tooltip>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let manager = lua.get_tracked::<SManager>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
+                let mut tooltip = tooltip.borrow_mut();
+                let mut manager = manager.borrow_mut();
+                Manager::show_tooltip_impl(
+                    &mut *manager,
+                    &mut *tooltip,
+                    &*key,
+                    content.0.clone(),
+                    x,
+                    y,
+                );
 
-        let mut tooltip = tooltip.borrow_mut();
-        let mut manager = manager.borrow_mut();
-        Manager::show_tooltip_impl(&mut *manager, &mut *tooltip, &*key, content.0.clone(), x, y);
+                Ok(())
+            },
+        ),
+    );
+    state.set(
+        Scope::Global,
+        "ui_move_tooltip",
+        lua::closure3(|lua, key: Ref<String>, x: i32, y: i32| -> UResult<()> {
+            let tooltip = lua
+                .get_tracked::<Tooltip>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let tooltip = tooltip.borrow();
+            Manager::move_tooltip_impl(&*tooltip, &*key, x, y);
 
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_move_tooltip", lua::closure3(|lua, key: Ref<String>, x: i32, y: i32| -> UResult<()> {
-        let tooltip = lua.get_tracked::<Tooltip>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let tooltip = tooltip.borrow();
-        Manager::move_tooltip_impl(&*tooltip, &*key, x, y);
+            Ok(())
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_hide_tooltip",
+        lua::closure1(|lua, key: Ref<String>| -> UResult<()> {
+            let tooltip = lua
+                .get_tracked::<Tooltip>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let manager = lua
+                .get_tracked::<SManager>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
 
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_hide_tooltip", lua::closure1(|lua, key: Ref<String>| -> UResult<()> {
-        let tooltip = lua.get_tracked::<Tooltip>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let manager = lua.get_tracked::<SManager>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut tooltip = tooltip.borrow_mut();
+            let mut manager = manager.borrow_mut();
 
-        let mut tooltip = tooltip.borrow_mut();
-        let mut manager = manager.borrow_mut();
-
-        Manager::hide_tooltip_impl(&mut *manager, &mut *tooltip, &*key);
-        Ok(())
-    }));
+            Manager::hide_tooltip_impl(&mut *manager, &mut *tooltip, &*key);
+            Ok(())
+        }),
+    );
 
     // Event handling
-    state.set(Scope::Global, "ui_emit_0", lua::closure1(|lua, evt: Ref<String>| -> UResult<()> {
-        let events = lua.get_tracked::<Events>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut events = events.borrow_mut();
-        match &evt[..] {
-            "exit_game" => events.emit(crate::ExitGame),
-            _ => bail!("unknown event type {:?}", evt),
-        }
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_emit_1", lua::closure2(|lua, evt: Ref<String>, p1: Ref<String>| -> UResult<()> {
-        let events = lua.get_tracked::<Events>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut events = events.borrow_mut();
-        match &evt[..] {
-            "switch_menu" => events.emit(crate::SwitchMenu(p1.to_string())),
-            "set_cursor" => events.emit(crate::SetCursor(LazyResourceKey::parse(&p1)
-                .or_module(ModuleKey::new("base"))
-                .into_owned())),
-            "open" => match &p1[..] {
-                "room_buy" => events.emit(crate::instance::OpenBuyRoomMenu),
-                "staff_buy" => events.emit(crate::instance::OpenBuyStaffMenu),
-                "staff_list" => events.emit(crate::instance::OpenStaffListMenu),
-                "stats" => events.emit(crate::instance::OpenStatsMenu),
-                "settings" => events.emit(crate::instance::OpenSettingsMenu),
-                "courses" => events.emit(crate::instance::OpenCoursesMenu),
-                "edit_room" => events.emit(crate::instance::OpenEditRoom),
-                _ => bail!("unknown window type {:?}", evt),
-            },
-            "multi_player" => events.emit(crate::MultiPlayer(p1.to_string())),
-            _ => bail!("unknown event type {:?}", evt),
-        }
-        Ok(())
-    }));
+    state.set(
+        Scope::Global,
+        "ui_emit_0",
+        lua::closure1(|lua, evt: Ref<String>| -> UResult<()> {
+            let events = lua
+                .get_tracked::<Events>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut events = events.borrow_mut();
+            match &evt[..] {
+                "exit_game" => events.emit(crate::ExitGame),
+                _ => bail!("unknown event type {:?}", evt),
+            }
+            Ok(())
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_emit_1",
+        lua::closure2(|lua, evt: Ref<String>, p1: Ref<String>| -> UResult<()> {
+            let events = lua
+                .get_tracked::<Events>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut events = events.borrow_mut();
+            match &evt[..] {
+                "switch_menu" => events.emit(crate::SwitchMenu(p1.to_string())),
+                "set_cursor" => events.emit(crate::SetCursor(
+                    LazyResourceKey::parse(&p1)
+                        .or_module(ModuleKey::new("base"))
+                        .into_owned(),
+                )),
+                "open" => match &p1[..] {
+                    "room_buy" => events.emit(crate::instance::OpenBuyRoomMenu),
+                    "staff_buy" => events.emit(crate::instance::OpenBuyStaffMenu),
+                    "staff_list" => events.emit(crate::instance::OpenStaffListMenu),
+                    "stats" => events.emit(crate::instance::OpenStatsMenu),
+                    "settings" => events.emit(crate::instance::OpenSettingsMenu),
+                    "courses" => events.emit(crate::instance::OpenCoursesMenu),
+                    "edit_room" => events.emit(crate::instance::OpenEditRoom),
+                    _ => bail!("unknown window type {:?}", evt),
+                },
+                "multi_player" => events.emit(crate::MultiPlayer(p1.to_string())),
+                _ => bail!("unknown event type {:?}", evt),
+            }
+            Ok(())
+        }),
+    );
 
-    state.set(Scope::Global, "ui_emit_accept", lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
-        let events = lua.get_tracked::<Events>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut events = events.borrow_mut();
-        let mut base = node.0.clone();
-        loop {
-            if let Some(parent) = base.parent() {
-                if parent.name().map_or(false, |v| v == "root") {
-                    break;
+    state.set(
+        Scope::Global,
+        "ui_emit_accept",
+        lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
+            let events = lua
+                .get_tracked::<Events>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut events = events.borrow_mut();
+            let mut base = node.0.clone();
+            loop {
+                if let Some(parent) = base.parent() {
+                    if parent.name().map_or(false, |v| v == "root") {
+                        break;
+                    }
+                    base = parent;
+                } else {
+                    bail!("Missing node parent")
                 }
-                base = parent;
-            } else {
-                bail!("Missing node parent")
             }
-        }
-        events.emit(crate::instance::AcceptEvent(base));
-        Ok(())
-    }));
-    state.set(Scope::Global, "ui_emit_cancel", lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
-        let events = lua.get_tracked::<Events>()
-            .ok_or_else(|| ErrorKind::UINotBound)?;
-        let mut events = events.borrow_mut();
-        let mut base = node.0.clone();
-        loop {
-            if let Some(parent) = base.parent() {
-                if parent.name().map_or(false, |v| v == "root") {
-                    break;
+            events.emit(crate::instance::AcceptEvent(base));
+            Ok(())
+        }),
+    );
+    state.set(
+        Scope::Global,
+        "ui_emit_cancel",
+        lua::closure1(|lua, node: Ref<NodeRef>| -> UResult<()> {
+            let events = lua
+                .get_tracked::<Events>()
+                .ok_or_else(|| ErrorKind::UINotBound)?;
+            let mut events = events.borrow_mut();
+            let mut base = node.0.clone();
+            loop {
+                if let Some(parent) = base.parent() {
+                    if parent.name().map_or(false, |v| v == "root") {
+                        break;
+                    }
+                    base = parent;
+                } else {
+                    bail!("Missing node parent")
                 }
-                base = parent;
-            } else {
-                bail!("Missing node parent")
             }
-        }
-        events.emit(crate::instance::CancelEvent(base));
-        Ok(())
-    }));
+            events.emit(crate::instance::CancelEvent(base));
+            Ok(())
+        }),
+    );
 }
-
 
 impl fungui::ConvertValue<UniverCityUI> for UValue {
     type RefType = UValue;
@@ -1808,41 +2113,41 @@ impl fungui::ConvertValue<UniverCityUI> for LuaTable {
 
 macro_rules! value_method {
     ($evt:ty, $name:ident) => {
-impl fungui::ConvertValue<UniverCityUI> for MethodDesc<$evt> {
-    type RefType = [MethodDesc<$evt>];
+        impl fungui::ConvertValue<UniverCityUI> for MethodDesc<$evt> {
+            type RefType = [MethodDesc<$evt>];
 
-    fn from_value(_v: Value) -> Option<Self> {
-        None
-    }
-    fn from_value_ref(_v: &Value) -> Option<&Self::RefType> {
-        None
-    }
-    fn to_value(v: Self) -> Value {
-        fungui::Value::ExtValue(UValue::$name(vec![v]))
-    }
-}
-
-impl fungui::ConvertValue<UniverCityUI> for Vec<MethodDesc<$evt>> {
-    type RefType = [MethodDesc<$evt>];
-
-    fn from_value(v: Value) -> Option<Self> {
-        if let fungui::Value::ExtValue(UValue::$name(v)) = v {
-            Some(v)
-        } else {
-            None
+            fn from_value(_v: Value) -> Option<Self> {
+                None
+            }
+            fn from_value_ref(_v: &Value) -> Option<&Self::RefType> {
+                None
+            }
+            fn to_value(v: Self) -> Value {
+                fungui::Value::ExtValue(UValue::$name(vec![v]))
+            }
         }
-    }
-    fn from_value_ref(v: &Value) -> Option<&Self::RefType> {
-        if let fungui::Value::ExtValue(UValue::$name(v)) = v {
-            Some(v)
-        } else {
-            None
+
+        impl fungui::ConvertValue<UniverCityUI> for Vec<MethodDesc<$evt>> {
+            type RefType = [MethodDesc<$evt>];
+
+            fn from_value(v: Value) -> Option<Self> {
+                if let fungui::Value::ExtValue(UValue::$name(v)) = v {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+            fn from_value_ref(v: &Value) -> Option<&Self::RefType> {
+                if let fungui::Value::ExtValue(UValue::$name(v)) = v {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+            fn to_value(v: Self) -> Value {
+                fungui::Value::ExtValue(UValue::$name(v))
+            }
         }
-    }
-    fn to_value(v: Self) -> Value {
-        fungui::Value::ExtValue(UValue::$name(v))
-    }
-}
     };
 }
 

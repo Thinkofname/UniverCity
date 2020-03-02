@@ -145,19 +145,14 @@ pub use crate::group::*;
 mod util;
 
 use std::any::{Any, TypeId};
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
-use std::sync::{Mutex, RwLock};
-use std::sync::mpsc;
-use std::fmt::{Debug, Formatter, self};
 use std::ops::Deref;
+use std::sync::mpsc;
+use std::sync::{Mutex, RwLock};
 
+use rayon::iter::plumbing::{bridge_unindexed, Folder, UnindexedConsumer, UnindexedProducer};
 use rayon::iter::ParallelIterator;
-use rayon::iter::plumbing::{
-    bridge_unindexed,
-    UnindexedConsumer,
-    UnindexedProducer,
-    Folder,
-};
 
 /// Collection of entities and their components.
 pub struct Container {
@@ -200,7 +195,8 @@ impl Container {
     /// Removes the entity and all allocated components attached to it.
     #[inline]
     pub fn remove_entity(&mut self, e: Entity) {
-        if !self.entities
+        if !self
+            .entities
             .get_mut()
             .expect("Failed to lock entities")
             .free(e)
@@ -240,34 +236,32 @@ impl Container {
 
     /// Returns an iterator that iterates over every active entity.
     #[inline]
-    pub fn iter_all(&self)
-    -> MaskedEntityIter<
-        impl Deref<Target=internal::EntityAllocator> + '_,
+    pub fn iter_all(
+        &self,
+    ) -> MaskedEntityIter<
+        impl Deref<Target = internal::EntityAllocator> + '_,
         impl for<'b> Fn(&'b internal::EntityAllocator, usize) -> bool + '_,
     > {
-        let ea = self.entities
-            .read()
-            .expect("Failed to lock entities");
+        let ea = self.entities.read().expect("Failed to lock entities");
         MaskedEntityIter {
             id: 0,
             max: ea.max_entities,
             entities: ea,
             test_mask: |e: &internal::EntityAllocator, i| e.entities.get(i),
         }
-
     }
 
     /// Returns an iterator that iterates over every active entity
     /// which contains the components represented by the passed mask.
     #[inline]
-    pub fn iter_mask<'a>(&'a self, mask: &'a EntityMask)
-    -> MaskedEntityIter<
-            impl Deref<Target=internal::EntityAllocator> + 'a,
-            impl for<'b> Fn(&'b internal::EntityAllocator, usize) -> bool + 'a,
+    pub fn iter_mask<'a>(
+        &'a self,
+        mask: &'a EntityMask,
+    ) -> MaskedEntityIter<
+        impl Deref<Target = internal::EntityAllocator> + 'a,
+        impl for<'b> Fn(&'b internal::EntityAllocator, usize) -> bool + 'a,
     > {
-        let ea = self.entities
-            .read()
-            .expect("Failed to lock entities");
+        let ea = self.entities.read().expect("Failed to lock entities");
         MaskedEntityIter {
             entities: ea,
             id: 0,
@@ -279,9 +273,14 @@ impl Container {
     /// Returns a mask which contains every entity with this component
     #[inline]
     pub fn mask_for<T: Component>(&self) -> EntityMask {
-        let wrap = unsafe { &mut *self.components.components.get(&TypeId::of::<T>())
+        let wrap = unsafe {
+            &mut *self
+                .components
+                .components
+                .get(&TypeId::of::<T>())
                 .expect("Component not registered")
-                .get() };
+                .get()
+        };
         EntityMask {
             mask: wrap.mask.clone(),
             max: wrap.max as u32,
@@ -305,7 +304,8 @@ impl Container {
     /// Adds a component to an entity.
     #[inline]
     pub fn add_component<T: Component>(&mut self, e: Entity, val: T) {
-        if !self.entities
+        if !self
+            .entities
             .get_mut()
             .expect("Failed to lock entities")
             .is_valid(e)
@@ -318,7 +318,8 @@ impl Container {
     /// Removes a component from an entity.
     #[inline]
     pub fn remove_component<T: Component>(&mut self, e: Entity) -> Option<T> {
-        if !self.entities
+        if !self
+            .entities
             .get_mut()
             .expect("Failed to lock entities")
             .is_valid(e)
@@ -331,7 +332,8 @@ impl Container {
     /// Gets an immutable reference to a component from an entity.
     #[inline]
     pub fn get_component<T: Component>(&self, e: Entity) -> Option<&T> {
-        if !self.entities
+        if !self
+            .entities
             .read()
             .expect("Failed to lock entities")
             .is_valid(e)
@@ -344,7 +346,8 @@ impl Container {
     /// Gets an mutable reference to a component from an entity.
     #[inline]
     pub fn get_component_mut<T: Component>(&mut self, e: Entity) -> Option<&mut T> {
-        if !self.entities
+        if !self
+            .entities
             .get_mut()
             .expect("Failed to lock entities")
             .is_valid(e)
@@ -357,15 +360,17 @@ impl Container {
     /// Gets a custom value from an entity
     #[inline]
     pub fn get_custom<T>(&mut self, e: Entity) -> Option<<T::Storage as StorageCustom>::Value>
-        where T: Component,
-              T::Storage: StorageCustom
+    where
+        T: Component,
+        T::Storage: StorageCustom,
     {
         self.component_write::<T>().get_custom(e)
     }
 
     /// Runs the passed function like a system
     pub fn with<'a, F, D>(&mut self, f: F) -> F::Return
-        where F: IntoWithSystem<'a, D> + 'a
+    where
+        F: IntoWithSystem<'a, D> + 'a,
     {
         let (send, recv) = mpsc::channel();
         let ret = {
@@ -376,9 +381,7 @@ impl Container {
             };
             f.run_system(&param)
         };
-        let entities = self.entities
-            .get_mut()
-            .expect("Failed to lock entities");
+        let entities = self.entities.get_mut().expect("Failed to lock entities");
         for e in recv {
             if !entities.free(e) {
                 continue;
@@ -435,10 +438,11 @@ pub trait Component: Any + Sized {
     type Storage: ComponentStorage<Self>;
 }
 
-impl <K, V, S> Component for ::std::collections::HashMap<K, V, S>
-    where K: Sync + Send + 'static,
-          V: Sync + Send + 'static,
-          S: Sync + Send + 'static,
+impl<K, V, S> Component for ::std::collections::HashMap<K, V, S>
+where
+    K: Sync + Send + 'static,
+    V: Sync + Send + 'static,
+    S: Sync + Send + 'static,
 {
     type Storage = MutWorldStore<Self>;
 }
@@ -522,31 +526,31 @@ impl <K, V, S> Component for ::std::collections::HashMap<K, V, S>
 ///   as the component value is shared between all entities.
 #[macro_export]
 macro_rules! component {
-    ($ty:ty => Map) => (
+    ($ty:ty => Map) => {
         impl $crate::Component for $ty {
             type Storage = $crate::MapStorage<$ty>;
         }
-    );
-    ($ty:ty => Vec) => (
+    };
+    ($ty:ty => Vec) => {
         impl $crate::Component for $ty {
             type Storage = $crate::VecStorage<$ty>;
         }
-    );
-    ($ty:ty => Marker) => (
+    };
+    ($ty:ty => Marker) => {
         impl $crate::Component for $ty {
             type Storage = $crate::DefaultStorage<$ty>;
         }
-    );
-    ($ty:ty => const World) => (
+    };
+    ($ty:ty => const World) => {
         impl $crate::Component for $ty {
             type Storage = $crate::ConstWorldStore<$ty>;
         }
-    );
-    ($ty:ty => mut World) => (
+    };
+    ($ty:ty => mut World) => {
         impl $crate::Component for $ty {
             type Storage = $crate::MutWorldStore<$ty>;
         }
-    );
+    };
 }
 
 #[cfg(test)]
@@ -581,7 +585,8 @@ impl Systems {
     /// Masks can be chained as followed to iterator over the intersection of multiple
     /// types `pos.mask().and(vel)`.
     pub fn add<S, D>(&mut self, system: S)
-        where S: IntoSyncSystem<D>
+    where
+        S: IntoSyncSystem<D>,
     {
         system.into_system(&mut self.scheduler);
     }
@@ -639,20 +644,29 @@ pub struct BorrowBuilder<'a> {
     to_remove: Vec<TypeId>,
 }
 
-impl <'a> BorrowBuilder<'a> {
-
+impl<'a> BorrowBuilder<'a> {
     /// Borrows a immutable reference and attaches it to the world.
     pub fn borrow<T>(mut self, val: &'a T) -> BorrowBuilder<'a>
-        where T: Component<Storage=ConstWorldStore<T>> + Send + Sync,
+    where
+        T: Component<Storage = ConstWorldStore<T>> + Send + Sync,
     {
         let id = TypeId::of::<T>();
         {
-            let store = unsafe { &mut *self.container.components.components.get_mut(&id)
-                .unwrap()
-                .get() };
+            let store = unsafe {
+                &mut *self
+                    .container
+                    .components
+                    .components
+                    .get_mut(&id)
+                    .unwrap()
+                    .get()
+            };
             store.mask.set(0, true);
-            let s = store.store.as_mut_any()
-                .downcast_mut::<ConstWorldStore<T>>().unwrap();
+            let s = store
+                .store
+                .as_mut_any()
+                .downcast_mut::<ConstWorldStore<T>>()
+                .unwrap();
             s.val = val;
         }
         self.to_remove.push(id);
@@ -661,16 +675,26 @@ impl <'a> BorrowBuilder<'a> {
 
     /// Borrows a mutable reference and attaches it to the world.
     pub fn borrow_mut<T>(mut self, val: &'a mut T) -> BorrowBuilder<'a>
-        where T: Component<Storage=MutWorldStore<T>> + Send + Sync,
+    where
+        T: Component<Storage = MutWorldStore<T>> + Send + Sync,
     {
         let id = TypeId::of::<T>();
         {
-            let store = unsafe { &mut *self.container.components.components.get_mut(&id)
-                .unwrap()
-                .get() };
+            let store = unsafe {
+                &mut *self
+                    .container
+                    .components
+                    .components
+                    .get_mut(&id)
+                    .unwrap()
+                    .get()
+            };
             store.mask.set(0, true);
-            let s = store.store.as_mut_any()
-                .downcast_mut::<MutWorldStore<T>>().unwrap();
+            let s = store
+                .store
+                .as_mut_any()
+                .downcast_mut::<MutWorldStore<T>>()
+                .unwrap();
             s.val = val;
         }
         self.to_remove.push(id);
@@ -687,9 +711,15 @@ impl <'a> BorrowBuilder<'a> {
         use std::panic;
         let err = self.sys.run_internal(self.container);
         for id in self.to_remove {
-            let store = unsafe { &mut *self.container.components.components.get_mut(&id)
-                .unwrap()
-                .get() };
+            let store = unsafe {
+                &mut *self
+                    .container
+                    .components
+                    .components
+                    .get_mut(&id)
+                    .unwrap()
+                    .get()
+            };
             store.mask.set(0, false);
             store.store.free_id(0);
         }
@@ -705,8 +735,7 @@ pub struct EntityManager<'a> {
     kill_chan: &'a Mutex<mpsc::Sender<Entity>>,
 }
 
-impl <'a> EntityManager<'a> {
-
+impl<'a> EntityManager<'a> {
     /// Returns whether the entity is still valid.
     ///
     /// Entity ids can be reused but the generation will be changed allowing
@@ -739,9 +768,10 @@ impl <'a> EntityManager<'a> {
 
     /// Returns an iterator that iterates over every active entity.
     #[inline]
-    pub fn iter_all(&'a self)
-    -> MaskedEntityIter<
-        impl Deref<Target=internal::EntityAllocator> + '_,
+    pub fn iter_all(
+        &'a self,
+    ) -> MaskedEntityIter<
+        impl Deref<Target = internal::EntityAllocator> + '_,
         impl for<'b> Fn(&'b internal::EntityAllocator, usize) -> bool + '_,
     > {
         let ea = self.entities.read().unwrap();
@@ -756,9 +786,11 @@ impl <'a> EntityManager<'a> {
     /// Returns an iterator that iterates over every active entity
     /// which contains the components represented by the passed mask.
     #[inline]
-    pub fn iter_mask(&'a self, mask: &'a EntityMask)
-    -> MaskedEntityIter<
-        impl Deref<Target=internal::EntityAllocator> + '_,
+    pub fn iter_mask(
+        &'a self,
+        mask: &'a EntityMask,
+    ) -> MaskedEntityIter<
+        impl Deref<Target = internal::EntityAllocator> + '_,
         impl for<'b> Fn(&'b internal::EntityAllocator, usize) -> bool + '_,
     > {
         let ea = self.entities.read().unwrap();
@@ -774,12 +806,16 @@ impl <'a> EntityManager<'a> {
     /// which contains the components passed in.
     #[inline]
     pub fn par_group<F>(&'a self, components: F) -> GroupPar<'a, F>
-        where F: FetchableComponent<'a>,
-              F::Component: Send + Sync
+    where
+        F: FetchableComponent<'a>,
+        F::Component: Send + Sync,
     {
         let mask = components.mask();
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -795,14 +831,18 @@ impl <'a> EntityManager<'a> {
     /// which contains the components passed in.
     #[inline]
     pub fn par_group_mask<'b, F, MaskOp>(&'a self, components: F, op: MaskOp) -> GroupPar<'a, F>
-        where F: FetchableComponent<'a>,
-              F::Component: Send + Sync,
-              MaskOp: FnOnce(EntityMask) -> EntityMask + 'b
+    where
+        F: FetchableComponent<'a>,
+        F::Component: Send + Sync,
+        MaskOp: FnOnce(EntityMask) -> EntityMask + 'b,
     {
         let mask = components.mask();
         let mask = op(mask);
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -818,11 +858,15 @@ impl <'a> EntityManager<'a> {
     /// which contains the components passed in.
     #[inline]
     pub fn group<F>(&'a self, components: F) -> Group<'a, F>
-        where F: FetchableComponent<'a>,
+    where
+        F: FetchableComponent<'a>,
     {
         let mask = components.mask();
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -839,13 +883,17 @@ impl <'a> EntityManager<'a> {
     /// which contains the components passed in.
     #[inline]
     pub fn group_mask<'b, F, MaskOp>(&'a self, components: F, op: MaskOp) -> Group<'a, F>
-        where F: FetchableComponent<'a>,
-              MaskOp: FnOnce(EntityMask) -> EntityMask + 'b
+    where
+        F: FetchableComponent<'a>,
+        MaskOp: FnOnce(EntityMask) -> EntityMask + 'b,
     {
         let mask = components.mask();
         let mask = op(mask);
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -888,9 +936,13 @@ impl EntityMask {
     #[inline]
     pub fn and_component<T: Component>(mut self, c: &Container) -> EntityMask {
         use std::cmp::min;
-        let wrap = unsafe { &*c.components.components.get(&TypeId::of::<T>())
-            .expect("Component not registered")
-            .get() };
+        let wrap = unsafe {
+            &*c.components
+                .components
+                .get(&TypeId::of::<T>())
+                .expect("Component not registered")
+                .get()
+        };
         self.max = min(self.max, wrap.max as u32);
         self.mask.and(&wrap.mask);
         self
@@ -901,9 +953,13 @@ impl EntityMask {
     #[inline]
     pub fn and_not_component<T: Component>(mut self, c: &Container) -> EntityMask {
         use std::cmp::max;
-        let wrap = unsafe { &*c.components.components.get(&TypeId::of::<T>())
-            .expect("Component not registered")
-            .get() };
+        let wrap = unsafe {
+            &*c.components
+                .components
+                .get(&TypeId::of::<T>())
+                .expect("Component not registered")
+                .get()
+        };
         self.max = max(self.max, wrap.max as u32);
         self.mask.and_not(&wrap.mask);
         self
@@ -925,9 +981,10 @@ pub struct MaskedEntityIter<T, F> {
     test_mask: F,
 }
 
-impl <T, F> Iterator for MaskedEntityIter<T, F>
-    where T: Deref<Target=internal::EntityAllocator>,
-          F: for<'a> Fn(&'a internal::EntityAllocator, usize) -> bool,
+impl<T, F> Iterator for MaskedEntityIter<T, F>
+where
+    T: Deref<Target = internal::EntityAllocator>,
+    F: for<'a> Fn(&'a internal::EntityAllocator, usize) -> bool,
 {
     type Item = Entity;
 
@@ -940,7 +997,7 @@ impl <T, F> Iterator for MaskedEntityIter<T, F>
                 return Some(Entity {
                     id,
                     generation: self.entities.generations[id as usize],
-                })
+                });
             }
         }
         None
@@ -948,29 +1005,24 @@ impl <T, F> Iterator for MaskedEntityIter<T, F>
 }
 
 /// A function which is a system.
-pub trait SystemFunction: internal::InternalFunction {
-
-}
+pub trait SystemFunction: internal::InternalFunction {}
 
 /// A type that can be used to provide access to components
 /// whilst executing a system.
-pub trait ComponentAccessor: internal::Accessor {
-
-}
+pub trait ComponentAccessor: internal::Accessor {}
 
 /// Marks the accessor as being safe to use via threads
-pub unsafe trait SyncComponentAccessor {
-
-}
+pub unsafe trait SyncComponentAccessor {}
 
 /// Marks the system's components as being safe to use via threads
-pub unsafe trait SyncComponentSystem<'a>: System<'a> {
+pub unsafe trait SyncComponentSystem<'a>: System<'a> {}
 
+unsafe impl<'a, T> SyncComponentSystem<'a> for T
+where
+    T: System<'a>,
+    T::Param: SyncComponentAccessor,
+{
 }
-
-unsafe impl <'a, T> SyncComponentSystem<'a> for T
-    where T: System<'a>,
-          T::Param: SyncComponentAccessor {}
 
 /// Allows storages to return a custom value
 pub trait StorageCustom {
@@ -989,23 +1041,23 @@ pub struct Write<'a, T: Component> {
     storage: *mut T::Storage,
 }
 
-impl <'a, T> Write<'a, T>
-    where T: Component,
-          T::Storage: StorageCustom
+impl<'a, T> Write<'a, T>
+where
+    T: Component,
+    T::Storage: StorageCustom,
 {
-
     /// Gets a custom value from an entity
     #[inline]
     pub fn get_custom(&mut self, e: Entity) -> Option<<T::Storage as StorageCustom>::Value> {
         let storage = unsafe { &mut *self.storage };
-        if !T::Storage::self_bookkeeps() && !unsafe {&*self.wrap}.mask.get(e.id as usize) {
+        if !T::Storage::self_bookkeeps() && !unsafe { &*self.wrap }.mask.get(e.id as usize) {
             return None;
         }
         Some(storage.get(e.id))
     }
 }
 
-impl <'a, T: Component> Write<'a, T> {
+impl<'a, T: Component> Write<'a, T> {
     /// Returns a read accessor of this component type
     pub fn read(&self) -> Read<'a, T> {
         Read {
@@ -1019,7 +1071,7 @@ impl <'a, T: Component> Write<'a, T> {
     #[allow(clippy::ref_in_deref)]
     pub fn get_component(&self, e: Entity) -> Option<&T> {
         let storage = unsafe { &*self.storage };
-        if !T::Storage::self_bookkeeps()  {
+        if !T::Storage::self_bookkeeps() {
             unsafe {
                 if (&*self.wrap).mask.get(e.id as usize) {
                     Some(storage.get_unchecked_component(e.id))
@@ -1037,7 +1089,7 @@ impl <'a, T: Component> Write<'a, T> {
     #[allow(clippy::ref_in_deref)]
     pub fn get_component_mut(&mut self, e: Entity) -> Option<&mut T> {
         let storage = unsafe { &mut *self.storage };
-        if !T::Storage::self_bookkeeps()  {
+        if !T::Storage::self_bookkeeps() {
             unsafe {
                 if (&*self.wrap).mask.get(e.id as usize) {
                     Some(storage.get_unchecked_component_mut(e.id))
@@ -1057,16 +1109,17 @@ impl <'a, T: Component> Write<'a, T> {
     #[inline]
     #[allow(clippy::ref_in_deref)]
     pub fn get_component_or_insert<F>(&mut self, e: Entity, f: F) -> &mut T
-        where F: FnOnce() -> T
+    where
+        F: FnOnce() -> T,
     {
         use std::cmp;
         let storage = unsafe { &mut *self.storage };
-        let wrap = unsafe {&mut *self.wrap};
+        let wrap = unsafe { &mut *self.wrap };
         if wrap.max <= e.id as usize {
             wrap.max = cmp::max(wrap.max * 2, e.id as usize + 1);
             wrap.mask.resize(wrap.max);
         }
-        if !T::Storage::self_bookkeeps()  {
+        if !T::Storage::self_bookkeeps() {
             unsafe {
                 if (&*self.wrap).mask.get(e.id as usize) {
                     storage.get_unchecked_component_mut(e.id)
@@ -1086,7 +1139,7 @@ impl <'a, T: Component> Write<'a, T> {
     pub fn add_component(&mut self, e: Entity, val: T) {
         use std::cmp;
         let storage = unsafe { &mut *self.storage };
-        let wrap = unsafe {&mut *self.wrap};
+        let wrap = unsafe { &mut *self.wrap };
         if wrap.max <= e.id as usize {
             wrap.max = cmp::max(wrap.max * 2, e.id as usize + 1);
             wrap.mask.resize(wrap.max);
@@ -1102,7 +1155,7 @@ impl <'a, T: Component> Write<'a, T> {
     #[inline]
     pub fn remove_component(&mut self, e: Entity) -> Option<T> {
         let storage = unsafe { &mut *self.storage };
-        let wrap = unsafe {&mut *self.wrap};
+        let wrap = unsafe { &mut *self.wrap };
         if !T::Storage::self_bookkeeps() && !wrap.mask.get(e.id as usize) {
             return None;
         }
@@ -1113,7 +1166,7 @@ impl <'a, T: Component> Write<'a, T> {
     /// Returns a mask which contains every entity with this component
     #[inline]
     pub fn mask(&self) -> EntityMask {
-        let wrap = unsafe {&*self.wrap};
+        let wrap = unsafe { &*self.wrap };
         EntityMask {
             mask: wrap.mask.clone(),
             max: wrap.max as u32,
@@ -1123,10 +1176,14 @@ impl <'a, T: Component> Write<'a, T> {
     /// Returns a parallel iterator over the components
     #[inline]
     pub fn par_iter<'b>(&'b mut self, mask: &'b EntityMask) -> WriteParIter<'b, T>
-        where T: Sync + Send
+    where
+        T: Sync + Send,
     {
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -1138,10 +1195,9 @@ impl <'a, T: Component> Write<'a, T> {
         }
     }
 }
-impl <'a, T: Component> ComponentAccessor for Write<'a, T> {}
-unsafe impl <'a, T> SyncComponentAccessor for Write<'a, T>
-    where T: Component + Sync + Send {}
-impl <'a, T: Component> internal::Accessor for Write<'a, T> {
+impl<'a, T: Component> ComponentAccessor for Write<'a, T> {}
+unsafe impl<'a, T> SyncComponentAccessor for Write<'a, T> where T: Component + Sync + Send {}
+impl<'a, T: Component> internal::Accessor for Write<'a, T> {
     type Component = T;
 
     #[inline]
@@ -1150,16 +1206,10 @@ impl <'a, T: Component> internal::Accessor for Write<'a, T> {
     }
 
     fn new(store: &internal::ComponentStore) -> Self {
-        let back_store = unsafe { &mut *store.components.get(&TypeId::of::<T>())
-                .unwrap()
-                .get() };
+        let back_store = unsafe { &mut *store.components.get(&TypeId::of::<T>()).unwrap().get() };
         Write {
             _t: PhantomData,
-            storage: back_store
-                .store
-                .as_mut_any()
-                .downcast_mut()
-                .unwrap(),
+            storage: back_store.store.as_mut_any().downcast_mut().unwrap(),
             wrap: back_store,
         }
     }
@@ -1191,16 +1241,16 @@ pub struct Read<'a, T: Component> {
 }
 
 // Only immutable access so its safe to access from multiple threads
-unsafe impl <'a, T: Component + Send> Send for Read<'a, T> {}
-unsafe impl <'a, T: Component + Sync> Sync for Read<'a, T> {}
+unsafe impl<'a, T: Component + Send> Send for Read<'a, T> {}
+unsafe impl<'a, T: Component + Sync> Sync for Read<'a, T> {}
 
-impl <'a, T: Component> Read<'a, T> {
+impl<'a, T: Component> Read<'a, T> {
     /// Gets an immutable reference to a component from an entity.
     #[inline]
     #[allow(clippy::ref_in_deref)]
     pub fn get_component(&self, e: Entity) -> Option<&T> {
         let storage = unsafe { &*self.storage };
-        if !T::Storage::self_bookkeeps()  {
+        if !T::Storage::self_bookkeeps() {
             unsafe {
                 if (&*self.wrap).mask.get(e.id as usize) {
                     Some(storage.get_unchecked_component(e.id))
@@ -1216,7 +1266,7 @@ impl <'a, T: Component> Read<'a, T> {
     /// Returns a mask which contains every entity with this component
     #[inline]
     pub fn mask(&self) -> EntityMask {
-        let wrap = unsafe {&*self.wrap};
+        let wrap = unsafe { &*self.wrap };
         EntityMask {
             mask: wrap.mask.clone(),
             max: wrap.max as u32,
@@ -1226,10 +1276,14 @@ impl <'a, T: Component> Read<'a, T> {
     /// Returns a parallel iterator over the components
     #[inline]
     pub fn par_iter<'b>(&'b self, mask: &'b EntityMask) -> ReadParIter<'b, T>
-        where T: Sync + Send
+    where
+        T: Sync + Send,
     {
         let mut est_size = mask.mask.data.len() * 64;
-        est_size -= mask.mask.data.iter()
+        est_size -= mask
+            .mask
+            .data
+            .iter()
             .rev()
             .position(|v| *v != 0)
             .unwrap_or(est_size);
@@ -1241,10 +1295,9 @@ impl <'a, T: Component> Read<'a, T> {
         }
     }
 }
-impl <'a, T: Component> ComponentAccessor for Read<'a, T> {}
-unsafe impl <'a, T> SyncComponentAccessor for Read<'a, T>
-    where T: Component + Sync + Send {}
-impl <'a, T: Component> internal::Accessor for Read<'a, T> {
+impl<'a, T: Component> ComponentAccessor for Read<'a, T> {}
+unsafe impl<'a, T> SyncComponentAccessor for Read<'a, T> where T: Component + Sync + Send {}
+impl<'a, T: Component> internal::Accessor for Read<'a, T> {
     type Component = T;
 
     #[inline]
@@ -1253,16 +1306,10 @@ impl <'a, T: Component> internal::Accessor for Read<'a, T> {
     }
 
     fn new(store: &internal::ComponentStore) -> Self {
-        let back_store = unsafe { &*store.components.get(&TypeId::of::<T>())
-                .unwrap()
-                .get() };
+        let back_store = unsafe { &*store.components.get(&TypeId::of::<T>()).unwrap().get() };
         Read {
             _t: PhantomData,
-            storage: back_store
-                .store
-                .as_any()
-                .downcast_ref()
-                .unwrap(),
+            storage: back_store.store.as_any().downcast_ref().unwrap(),
             wrap: back_store,
         }
     }
@@ -1296,12 +1343,9 @@ pub trait System<'a> {
 }
 
 /// A set of accessors
-pub trait AccessorSet: internal::AccessorSet {
+pub trait AccessorSet: internal::AccessorSet {}
 
-}
-
-impl <T> AccessorSet for T
-    where T: internal::AccessorSet {}
+impl<T> AccessorSet for T where T: internal::AccessorSet {}
 
 /// Helper trait to convert types into systems
 pub trait IntoSyncSystem<Dummy> {
@@ -1309,8 +1353,9 @@ pub trait IntoSyncSystem<Dummy> {
     fn into_system(self, scheduler: &mut internal::Scheduler);
 }
 
-impl <S> IntoSyncSystem<S> for S
-    where S: for<'a> SyncComponentSystem<'a> + Send + Sync + 'static
+impl<S> IntoSyncSystem<S> for S
+where
+    S: for<'a> SyncComponentSystem<'a> + Send + Sync + 'static,
 {
     fn into_system(self, scheduler: &mut internal::Scheduler) {
         scheduler.add(self);
@@ -1319,7 +1364,7 @@ impl <S> IntoSyncSystem<S> for S
 /// Helper trait to convert types into systems
 pub trait IntoSystem<'a, Dummy> {
     #[doc(hidden)]
-    fn run_system(self, sysparam: &internal::SystemParam) ;
+    fn run_system(self, sysparam: &internal::SystemParam);
 }
 
 /// Helper trait to convert types into systems
@@ -1330,10 +1375,11 @@ pub trait IntoWithSystem<'a, Dummy> {
     fn run_system(self, sysparam: &internal::SystemParam) -> Self::Return;
 }
 
-impl <'a, S> IntoSystem<'a, S> for S
-    where S: for<'inner> System<'inner> + 'a
+impl<'a, S> IntoSystem<'a, S> for S
+where
+    S: for<'inner> System<'inner> + 'a,
 {
-    fn run_system(self, sysparam: &internal::SystemParam)  {
+    fn run_system(self, sysparam: &internal::SystemParam) {
         use crate::internal::AccessorSet;
         let entities = EntityManager {
             kill_chan: &sysparam.kill_chan,
@@ -1343,8 +1389,9 @@ impl <'a, S> IntoSystem<'a, S> for S
         self.run(entities, param);
     }
 }
-impl <'a, S> IntoWithSystem<'a, S> for S
-    where S: IntoSystem<'a, S>
+impl<'a, S> IntoWithSystem<'a, S> for S
+where
+    S: IntoSystem<'a, S>,
 {
     type Return = ();
     fn run_system(self, sysparam: &internal::SystemParam) -> Self::Return {
@@ -1528,7 +1575,6 @@ impl_system_functions!(
     closure26 => Z
 );
 
-
 /// A component that can be accessed genericly
 pub unsafe trait FetchableComponent<'a> {
     /// The component (or reference) that'll be returned
@@ -1544,8 +1590,9 @@ pub unsafe trait FetchableComponent<'a> {
     fn mask(&self) -> EntityMask;
 }
 
-unsafe impl <'a, 'b, T> FetchableComponent<'a> for &'a mut Write<'b, T>
-    where T: Component
+unsafe impl<'a, 'b, T> FetchableComponent<'a> for &'a mut Write<'b, T>
+where
+    T: Component,
 {
     type Component = &'a mut T;
 
@@ -1561,8 +1608,9 @@ unsafe impl <'a, 'b, T> FetchableComponent<'a> for &'a mut Write<'b, T>
     }
 }
 
-unsafe impl <'a, 'b, T> FetchableComponent<'a> for &'a Write<'b, T>
-    where T: Component
+unsafe impl<'a, 'b, T> FetchableComponent<'a> for &'a Write<'b, T>
+where
+    T: Component,
 {
     type Component = &'a T;
 
@@ -1578,8 +1626,9 @@ unsafe impl <'a, 'b, T> FetchableComponent<'a> for &'a Write<'b, T>
     }
 }
 
-unsafe impl <'a, 'b, T> FetchableComponent<'a> for &'a Read<'b, T>
-    where T: Component
+unsafe impl<'a, 'b, T> FetchableComponent<'a> for &'a Read<'b, T>
+where
+    T: Component,
 {
     type Component = &'a T;
 

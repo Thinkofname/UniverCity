@@ -1,8 +1,7 @@
-
 use super::*;
-use crate::render::exmodel;
 use crate::render;
-use cgmath::{InnerSpace, Vector4, Vector3, Matrix4, Decomposed, Quaternion, Deg, Rotation3};
+use crate::render::exmodel;
+use cgmath::{Decomposed, Deg, InnerSpace, Matrix4, Quaternion, Rotation3, Vector3, Vector4};
 
 pub(super) struct Model {
     pub verts_x: Vec<GLVertex>,
@@ -10,12 +9,16 @@ pub(super) struct Model {
 }
 
 impl Model {
-    pub(super) fn load(log: &Logger,
-                assets: &AssetManager,
-                target_atlas: &mut render::GlobalAtlas,
-                key: ResourceKey<'_>) -> Model
-    {
-        let mut file = assume!(log, assets.open_from_pack(key.module_key(), &format!("models/{}.umod", key.resource())));
+    pub(super) fn load(
+        log: &Logger,
+        assets: &AssetManager,
+        target_atlas: &mut render::GlobalAtlas,
+        key: ResourceKey<'_>,
+    ) -> Model {
+        let mut file = assume!(
+            log,
+            assets.open_from_pack(key.module_key(), &format!("models/{}.umod", key.resource()))
+        );
         let minfo = assume!(log, exmodel::Model::read_from(&mut file));
 
         let mut mdl = Model {
@@ -27,20 +30,27 @@ impl Model {
             scale: 0.1,
             rot: Quaternion::from_angle_x(Deg(90.0)),
             disp: Vector3::new(1.0, 0.0, 0.5),
-        }.into();
+        }
+        .into();
         let xtrans = xtrans * minfo.transform;
 
         let ztrans: Matrix4<f32> = Decomposed {
             scale: 0.1,
-            rot: Quaternion::from_angle_y(Deg(-90.0))
-                * Quaternion::from_angle_x(Deg(90.0)),
+            rot: Quaternion::from_angle_y(Deg(-90.0)) * Quaternion::from_angle_x(Deg(90.0)),
             disp: Vector3::new(0.5, 0.0, 1.0),
-        }.into();
+        }
+        .into();
         let ztrans = ztrans * minfo.transform;
 
-        let mut sub = minfo.sub_textures.iter()
-            .map(|v| (v.0, LazyResourceKey::parse(&v.1)
-                .or_module(key.module_key())))
+        let mut sub = minfo
+            .sub_textures
+            .iter()
+            .map(|v| {
+                (
+                    v.0,
+                    LazyResourceKey::parse(&v.1).or_module(key.module_key()),
+                )
+            })
             .collect::<Vec<_>>();
         sub.push((minfo.verts.len(), ResourceKey::new("base", "solid")));
 
@@ -49,19 +59,49 @@ impl Model {
                 let idx = *i as usize;
                 let v = &minfo.verts[idx];
 
-                let tex = assume!(log, sub.windows(2)
-                    .find(|v| idx < v[1].0)
-                    .map(|v| &v[0]));
+                let tex = assume!(log, sub.windows(2).find(|v| idx < v[1].0).map(|v| &v[0]));
                 let tex = tex.1.borrow();
 
                 let texture_id = if tex == ResourceKey::new("base", "wall_placeholder") {
-                    (-1, Rect { x: 0, y: 0, width: 128, height: 128})
+                    (
+                        -1,
+                        Rect {
+                            x: 0,
+                            y: 0,
+                            width: 128,
+                            height: 128,
+                        },
+                    )
                 } else if tex == ResourceKey::new("base", "wall_back_placeholder") {
-                    (-2, Rect { x: 0, y: 0, width: 128, height: 128})
+                    (
+                        -2,
+                        Rect {
+                            x: 0,
+                            y: 0,
+                            width: 128,
+                            height: 128,
+                        },
+                    )
                 } else if tex == ResourceKey::new("base", "wall_top_placeholder") {
-                    (-3, Rect { x: 0, y: 0, width: 128, height: 128})
+                    (
+                        -3,
+                        Rect {
+                            x: 0,
+                            y: 0,
+                            width: 128,
+                            height: 128,
+                        },
+                    )
                 } else if tex == ResourceKey::new("base", "wall_side_placeholder") {
-                    (-4, Rect { x: 0, y: 0, width: 128, height: 128})
+                    (
+                        -4,
+                        Rect {
+                            x: 0,
+                            y: 0,
+                            width: 128,
+                            height: 128,
+                        },
+                    )
                 } else {
                     Terrain::get_texture_id(log, assets, target_atlas, tex)
                 };

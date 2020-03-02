@@ -30,9 +30,12 @@ impl Frustum {
     /// Returns whether the point is within the frustum
     pub fn contains_point(&self, p: cgmath::Vector3<f32>) -> bool {
         for plane in &[
-            self.right, self.left,
-            self.bottom, self.top,
-            self.far, self.near
+            self.right,
+            self.left,
+            self.bottom,
+            self.top,
+            self.far,
+            self.near,
         ] {
             if plane.normal.dot(p) - plane.distance < 0.0 {
                 return false;
@@ -44,9 +47,12 @@ impl Frustum {
     /// Returns whether the sphere is within the frustum
     pub fn contains_sphere(&self, p: cgmath::Vector3<f32>, radius: f32) -> bool {
         for plane in &[
-            self.right, self.left,
-            self.bottom, self.top,
-            self.far, self.near
+            self.right,
+            self.left,
+            self.bottom,
+            self.top,
+            self.far,
+            self.near,
         ] {
             if plane.normal.dot(p) - plane.distance < -radius {
                 return false;
@@ -59,25 +65,16 @@ impl Frustum {
     /// two points (min, max) is within the frustum.
     pub fn contains_aabb(&self, min: cgmath::Vector3<f32>, max: cgmath::Vector3<f32>) -> bool {
         for plane in &[
-            self.right, self.left,
-            self.bottom, self.top,
-            self.far, self.near
+            self.right,
+            self.left,
+            self.bottom,
+            self.top,
+            self.far,
+            self.near,
         ] {
-            let bx = if plane.normal.x < 0.0 {
-                min.x
-            } else {
-                max.x
-            };
-            let by = if plane.normal.y < 0.0 {
-                min.y
-            } else {
-                max.y
-            };
-            let bz = if plane.normal.z < 0.0 {
-                min.z
-            } else {
-                max.z
-            };
+            let bx = if plane.normal.x < 0.0 { min.x } else { max.x };
+            let by = if plane.normal.y < 0.0 { min.y } else { max.y };
+            let bz = if plane.normal.z < 0.0 { min.z } else { max.z };
             let distance = plane.normal.dot(cgmath::Vector3::new(bx, by, bz));
             if distance < plane.distance {
                 return false;

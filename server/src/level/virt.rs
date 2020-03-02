@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::util::*;
 
@@ -41,7 +40,11 @@ impl RoomVirtualLevel {
     pub(super) fn new(
         log: &Logger,
         id: room::Id,
-        x: i32, y: i32, w: u32, h: u32, room_bounds: Bound,
+        x: i32,
+        y: i32,
+        w: u32,
+        h: u32,
+        room_bounds: Bound,
         asset_manager: AssetManager,
     ) -> RoomVirtualLevel {
         RoomVirtualLevel {
@@ -55,21 +58,24 @@ impl RoomVirtualLevel {
                 Location::new(x + w as i32 - 1, y + h as i32 - 1),
             ),
             room_bounds,
-            tiles: vec![TileData{
-                id: 0,
-                owner: None,
-                flags: TileFlag::empty(),
-            }; (w * h) as usize],
+            tiles: vec![
+                TileData {
+                    id: 0,
+                    owner: None,
+                    flags: TileFlag::empty(),
+                };
+                (w * h) as usize
+            ],
             tile_map: IntMap::new(),
-            walls: vec![WallData{
-                data: [None; 2],
-            }; ((w + 1) * (h + 1)) as usize],
+            walls: vec![WallData { data: [None; 2] }; ((w + 1) * (h + 1)) as usize],
             dirty: true,
             asset_manager,
             objects: vec![],
             object_placement: None,
 
-            placement_map: BitSet::new((room_bounds.width() * 4 * room_bounds.height() * 4) as usize),
+            placement_map: BitSet::new(
+                (room_bounds.width() * 4 * room_bounds.height() * 4) as usize,
+            ),
             has_border: false,
             should_lower_walls: false,
             window_type: vec![],
@@ -87,7 +93,10 @@ impl RoomVirtualLevel {
     /// Shares a tile map with the passed level
     pub fn set_tile(&mut self, loc: Location, tile: ResourceKey<'_>) {
         if self.bounds.in_bounds(loc) {
-            let t = if let Ok(t) = self.asset_manager.loader_open::<tile::Loader>(tile.borrow()) {
+            let t = if let Ok(t) = self
+                .asset_manager
+                .loader_open::<tile::Loader>(tile.borrow())
+            {
                 t
             } else {
                 panic!("Tried to set an invalid tile: {:?}", tile);
@@ -145,7 +154,9 @@ impl RoomVirtualLevel {
         if special_bounds.in_bounds(loc) {
             let loc = loc - self.offset;
             let idx = (loc.x + 1) + (loc.y + 1) * (self.width + 1) as i32;
-            self.walls.get(idx as usize).and_then(|v| v.data[dir.as_usize() >> 1])
+            self.walls
+                .get(idx as usize)
+                .and_then(|v| v.data[dir.as_usize() >> 1])
         } else {
             None
         }
@@ -181,21 +192,30 @@ impl RoomVirtualLevel {
     }
 
     pub(super) fn rebuild_placement_map(&mut self) {
-        RoomPlacement::build_placement_map(&mut self.placement_map, self.room_bounds, &self.objects);
+        RoomPlacement::build_placement_map(
+            &mut self.placement_map,
+            self.room_bounds,
+            &self.objects,
+        );
     }
 
     fn can_place_object(&self, obj: &ObjectPlacement) -> bool {
         for action in &obj.actions.0 {
-            if let ObjectPlacementAction::PlacementBound{location, size} = *action {
+            if let ObjectPlacementAction::PlacementBound { location, size } = *action {
                 let min_x = (location.0.max(self.room_bounds.min.x as f32) * 4.0).floor() as usize;
                 let min_y = (location.1.max(self.room_bounds.min.y as f32) * 4.0).floor() as usize;
-                let max_x = ((location.0 + size.0).min(self.room_bounds.max.x as f32 + 1.0) * 4.0).ceil() as usize;
-                let max_y = ((location.1 + size.1).min(self.room_bounds.max.y as f32 + 1.0) * 4.0).ceil() as usize;
-                for y in min_y .. max_y {
-                    for x in min_x .. max_x {
+                let max_x = ((location.0 + size.0).min(self.room_bounds.max.x as f32 + 1.0) * 4.0)
+                    .ceil() as usize;
+                let max_y = ((location.1 + size.1).min(self.room_bounds.max.y as f32 + 1.0) * 4.0)
+                    .ceil() as usize;
+                for y in min_y..max_y {
+                    for x in min_x..max_x {
                         let lx = x - (self.room_bounds.min.x * 4) as usize;
                         let ly = y - (self.room_bounds.min.y * 4) as usize;
-                        if self.placement_map.get(lx + ly * (self.room_bounds.width() as usize * 4)) {
+                        if self
+                            .placement_map
+                            .get(lx + ly * (self.room_bounds.width() as usize * 4))
+                        {
                             return false;
                         }
                     }
@@ -206,9 +226,17 @@ impl RoomVirtualLevel {
     }
 
     /// Replaces the object with the given id into the room
-    pub fn replace_object<EC: EntityCreator>(&mut self, entities: &mut Container, object_id: usize, obj: ObjectPlacement) {
+    pub fn replace_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        object_id: usize,
+        obj: ObjectPlacement,
+    ) {
         let id = self.id;
-        let rev = assume!(self.log, obj.apply::<_, EC>(&self.log.clone(), self, entities, id, false));
+        let rev = assume!(
+            self.log,
+            obj.apply::<_, EC>(&self.log.clone(), self, entities, id, false)
+        );
         self.objects[object_id] = Some((obj, rev));
         self.rebuild_placement_map();
         self.dirty = true;
@@ -242,12 +270,10 @@ impl LevelView for RoomVirtualLevel {
         self.asset_manager.clone()
     }
 
-
     fn get_window(&self, id: u8) -> ResourceKey<'static> {
         self.window_type[id as usize].clone()
     }
 }
-
 
 impl LevelAccess for RoomVirtualLevel {
     fn set_tile(&mut self, loc: Location, tile: ResourceKey<'_>) {
@@ -265,13 +291,21 @@ impl LevelAccess for RoomVirtualLevel {
                 let was_wall = self.get_wall_info(loc, *dir).is_some();
                 let is_wall = {
                     self.get_tile(loc).should_place_wall(self, loc, *dir)
-                        || self.get_tile(loc.shift(*dir)).should_place_wall(self, loc.shift(*dir), dir.reverse())
+                        || self.get_tile(loc.shift(*dir)).should_place_wall(
+                            self,
+                            loc.shift(*dir),
+                            dir.reverse(),
+                        )
                 };
                 if was_wall != is_wall {
                     if is_wall {
-                        self.set_wall_info(loc, *dir, Some(WallInfo {
-                            flag: TileWallFlag::None,
-                        }));
+                        self.set_wall_info(
+                            loc,
+                            *dir,
+                            Some(WallInfo {
+                                flag: TileWallFlag::None,
+                            }),
+                        );
                     } else {
                         self.set_wall_info(loc, *dir, None);
                     }
@@ -290,7 +324,8 @@ impl LevelAccess for RoomVirtualLevel {
             return id;
         }
         let id = self.window_type.len();
-        self.window_type_map.insert(key.borrow().into_owned(), id as u8);
+        self.window_type_map
+            .insert(key.borrow().into_owned(), id as u8);
         self.window_type.push(key.into_owned());
         id as u8
     }
@@ -306,12 +341,16 @@ macro_rules! virt_placer_ref {
     ($self:ident) => {{
         let rooms = $self.rooms.borrow();
         let room = ::std::cell::Ref::map(rooms, |rooms| rooms.get_room_info($self.id));
-        ::std::cell::Ref::map(room, |room| assume!($self.log, room.building_level.as_ref()))
+        ::std::cell::Ref::map(room, |room| {
+            assume!($self.log, room.building_level.as_ref())
+        })
     }};
     (mut $self:ident) => {{
         let rooms = $self.rooms.borrow_mut();
         let room = ::std::cell::RefMut::map(rooms, |rooms| rooms.get_room_info_mut($self.id));
-        ::std::cell::RefMut::map(room, |room| assume!($self.log, room.building_level.as_mut()))
+        ::std::cell::RefMut::map(room, |room| {
+            assume!($self.log, room.building_level.as_mut())
+        })
     }};
 }
 
@@ -377,9 +416,15 @@ impl ObjectPlaceable for VirtualPlacer {
         }
     }
 
-    fn is_virtual() -> bool { true }
+    fn is_virtual() -> bool {
+        true
+    }
 
-    fn remove_object<EC: EntityCreator>(&mut self, entities: &mut Container, object_id: usize) -> UResult<ObjectPlacement> {
+    fn remove_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        object_id: usize,
+    ) -> UResult<ObjectPlacement> {
         use std::mem;
         let mut objects = {
             let mut room = virt_placer_ref!(mut self);
@@ -387,9 +432,11 @@ impl ObjectPlaceable for VirtualPlacer {
         };
         let ret = Level::try_remove_object::<_, EC>(
             &self.log,
-            &mut Level::virt_placer(&self.log, &self.rooms, self.id), &mut objects,
-            entities, self.id,
-            object_id
+            &mut Level::virt_placer(&self.log, &self.rooms, self.id),
+            &mut objects,
+            entities,
+            self.id,
+            object_id,
         );
         let mut room = virt_placer_ref!(mut self);
         room.objects = objects;
@@ -397,7 +444,12 @@ impl ObjectPlaceable for VirtualPlacer {
         room.dirty = true;
         ret
     }
-    fn replace_object<EC: EntityCreator>(&mut self, entities: &mut Container, object_id: usize, obj: ObjectPlacement) {
+    fn replace_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        object_id: usize,
+        obj: ObjectPlacement,
+    ) {
         let mut room = virt_placer_ref!(mut self);
         RoomVirtualLevel::replace_object::<EC>(&mut *room, entities, object_id, obj)
     }
@@ -435,7 +487,6 @@ impl LevelView for VirtualPlacer {
         let room = virt_placer_ref!(self);
         room.asset_manager.clone()
     }
-
 
     fn get_window(&self, id: u8) -> ResourceKey<'static> {
         let room = virt_placer_ref!(self);

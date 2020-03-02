@@ -1,4 +1,3 @@
-
 /// Helper to place objects inside a room like a player would
 #[macro_export]
 macro_rules! place_objects {

@@ -56,11 +56,11 @@ pub use self::iter::*;
 mod angle;
 pub use self::angle::*;
 
+use slog::Logger;
 use std::fmt::Debug;
+use std::fs::OpenOptions;
 use std::panic;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fs::OpenOptions;
-use slog::Logger;
 
 /// Alias for a `HashMap` using FNVHash as its hasher
 pub type FNVMap<K, V> = fnv::FnvHashMap<K, V>;
@@ -86,9 +86,7 @@ struct CrashReport {
 
 #[no_mangle]
 #[inline(never)]
-pub extern "C" fn base_anchor() {
-
-}
+pub extern "C" fn base_anchor() {}
 
 /// Logs panics to a log file before
 pub fn log_panics(log: &Logger, game_version: &'static str, is_client: bool) {
@@ -97,11 +95,10 @@ pub fn log_panics(log: &Logger, game_version: &'static str, is_client: bool) {
     let old = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let payload = info.payload();
-        let msg = payload.downcast_ref::<&str>()
+        let msg = payload
+            .downcast_ref::<&str>()
             .cloned()
-            .or_else(|| payload.downcast_ref::<String>()
-                .map(|v| v.as_str())
-            )
+            .or_else(|| payload.downcast_ref::<String>().map(|v| v.as_str()))
             .unwrap_or("Box<Any>");
         let (file, line) = if let Some(loc) = info.location() {
             error!(log, "{}", msg; "file" => loc.file(), "line" => loc.line());
@@ -121,7 +118,12 @@ pub fn log_panics(log: &Logger, game_version: &'static str, is_client: bool) {
         #[cfg(target_os = "linux")]
         let os = "linux";
         let report = CrashReport {
-            game_version: format!("{}-{}-{}", game_version, if is_client { "client" } else { "server" }, os),
+            game_version: format!(
+                "{}-{}-{}",
+                game_version,
+                if is_client { "client" } else { "server" },
+                os
+            ),
             reason: msg.to_owned(),
             file: file.to_owned(),
             line: line,
@@ -134,12 +136,18 @@ pub fn log_panics(log: &Logger, game_version: &'static str, is_client: bool) {
         //     .json(&report)
         //     .send();
 
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).expect("Failed to get the timestamp").as_secs() / 10;
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to get the timestamp")
+            .as_secs()
+            / 10;
         let mut rf = OpenOptions::new()
             .append(true)
             .create(true)
-            .open(&format!("crash-report-{}.rpt", ts)).expect("Failed to create error report");
-        serde_json::to_writer_pretty(&mut rf, &report).expect("Failed to encode the report to json");
+            .open(&format!("crash-report-{}.rpt", ts))
+            .expect("Failed to create error report");
+        serde_json::to_writer_pretty(&mut rf, &report)
+            .expect("Failed to encode the report to json");
         rf.sync_all().expect("Failed to sync the report to disk");
 
         old(info);
@@ -154,7 +162,7 @@ macro_rules! assume {
     ($log:expr, $e:expr) => {
         match $crate::Assumable::assume($e) {
             Ok(val) => val,
-            Err(err) => $crate::Failable::fail(err, &$log, file!(), line!())
+            Err(err) => $crate::Failable::fail(err, &$log, file!(), line!()),
         }
     };
 }
@@ -173,8 +181,9 @@ pub trait Failable {
     fn fail(self, log: &Logger, file: &'static str, line: u32) -> !;
 }
 
-impl <V, E> Assumable for Result<V, E>
-    where E: Failable
+impl<V, E> Assumable for Result<V, E>
+where
+    E: Failable,
 {
     type Value = V;
     type Error = E;
@@ -185,7 +194,7 @@ impl <V, E> Assumable for Result<V, E>
     }
 }
 
-impl <V> Assumable for Option<V> {
+impl<V> Assumable for Option<V> {
     type Value = V;
     type Error = ();
 
@@ -195,8 +204,9 @@ impl <V> Assumable for Option<V> {
     }
 }
 
-impl <T> Failable for T
-    where T: Debug
+impl<T> Failable for T
+where
+    T: Debug,
 {
     #[cold]
     #[inline(never)]

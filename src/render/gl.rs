@@ -1,13 +1,13 @@
 #![allow(missing_docs)]
 
-use gl33 as gl;
 pub use self::gl::load_with;
+use gl33 as gl;
 
-use std::ffi;
-use std::ptr;
-use std::mem;
-use std::marker::PhantomData;
 use crate::prelude::*;
+use std::ffi;
+use std::marker::PhantomData;
+use std::mem;
+use std::ptr;
 
 bitflags! {
     pub struct BufferBit: u32 {
@@ -127,12 +127,27 @@ pub enum BlendFunc {
     OneMinusConstantColor = gl::ONE_MINUS_CONSTANT_COLOR,
     ConstantAlpha = gl::CONSTANT_ALPHA,
     OneMinusConstantAlpha = gl::ONE_MINUS_CONSTANT_ALPHA,
-
 }
 
 // No bounds checks here, can't be safe unless every ty+format combo is handled manually
-pub unsafe fn read_pixels(x: i32, y: i32, width: i32, height: i32, format: TextureFormat, ty: Type, data: &mut [u8]) {
-    gl::ReadPixels(x as _, y as _, width as _, height as _, format as _, ty as _, data.as_mut_ptr() as *mut _);
+pub unsafe fn read_pixels(
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    format: TextureFormat,
+    ty: Type,
+    data: &mut [u8],
+) {
+    gl::ReadPixels(
+        x as _,
+        y as _,
+        width as _,
+        height as _,
+        format as _,
+        ty as _,
+        data.as_mut_ptr() as *mut _,
+    );
 }
 
 pub fn polygon_offset(factor: f32, units: f32) {
@@ -245,7 +260,13 @@ pub fn draw_arrays_instanced(ty: DrawType, offset: usize, count: usize, prim_cou
 
 pub fn draw_elements_instanced(ty: DrawType, count: usize, ety: Type, prim_count: usize) {
     unsafe {
-        gl::DrawElementsInstanced(ty as u32, count as i32, ety as u32, ptr::null(), prim_count as i32);
+        gl::DrawElementsInstanced(
+            ty as u32,
+            count as i32,
+            ety as u32,
+            ptr::null(),
+            prim_count as i32,
+        );
     }
 }
 
@@ -320,29 +341,49 @@ impl Buffer {
     #[inline]
     pub fn alloc_size<T>(&self, target: BufferTarget, len: usize, usage: BufferUsage) {
         unsafe {
-            gl::BufferData(target as u32, (len * mem::size_of::<T>()) as isize, ptr::null(), usage as u32);
+            gl::BufferData(
+                target as u32,
+                (len * mem::size_of::<T>()) as isize,
+                ptr::null(),
+                usage as u32,
+            );
         }
     }
 
     #[inline]
     pub fn set_data<T>(&self, target: BufferTarget, data: &[T], usage: BufferUsage) {
         unsafe {
-            gl::BufferData(target as u32, (data.len() * mem::size_of::<T>()) as isize, data.as_ptr() as *const _, usage as u32);
+            gl::BufferData(
+                target as u32,
+                (data.len() * mem::size_of::<T>()) as isize,
+                data.as_ptr() as *const _,
+                usage as u32,
+            );
         }
     }
 
     #[inline]
     pub fn set_data_range<T>(&self, target: BufferTarget, data: &[T], start: i32) {
         unsafe {
-            gl::BufferSubData(target as u32, start as isize * mem::size_of::<T>() as isize, (data.len() * mem::size_of::<T>()) as isize, data.as_ptr() as *const _);
+            gl::BufferSubData(
+                target as u32,
+                start as isize * mem::size_of::<T>() as isize,
+                (data.len() * mem::size_of::<T>()) as isize,
+                data.as_ptr() as *const _,
+            );
         }
     }
 
-    pub unsafe fn write_unsync<T>(&self, target: BufferTarget, length: usize) -> MappedWriteBuffer<'_, T> {
+    pub unsafe fn write_unsync<T>(
+        &self,
+        target: BufferTarget,
+        length: usize,
+    ) -> MappedWriteBuffer<'_, T> {
         let data = gl::MapBufferRange(
-            target as u32, 0,
+            target as u32,
+            0,
             (length * mem::size_of::<T>()) as isize,
-            gl::MAP_WRITE_BIT | gl::MAP_UNSYNCHRONIZED_BIT | gl::MAP_INVALIDATE_BUFFER_BIT
+            gl::MAP_WRITE_BIT | gl::MAP_UNSYNCHRONIZED_BIT | gl::MAP_INVALIDATE_BUFFER_BIT,
         );
         MappedWriteBuffer {
             target,
@@ -370,7 +411,7 @@ pub struct MappedWriteBuffer<'a, T> {
     _not_send_sync: PhantomData<*mut ()>,
 }
 
-impl <'a, T> ::std::ops::Deref for MappedWriteBuffer<'a, T> {
+impl<'a, T> ::std::ops::Deref for MappedWriteBuffer<'a, T> {
     type Target = [T];
 
     fn deref(&self) -> &[T] {
@@ -378,14 +419,13 @@ impl <'a, T> ::std::ops::Deref for MappedWriteBuffer<'a, T> {
     }
 }
 
-impl <'a, T> ::std::ops::DerefMut for MappedWriteBuffer<'a, T> {
-
+impl<'a, T> ::std::ops::DerefMut for MappedWriteBuffer<'a, T> {
     fn deref_mut(&mut self) -> &mut [T] {
         unsafe { ::std::slice::from_raw_parts_mut(self.data, self.len) }
     }
 }
 
-impl <'a, T> Drop for MappedWriteBuffer<'a, T> {
+impl<'a, T> Drop for MappedWriteBuffer<'a, T> {
     fn drop(&mut self) {
         unsafe {
             gl::UnmapBuffer(self.target as u32);
@@ -510,7 +550,6 @@ impl Program {
             let name_c = ffi::CString::new(name).expect("Failed to create CString");
             gl::BindAttribLocation(self.internal, index, name_c.as_ptr());
         }
-
     }
 }
 
@@ -554,7 +593,12 @@ impl Shader {
                 gl::GetShaderiv(self.internal, gl::INFO_LOG_LENGTH, &mut len);
                 let mut buffer = Vec::with_capacity(len as usize);
                 buffer.set_len(len as usize);
-                gl::GetShaderInfoLog(self.internal, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut _);
+                gl::GetShaderInfoLog(
+                    self.internal,
+                    len,
+                    ptr::null_mut(),
+                    buffer.as_mut_ptr() as *mut _,
+                );
                 let msg = ffi::CStr::from_ptr(buffer.as_ptr());
                 Err(msg.to_string_lossy().into_owned())
             } else {
@@ -682,13 +726,20 @@ impl Attribute {
 
     pub fn vertex_pointer(self, size: i32, ty: Type, normalized: bool, stride: i32, offset: i32) {
         unsafe {
-            gl::VertexAttribPointer(self.internal, size, ty as u32, normalized as u8, stride, offset as *const _);
+            gl::VertexAttribPointer(
+                self.internal,
+                size,
+                ty as u32,
+                normalized as u8,
+                stride,
+                offset as *const _,
+            );
         }
     }
 
     pub fn vertex_int_pointer(self, size: i32, ty: Type, stride: i32, offset: i32) {
         unsafe {
-            gl::VertexAttribIPointer(self.internal, size, ty as u32,stride, offset as *const _);
+            gl::VertexAttribIPointer(self.internal, size, ty as u32, stride, offset as *const _);
         }
     }
 
@@ -815,7 +866,7 @@ impl Texture {
         unsafe {
             let mut t = 0;
             gl::GenTextures(1, &mut t);
-            Texture{
+            Texture {
                 internal: t,
                 _not_send_sync: PhantomData,
             }
@@ -834,85 +885,149 @@ impl Texture {
         }
     }
 
-    pub fn image_2d_ex(&self, target: TextureTarget,
-        level: i32, width: u32, height: u32,
-        internal_format: TextureFormat, format: TextureFormat,
-        ty: Type, pix: Option<&[u8]>)
-    {
-        unsafe {
-            let ptr = match pix {
-                Some(val) => val.as_ptr() as *const _,
-                None => ptr::null(),
-            };
-            gl::TexImage2D(
-                target as u32, level, internal_format as i32,
-                width as i32, height as i32, 0, format as u32,
-                ty as u32, ptr
-            );
-        }
-    }
-
-    pub fn image_2d_any<T>(&self, target: TextureTarget,
-        level: i32, width: u32, height: u32,
-        internal_format: TextureFormat, format: TextureFormat,
-        ty: Type, pix: Option<&[T]>)
-    {
-        unsafe {
-            let ptr = match pix {
-                Some(val) => val.as_ptr() as *const _,
-                None => ptr::null(),
-            };
-            gl::TexImage2D(
-                target as u32, level, internal_format as i32,
-                width as i32, height as i32, 0, format as u32,
-                ty as u32, ptr
-            );
-        }
-    }
-
-    pub fn image_3d(&self, target: TextureTarget,
+    pub fn image_2d_ex(
+        &self,
+        target: TextureTarget,
         level: i32,
-        width: u32, height: u32, depth: u32,
-        internal_format: TextureFormat, format: TextureFormat,
-        ty: Type, pix: Option<&[u8]>)
-    {
+        width: u32,
+        height: u32,
+        internal_format: TextureFormat,
+        format: TextureFormat,
+        ty: Type,
+        pix: Option<&[u8]>,
+    ) {
+        unsafe {
+            let ptr = match pix {
+                Some(val) => val.as_ptr() as *const _,
+                None => ptr::null(),
+            };
+            gl::TexImage2D(
+                target as u32,
+                level,
+                internal_format as i32,
+                width as i32,
+                height as i32,
+                0,
+                format as u32,
+                ty as u32,
+                ptr,
+            );
+        }
+    }
+
+    pub fn image_2d_any<T>(
+        &self,
+        target: TextureTarget,
+        level: i32,
+        width: u32,
+        height: u32,
+        internal_format: TextureFormat,
+        format: TextureFormat,
+        ty: Type,
+        pix: Option<&[T]>,
+    ) {
+        unsafe {
+            let ptr = match pix {
+                Some(val) => val.as_ptr() as *const _,
+                None => ptr::null(),
+            };
+            gl::TexImage2D(
+                target as u32,
+                level,
+                internal_format as i32,
+                width as i32,
+                height as i32,
+                0,
+                format as u32,
+                ty as u32,
+                ptr,
+            );
+        }
+    }
+
+    pub fn image_3d(
+        &self,
+        target: TextureTarget,
+        level: i32,
+        width: u32,
+        height: u32,
+        depth: u32,
+        internal_format: TextureFormat,
+        format: TextureFormat,
+        ty: Type,
+        pix: Option<&[u8]>,
+    ) {
         unsafe {
             let ptr = match pix {
                 Some(val) => val.as_ptr() as *const _,
                 None => ptr::null(),
             };
             gl::TexImage3D(
-                target as u32, level, internal_format as i32,
-                width as i32, height as i32, depth as i32, 0, format as u32,
-                ty as u32, ptr
+                target as u32,
+                level,
+                internal_format as i32,
+                width as i32,
+                height as i32,
+                depth as i32,
+                0,
+                format as u32,
+                ty as u32,
+                ptr,
             );
         }
     }
 
-    pub fn sub_image_3d(&self, target: TextureTarget,
+    pub fn sub_image_3d(
+        &self,
+        target: TextureTarget,
         level: i32,
-        x: u32, y: u32, z: u32,
-        width: u32, height: u32, depth: u32,
+        x: u32,
+        y: u32,
+        z: u32,
+        width: u32,
+        height: u32,
+        depth: u32,
         format: TextureFormat,
-        ty: Type, pix: Option<&[u8]>)
-    {
+        ty: Type,
+        pix: Option<&[u8]>,
+    ) {
         unsafe {
             let ptr = match pix {
                 Some(val) => val.as_ptr() as *const _,
                 None => ptr::null(),
             };
             gl::TexSubImage3D(
-                target as u32, level,
-                x as i32, y as i32, z as i32,
-                width as i32, height as i32, depth as i32, format as u32,
-                ty as u32, ptr
+                target as u32,
+                level,
+                x as i32,
+                y as i32,
+                z as i32,
+                width as i32,
+                height as i32,
+                depth as i32,
+                format as u32,
+                ty as u32,
+                ptr,
             );
         }
     }
 
-    pub fn get_data(&self, target: TextureTarget, level: i32, format: TextureFormat, ty: Type, pix: &mut [u8]) {
+    pub fn get_data(
+        &self,
+        target: TextureTarget,
+        level: i32,
+        format: TextureFormat,
+        ty: Type,
+        pix: &mut [u8],
+    ) {
         unsafe {
-            gl::GetTexImage(target as u32, level, format as u32, ty as u32, pix.as_mut_ptr() as *mut _);
+            gl::GetTexImage(
+                target as u32,
+                level,
+                format as u32,
+                ty as u32,
+                pix.as_mut_ptr() as *mut _,
+            );
         }
     }
 
@@ -966,7 +1081,9 @@ pub enum TextureFilter {
     NearestMipmapNearest = gl::NEAREST_MIPMAP_NEAREST as i32,
 }
 impl From<TextureFilter> for i32 {
-    fn from(val: TextureFilter) -> i32  { val as i32 }
+    fn from(val: TextureFilter) -> i32 {
+        val as i32
+    }
 }
 
 pub struct TextureWrapS;
@@ -989,12 +1106,14 @@ impl TextureParameter for TextureWrapT {
 #[repr(i32)]
 pub enum TextureWrap {
     ClampToEdge = gl::CLAMP_TO_EDGE as i32,
-    ClampToBorder= gl::CLAMP_TO_BORDER as i32,
+    ClampToBorder = gl::CLAMP_TO_BORDER as i32,
     MirroredRepeat = gl::MIRRORED_REPEAT as i32,
     Repeat = gl::REPEAT as i32,
 }
 impl From<TextureWrap> for i32 {
-    fn from(val: TextureWrap) -> i32 { val as i32 }
+    fn from(val: TextureWrap) -> i32 {
+        val as i32
+    }
 }
 
 pub struct TextureBorderColor;
@@ -1102,9 +1221,22 @@ impl Framebuffer {
         }
     }
 
-    pub fn texture_2d(&self, fbtarget: TargetFramebuffer, attachment: Attachment, target: TextureTarget, tex: &Texture, level: i32) {
+    pub fn texture_2d(
+        &self,
+        fbtarget: TargetFramebuffer,
+        attachment: Attachment,
+        target: TextureTarget,
+        tex: &Texture,
+        level: i32,
+    ) {
         unsafe {
-            gl::FramebufferTexture2D(fbtarget as u32, attachment as u32, target as u32, tex.internal, level);
+            gl::FramebufferTexture2D(
+                fbtarget as u32,
+                attachment as u32,
+                target as u32,
+                tex.internal,
+                level,
+            );
         }
     }
 }
@@ -1119,10 +1251,7 @@ impl Drop for Framebuffer {
 
 pub fn draw_buffers(bufs: &[Attachment]) {
     unsafe {
-        gl::DrawBuffers(
-            bufs.len() as i32,
-            bufs.as_ptr() as *const _,
-        );
+        gl::DrawBuffers(bufs.len() as i32, bufs.as_ptr() as *const _);
     }
 }
 

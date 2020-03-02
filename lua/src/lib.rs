@@ -4,22 +4,22 @@
 #![allow(clippy::new_without_default)]
 
 extern crate lua_sys as sys;
-extern crate univercity_util as util;
 extern crate serde;
+extern crate univercity_util as util;
 #[macro_use]
 #[cfg(test)]
 extern crate serde_derive;
 #[macro_use]
 extern crate failure;
 
-use std::ffi::{CStr, CString};
-use std::ptr;
-use std::marker::PhantomData;
 use std::any::{self, Any};
+use std::cell::{Cell, RefCell};
+use std::ffi::{CStr, CString};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::ptr;
 use std::rc::{Rc, Weak};
-use std::fmt::{Debug, Display, Formatter, self};
-use std::cell::{RefCell, Cell};
 use util::FNVMap as HashMap;
 
 mod serde_support;
@@ -48,18 +48,21 @@ pub enum Scope {
     /// Via the `debug` package in lua this table is accessible
     /// but this is not considered standard and should normally
     /// be disabled for production use.
-    Registry
+    Registry,
 }
 
 impl Lua {
     /// Allocates a lua scripting instance
     pub fn new() -> Lua {
         use std::mem;
-        let state = internal::LuaState(unsafe {
-            let s = sys::luaL_newstate();
-            sys::luaL_openlibs(s);
-            s
-        }, None);
+        let state = internal::LuaState(
+            unsafe {
+                let s = sys::luaL_newstate();
+                sys::luaL_openlibs(s);
+                s
+            },
+            None,
+        );
         let lua = Lua {
             state: Rc::new(state),
         };
@@ -68,13 +71,21 @@ impl Lua {
             // Use lua user data to store the value in lua space
             let data = sys::lua_newuserdata(lua.state.0, mem::size_of::<UserdataTable>());
             ptr::write(data as *mut UserdataTable, userdata_store);
-            sys::lua_setfield(lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"userdata_store\0".as_ptr() as *const _);
+            sys::lua_setfield(
+                lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"userdata_store\0".as_ptr() as *const _,
+            );
 
             let borrow_store: BorrowTable = RefCell::new(HashMap::default());
             // Use lua user data to store the value in lua space
             let data = sys::lua_newuserdata(lua.state.0, mem::size_of::<BorrowTable>());
             ptr::write(data as *mut BorrowTable, borrow_store);
-            sys::lua_setfield(lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_setfield(
+                lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
         }
         lua
     }
@@ -82,16 +93,17 @@ impl Lua {
     /// Starts building a list of borrowed values that will be accessible
     /// during the execution of the function called at the end
     pub fn with_borrows(&self) -> BorrowBuilder {
-        BorrowBuilder {
-            lua: self,
-        }
+        BorrowBuilder { lua: self }
     }
 
     /// Invokes the named function in the global scope passing the parameters
     /// to the function and converting the result to the requested type.
-    pub fn invoke_function<P: Value, Ret: Value>(&self, name: &str, param: P) -> Result<Ret, Error> {
-        self.with_borrows()
-            .invoke_function(name, param)
+    pub fn invoke_function<P: Value, Ret: Value>(
+        &self,
+        name: &str,
+        param: P,
+    ) -> Result<Ret, Error> {
+        self.with_borrows().invoke_function(name, param)
     }
 
     /// Loads and executes the passed string converting and returning the results
@@ -115,15 +127,18 @@ impl Lua {
             let orig_top = sys::lua_gettop(self.state.0);
 
             // Load and parse the code into the vm
-            let status = sys::luaL_loadbuffer(self.state.0, c_script.as_ptr(), script.len(), c_name.as_ptr());
+            let status = sys::luaL_loadbuffer(
+                self.state.0,
+                c_script.as_ptr(),
+                script.len(),
+                c_name.as_ptr(),
+            );
             if status != 0 {
                 // Pop the error off the stack and return it
                 let ret = CStr::from_ptr(sys::lua_tolstring(self.state.0, -1, ptr::null_mut()));
                 internal::lua_pop(self.state.0, 1);
                 return Err(Error::Raw {
-                    msg: ret.to_string_lossy()
-                        .into_owned()
-                        .into_boxed_str()
+                    msg: ret.to_string_lossy().into_owned().into_boxed_str(),
                 });
             }
             // Invoke the loaded script with no arguments and the return size
@@ -140,7 +155,7 @@ impl Lua {
                 };
                 internal::lua_pop(self.state.0, 1);
                 return Err(Error::Raw {
-                    msg: ret.to_string().into_boxed_str()
+                    msg: ret.to_string().into_boxed_str(),
                 });
             }
             // Try and make the type into something we can work with
@@ -218,7 +233,11 @@ impl Lua {
     pub fn get_borrow<T: Any>(&self) -> &T {
         let ty = any::TypeId::of::<T>();
         unsafe {
-            sys::lua_getfield(self.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.state.0, 1);
             let borrow_store = (&*borrow_store).borrow();
@@ -241,7 +260,11 @@ impl Lua {
     pub fn read_borrow<T: Any>(&self) -> MBRef<T> {
         let ty = any::TypeId::of::<T>();
         unsafe {
-            sys::lua_getfield(self.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.state.0, 1);
             let mut borrow_store = (&*borrow_store).borrow_mut();
@@ -250,10 +273,10 @@ impl Lua {
                 match val.state.get() {
                     BorrowState::None => {
                         val.state.set(BorrowState::Read(1));
-                    },
+                    }
                     BorrowState::Read(count) => {
                         val.state.set(BorrowState::Read(count + 1));
-                    },
+                    }
                     BorrowState::Write => {
                         panic!("Can't borrow value immutably that is borrowed mutably")
                     }
@@ -261,7 +284,8 @@ impl Lua {
                 MBRef {
                     value: &*(val.ptr as *mut T),
                     // Can't borrow whilst reading so this is safe
-                    state: &*(&val.state as *const std::cell::Cell<BorrowState> as *const std::cell::Cell<BorrowState>),
+                    state: &*(&val.state as *const std::cell::Cell<BorrowState>
+                        as *const std::cell::Cell<BorrowState>),
                 }
             } else {
                 panic!("Value not borrowed")
@@ -279,7 +303,11 @@ impl Lua {
     pub fn write_borrow<T: Any>(&self) -> MBRefMut<T> {
         let ty = any::TypeId::of::<T>();
         unsafe {
-            sys::lua_getfield(self.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.state.0, 1);
             let mut borrow_store = (&*borrow_store).borrow_mut();
@@ -288,10 +316,10 @@ impl Lua {
                 match val.state.get() {
                     BorrowState::None => {
                         val.state.set(BorrowState::Write);
-                    },
+                    }
                     BorrowState::Read(_) => {
                         panic!("Can't borrow value mutably that is borrowed immutably")
-                    },
+                    }
                     BorrowState::Write => {
                         panic!("Can't borrow value mutably that is borrowed already mutably")
                     }
@@ -299,7 +327,8 @@ impl Lua {
                 MBRefMut {
                     value: &mut *(val.ptr as *mut T),
                     // Can't borrow whilst reading so this is safe
-                    state: &*(&val.state as *const std::cell::Cell<BorrowState> as *const std::cell::Cell<BorrowState>),
+                    state: &*(&val.state as *const std::cell::Cell<BorrowState>
+                        as *const std::cell::Cell<BorrowState>),
                 }
             } else {
                 panic!("Value not borrowed")
@@ -332,12 +361,14 @@ pub struct MBRef<'a, T: 'a + ?Sized> {
     state: &'a Cell<BorrowState>,
 }
 
-impl <'a, T: 'a> MBRef<'a, T>
-    where T: ?Sized
+impl<'a, T: 'a> MBRef<'a, T>
+where
+    T: ?Sized,
 {
     pub fn map<F, R>(this: MBRef<'a, T>, mfunc: F) -> MBRef<'a, R>
-        where F: FnOnce(&'a T) -> &'a R,
-              R: ?Sized
+    where
+        F: FnOnce(&'a T) -> &'a R,
+        R: ?Sized,
     {
         use std::mem;
         let state = this.state;
@@ -345,15 +376,13 @@ impl <'a, T: 'a> MBRef<'a, T>
         // Don't run drop
         mem::forget(this);
         let nv = (mfunc)(val);
-        MBRef {
-            value: nv,
-            state,
-        }
+        MBRef { value: nv, state }
     }
 }
 
-impl <'a, T> Deref for MBRef<'a, T>
-    where T: ?Sized
+impl<'a, T> Deref for MBRef<'a, T>
+where
+    T: ?Sized,
 {
     type Target = T;
     fn deref(&self) -> &T {
@@ -361,8 +390,9 @@ impl <'a, T> Deref for MBRef<'a, T>
     }
 }
 
-impl <'a, T> Drop for MBRef<'a, T>
-    where T: ?Sized
+impl<'a, T> Drop for MBRef<'a, T>
+where
+    T: ?Sized,
 {
     fn drop(&mut self) {
         if let BorrowState::Read(mut count) = self.state.get() {
@@ -384,20 +414,20 @@ pub struct MBRefMut<'a, T: 'a> {
     state: &'a Cell<BorrowState>,
 }
 
-impl <'a, T> Deref for MBRefMut<'a, T> {
+impl<'a, T> Deref for MBRefMut<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.value
     }
 }
 
-impl <'a, T> DerefMut for MBRefMut<'a, T> {
+impl<'a, T> DerefMut for MBRefMut<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.value
     }
 }
 
-impl <'a, T> Drop for MBRefMut<'a, T> {
+impl<'a, T> Drop for MBRefMut<'a, T> {
     fn drop(&mut self) {
         if let BorrowState::Write = self.state.get() {
             self.state.set(BorrowState::None);
@@ -422,23 +452,30 @@ pub struct BorrowBuilder<'a> {
     lua: &'a Lua,
 }
 
-impl <'a> BorrowBuilder<'a> {
-
+impl<'a> BorrowBuilder<'a> {
     /// Borrows an immutable reference and makes it accessible
     /// to lua for the duration of the call.
     pub fn borrow<T>(self, val: &'a T) -> Self
-        where T: Any
+    where
+        T: Any,
     {
         unsafe {
             let ty = any::TypeId::of::<T>();
 
-            sys::lua_getfield(self.lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.lua.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.lua.state.0, 1);
             let mut borrow_store = (&*borrow_store).borrow_mut();
-            borrow_store.insert(ty, Borrow::Immutable(ImmutableBorrow{
-                ptr: val as *const T as *const _,
-            }));
+            borrow_store.insert(
+                ty,
+                Borrow::Immutable(ImmutableBorrow {
+                    ptr: val as *const T as *const _,
+                }),
+            );
         }
         self
     }
@@ -446,19 +483,27 @@ impl <'a> BorrowBuilder<'a> {
     /// Borrows an mutable reference and makes it accessible
     /// to lua for the duration of the call.
     pub fn borrow_mut<T>(self, val: &'a mut T) -> Self
-        where T: Any
+    where
+        T: Any,
     {
         unsafe {
             let ty = any::TypeId::of::<T>();
 
-            sys::lua_getfield(self.lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.lua.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.lua.state.0, 1);
             let mut borrow_store = (&*borrow_store).borrow_mut();
-            borrow_store.insert(ty, Borrow::Mutable(MutableBorrow{
-                ptr: val as *mut _ as *mut AnyType,
-                state: Cell::new(BorrowState::None),
-            }));
+            borrow_store.insert(
+                ty,
+                Borrow::Mutable(MutableBorrow {
+                    ptr: val as *mut _ as *mut AnyType,
+                    state: Cell::new(BorrowState::None),
+                }),
+            );
         }
         self
     }
@@ -472,7 +517,11 @@ impl <'a> BorrowBuilder<'a> {
             #[cfg(debug_assertions)]
             let orig_top = sys::lua_gettop(self.lua.state.0);
 
-            sys::lua_getfield(self.lua.state.0, i32::from(sys::LUA_GLOBALSINDEX), c_name.as_ptr());
+            sys::lua_getfield(
+                self.lua.state.0,
+                i32::from(sys::LUA_GLOBALSINDEX),
+                c_name.as_ptr(),
+            );
             param.to_lua(&self.lua.state).unwrap();
             let res = sys::lua_pcall(self.lua.state.0, P::stack_size(), Ret::stack_size(), 0);
             if res != 0 {
@@ -486,8 +535,7 @@ impl <'a> BorrowBuilder<'a> {
                 };
                 internal::lua_pop(self.lua.state.0, 1);
                 return Err(Error::Raw {
-                    msg: ret.to_string()
-                        .into_boxed_str()
+                    msg: ret.to_string().into_boxed_str(),
                 });
             }
             // Try and make the type into something we can work with
@@ -503,10 +551,14 @@ impl <'a> BorrowBuilder<'a> {
     }
 }
 
-impl <'a> Drop for BorrowBuilder<'a> {
+impl<'a> Drop for BorrowBuilder<'a> {
     fn drop(&mut self) {
         unsafe {
-            sys::lua_getfield(self.lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"borrow_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                self.lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"borrow_store\0".as_ptr() as *const _,
+            );
             let borrow_store = sys::lua_touserdata(self.lua.state.0, -1) as *mut BorrowTable;
             internal::lua_pop(self.lua.state.0, 1);
             let mut borrow_store = (&*borrow_store).borrow_mut();
@@ -521,9 +573,7 @@ impl <'a> Drop for BorrowBuilder<'a> {
 ///
 /// Copy of the value is used when transfering between
 /// lua and rust.
-pub trait Value: internal::InternalValue {
-
-}
+pub trait Value: internal::InternalValue {}
 
 // Type impls
 
@@ -548,9 +598,7 @@ unsafe impl internal::InternalValue for f64 {
         if sys::lua_isnumber(state.0, idx) != 0 {
             Ok(sys::lua_tonumber(state.0, idx))
         } else {
-            Err(Error::TypeMismatch {
-                wanted: "Number",
-            })
+            Err(Error::TypeMismatch { wanted: "Number" })
         }
     }
 
@@ -570,9 +618,7 @@ unsafe impl internal::InternalValue for i32 {
         if sys::lua_isnumber(state.0, idx) != 0 {
             Ok(sys::lua_tonumber(state.0, idx) as i32)
         } else {
-            Err(Error::TypeMismatch {
-                wanted: "Number",
-            })
+            Err(Error::TypeMismatch { wanted: "Number" })
         }
     }
 
@@ -602,10 +648,10 @@ unsafe impl internal::InternalValue for bool {
     }
 }
 
-impl <T> Value for Option<T>
-    where T: Value {}
-unsafe impl <T> internal::InternalValue for Option<T>
-    where T: internal::InternalValue
+impl<T> Value for Option<T> where T: Value {}
+unsafe impl<T> internal::InternalValue for Option<T>
+where
+    T: internal::InternalValue,
 {
     unsafe fn to_rust(state: &Rc<internal::LuaState>, idx: i32) -> Result<Self, Error> {
         if sys::lua_type(state.0, idx) == i32::from(sys::LUA_TNIL) {
@@ -622,18 +668,26 @@ unsafe impl <T> internal::InternalValue for Option<T>
     unsafe fn to_lua(self, state: &Rc<internal::LuaState>) -> Result<(), Error> {
         match self {
             Some(val) => val.to_lua(state)?,
-            None => for _ in 0 .. Self::stack_size() { sys::lua_pushnil(state.0) },
+            None => {
+                for _ in 0..Self::stack_size() {
+                    sys::lua_pushnil(state.0)
+                }
+            }
         };
         Ok(())
     }
 }
 
-impl <T, E> Value for Result<T, E>
-    where T: Value,
-          E: Display {}
-unsafe impl <T, E> internal::InternalValue for Result<T, E>
-    where T: internal::InternalValue,
-          E: Display
+impl<T, E> Value for Result<T, E>
+where
+    T: Value,
+    E: Display,
+{
+}
+unsafe impl<T, E> internal::InternalValue for Result<T, E>
+where
+    T: internal::InternalValue,
+    E: Display,
 {
     unsafe fn to_rust(state: &Rc<internal::LuaState>, idx: i32) -> Result<Self, Error> {
         Ok(Ok(T::to_rust(state, idx)?))
@@ -646,9 +700,11 @@ unsafe impl <T, E> internal::InternalValue for Result<T, E>
     unsafe fn to_lua(self, state: &Rc<internal::LuaState>) -> Result<(), Error> {
         match self {
             Ok(val) => val.to_lua(state)?,
-            Err(err) => return Err(Error::External {
-                err: format!("{}", err).into_boxed_str()
-            }),
+            Err(err) => {
+                return Err(Error::External {
+                    err: format!("{}", err).into_boxed_str(),
+                })
+            }
         };
         Ok(())
     }
@@ -661,16 +717,15 @@ pub struct Ref<T> {
     _t: PhantomData<T>,
 }
 
-impl <T> Value for Ref<T>
-    where Ref<T>: internal::InternalValue {}
+impl<T> Value for Ref<T> where Ref<T>: internal::InternalValue {}
 
-impl <T> PartialEq for Ref<T> {
+impl<T> PartialEq for Ref<T> {
     fn eq(&self, other: &Self) -> bool {
         unsafe {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return false
+                return false;
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), other.value);
@@ -682,8 +737,8 @@ impl <T> PartialEq for Ref<T> {
 }
 
 /// Any lua type
-pub enum Unknown{}
-impl <T> Ref<T> {
+pub enum Unknown {}
+impl<T> Ref<T> {
     /// Removes the type information about this reference
     pub fn into_unknown(mut self) -> Ref<Unknown> {
         use std::mem;
@@ -716,11 +771,13 @@ impl Ref<Unknown> {
 
     /// Creates a reference to any lua type
     pub fn new_unknown<V>(lua: &Lua, v: V) -> Ref<Unknown>
-        where V: Value
+    where
+        V: Value,
     {
         unsafe {
             let state = internal::LuaState::root(lua.state.clone());
-            v.to_lua(&state).expect("Failed to push value on to the lua stack");
+            v.to_lua(&state)
+                .expect("Failed to push value on to the lua stack");
             let r = sys::luaL_ref(state.0, i32::from(sys::LUA_REGISTRYINDEX));
             Ref {
                 value: r,
@@ -736,7 +793,7 @@ impl Ref<Unknown> {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return false
+                return false;
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             let ret = sys::lua_type(state.0, -1) == i32::from(sys::LUA_TNIL);
@@ -751,7 +808,7 @@ impl Ref<Unknown> {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return Err(Error::Shutdown)
+                return Err(Error::Shutdown);
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             let val = T::to_rust(&state, -T::stack_size());
@@ -832,9 +889,7 @@ unsafe impl internal::InternalValue for Ref<String> {
                 _t: PhantomData,
             })
         } else {
-            Err(Error::TypeMismatch {
-                wanted: "String",
-            })
+            Err(Error::TypeMismatch { wanted: "String" })
         }
     }
 
@@ -855,7 +910,7 @@ impl Deref for Ref<String> {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return ""
+                return "";
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             let cstr = CStr::from_ptr(sys::lua_tolstring(state.0, -1, ptr::null_mut()));
@@ -902,14 +957,15 @@ impl Ref<Table> {
     /// Inserts the passed value into the table with the given key
     #[inline]
     pub fn insert<K, V>(&self, k: K, v: V)
-        where K: Value,
-              V: Value
+    where
+        K: Value,
+        V: Value,
     {
         unsafe {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return
+                return;
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             k.to_lua(&state).unwrap();
@@ -925,14 +981,15 @@ impl Ref<Table> {
     /// value can't be converted into the required type
     #[inline]
     pub fn get<K, V>(&self, k: K) -> Option<V>
-        where K: Value,
-              V: Value
+    where
+        K: Value,
+        V: Value,
     {
         unsafe {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return None
+                return None;
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             k.to_lua(&state).unwrap();
@@ -953,7 +1010,7 @@ impl Ref<Table> {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return 0
+                return 0;
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             let len = sys::lua_objlen(state.0, -1);
@@ -964,8 +1021,9 @@ impl Ref<Table> {
 
     /// Returns an iterator over the table's values
     pub fn iter<K, V>(&self) -> TableIterator<K, V>
-        where K: Value,
-            V: Value,
+    where
+        K: Value,
+        V: Value,
     {
         let state = if let Some(state) = self.state.upgrade() {
             state
@@ -989,7 +1047,8 @@ impl Ref<Table> {
 /// Deserializes the given type from the table
 #[allow(clippy::redundant_closure)]
 pub fn from_table<T>(tbl: &Ref<Table>) -> Result<T, Error>
-    where T: for<'a> serde::Deserialize<'a>
+where
+    T: for<'a> serde::Deserialize<'a>,
 {
     with_table_deserializer(tbl, |de| T::deserialize(de)).map_err(|v| v.0)
 }
@@ -997,7 +1056,8 @@ pub fn from_table<T>(tbl: &Ref<Table>) -> Result<T, Error>
 /// Deserializes from a table by running the passed function
 /// with a deserializer
 pub fn with_table_deserializer<F, Ret, E>(tbl: &Ref<Table>, f: F) -> Result<Ret, E>
-    where F: for <'a> FnOnce(&mut serde_support::Deserializer<'a>) -> Result<Ret, E>
+where
+    F: for<'a> FnOnce(&mut serde_support::Deserializer<'a>) -> Result<Ret, E>,
 {
     unsafe {
         let state = if let Some(state) = tbl.state.upgrade() {
@@ -1019,7 +1079,8 @@ pub fn with_table_deserializer<F, Ret, E>(tbl: &Ref<Table>, f: F) -> Result<Ret,
 
 /// Serializes the given value to a lua table
 pub fn to_table<T>(lua: &Lua, value: &T) -> Result<Ref<Table>, Error>
-    where T: serde::Serialize
+where
+    T: serde::Serialize,
 {
     with_table_serializer(lua, |s| value.serialize(s))
 }
@@ -1027,16 +1088,17 @@ pub fn to_table<T>(lua: &Lua, value: &T) -> Result<Ref<Table>, Error>
 /// Serializes to a table by running the passed function
 /// with a serializer
 pub fn with_table_serializer<F>(lua: &Lua, f: F) -> Result<Ref<Table>, Error>
-    where F: for <'se> FnOnce(&mut serde_support::Serializer<'se>) -> Result<(), serde_support::SError>,
+where
+    F: for<'se> FnOnce(&mut serde_support::Serializer<'se>) -> Result<(), serde_support::SError>,
 {
     unsafe {
-        let mut se = serde_support::Serializer {
-            state: &lua.state,
-        };
+        let mut se = serde_support::Serializer { state: &lua.state };
         f(&mut se).map_err(|v| v.0)?;
         if sys::lua_type(lua.state.0, -1) != i32::from(sys::LUA_TTABLE) {
             internal::lua_pop(lua.state.0, 1);
-            return Err(Error::Raw { msg: "failed to serialize as a table".into()});
+            return Err(Error::Raw {
+                msg: "failed to serialize as a table".into(),
+            });
         }
         let r = sys::luaL_ref(lua.state.0, i32::from(sys::LUA_REGISTRYINDEX));
         Ok(Ref {
@@ -1048,8 +1110,9 @@ pub fn with_table_serializer<F>(lua: &Lua, f: F) -> Result<Ref<Table>, Error>
 }
 
 pub struct TableIterator<'a, K, V>
-    where K: Value,
-          V: Value,
+where
+    K: Value,
+    V: Value,
 {
     state: Rc<internal::LuaState>,
     ended: bool,
@@ -1058,9 +1121,10 @@ pub struct TableIterator<'a, K, V>
     _v: PhantomData<V>,
 }
 
-impl <'a, K, V> Iterator for TableIterator<'a, K, V>
-    where K: Value,
-          V: Value,
+impl<'a, K, V> Iterator for TableIterator<'a, K, V>
+where
+    K: Value,
+    V: Value,
 {
     type Item = (K, V);
     fn next(&mut self) -> Option<(K, V)> {
@@ -1087,9 +1151,10 @@ impl <'a, K, V> Iterator for TableIterator<'a, K, V>
         }
     }
 }
-impl <'a, K, V> Drop for TableIterator<'a, K, V>
-    where K: Value,
-          V: Value,
+impl<'a, K, V> Drop for TableIterator<'a, K, V>
+where
+    K: Value,
+    V: Value,
 {
     fn drop(&mut self) {
         if !self.ended {
@@ -1111,9 +1176,7 @@ unsafe impl internal::InternalValue for Ref<Table> {
                 _t: PhantomData,
             })
         } else {
-            Err(Error::TypeMismatch {
-                wanted: "Table"
-            })
+            Err(Error::TypeMismatch { wanted: "Table" })
         }
     }
 
@@ -1159,7 +1222,6 @@ unsafe impl internal::InternalValue for Ref<Coroutine> {
     }
 }
 
-
 // Functions
 
 /// A lua function.
@@ -1174,7 +1236,12 @@ impl Ref<Function> {
         let c_name = CString::new("<inline function>").unwrap();
         unsafe {
             // Load and parse the code into the vm
-            let status = sys::luaL_loadbuffer(lua.state.0, c_script.as_ptr(), source.len(), c_name.as_ptr());
+            let status = sys::luaL_loadbuffer(
+                lua.state.0,
+                c_script.as_ptr(),
+                source.len(),
+                c_name.as_ptr(),
+            );
             if status != 0 {
                 // Pop the error off the stack and return it
                 let ret = CStr::from_ptr(sys::lua_tolstring(lua.state.0, -1, ptr::null_mut()));
@@ -1197,7 +1264,7 @@ impl Ref<Function> {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-                return Err(Error::Shutdown)
+                return Err(Error::Shutdown);
             };
             // Used to validate the stack after use
             #[cfg(debug_assertions)]
@@ -1217,8 +1284,7 @@ impl Ref<Function> {
                 };
                 internal::lua_pop(state.0, 1);
                 return Err(Error::Raw {
-                    msg: ret.to_string()
-                        .into_boxed_str()
+                    msg: ret.to_string().into_boxed_str(),
                 });
             }
             // Try and make the type into something we can work with
@@ -1245,9 +1311,7 @@ unsafe impl internal::InternalValue for Ref<Function> {
                 _t: PhantomData,
             })
         } else {
-            Err(Error::TypeMismatch {
-                wanted: "Function"
-            })
+            Err(Error::TypeMismatch { wanted: "Function" })
         }
     }
 
@@ -1268,16 +1332,15 @@ unsafe impl internal::InternalValue for Ref<Function> {
 pub trait LuaUsable: Any {
     /// Adds fields to the type that can be used
     /// in lua
-    fn fields(_t: &TypeBuilder) {
-    }
+    fn fields(_t: &TypeBuilder) {}
 
     /// Adds fields to the type's metatable
-    fn metatable(_t: &TypeBuilder) {
-    }
+    fn metatable(_t: &TypeBuilder) {}
 }
 
-impl <T> LuaUsable for RefCell<T>
-    where T: LuaUsable
+impl<T> LuaUsable for RefCell<T>
+where
+    T: LuaUsable,
 {
     fn fields(t: &TypeBuilder) {
         T::fields(t)
@@ -1287,8 +1350,9 @@ impl <T> LuaUsable for RefCell<T>
     }
 }
 
-impl <T> LuaUsable for Option<T>
-    where T: LuaUsable
+impl<T> LuaUsable for Option<T>
+where
+    T: LuaUsable,
 {
     fn fields(t: &TypeBuilder) {
         T::fields(t)
@@ -1309,11 +1373,11 @@ impl LuaUsable for f32 {}
 impl LuaUsable for f64 {}
 impl LuaUsable for bool {}
 
-impl <K: 'static, V: 'static, H: 'static> LuaUsable for ::std::collections::HashMap<K, V, H> {}
-impl <T: 'static> LuaUsable for Vec<T> {}
-impl <T: 'static> LuaUsable for ::std::sync::Arc<T> {}
-impl <T: 'static> LuaUsable for ::std::rc::Rc<T> {}
-impl <T: 'static> LuaUsable for ::std::rc::Weak<T> {}
+impl<K: 'static, V: 'static, H: 'static> LuaUsable for ::std::collections::HashMap<K, V, H> {}
+impl<T: 'static> LuaUsable for Vec<T> {}
+impl<T: 'static> LuaUsable for ::std::sync::Arc<T> {}
+impl<T: 'static> LuaUsable for ::std::rc::Rc<T> {}
+impl<T: 'static> LuaUsable for ::std::rc::Weak<T> {}
 
 /// Used to append fields to a custom lua type
 pub struct TypeBuilder {
@@ -1324,7 +1388,8 @@ pub struct TypeBuilder {
 impl TypeBuilder {
     /// Adds the field to the type currently being built
     pub fn field<T>(&self, name: &str, val: T)
-        where T: Value
+    where
+        T: Value,
     {
         unsafe {
             internal::push_string(self.lua.state.0, name);
@@ -1335,7 +1400,8 @@ impl TypeBuilder {
 
     /// Gets the field from the type currently being built
     pub fn get_field<T>(&self, name: &str) -> T
-        where T: Value
+    where
+        T: Value,
     {
         unsafe {
             internal::push_string(self.lua.state.0, name);
@@ -1347,11 +1413,16 @@ impl TypeBuilder {
     }
 
     pub fn metatable<F>(&self, f: F)
-        where F: FnOnce(&TypeBuilder)
+    where
+        F: FnOnce(&TypeBuilder),
     {
         unsafe {
             sys::lua_createtable(self.lua.state.0, 0, 0);
-            f(&TypeBuilder{lua: Lua{state: self.lua.state.clone()}});
+            f(&TypeBuilder {
+                lua: Lua {
+                    state: self.lua.state.clone(),
+                },
+            });
             sys::lua_setmetatable(self.lua.state.0, -2);
         }
     }
@@ -1359,15 +1430,20 @@ impl TypeBuilder {
 
 type UserdataTable = RefCell<HashMap<any::TypeId, i32>>;
 
-impl <T> Ref<T>
-    where T: LuaUsable {
-
+impl<T> Ref<T>
+where
+    T: LuaUsable,
+{
     /// Places the value on the lua heap
     pub fn new(lua: &Lua, val: T) -> Ref<T> {
         use std::mem;
 
         unsafe {
-            sys::lua_getfield(lua.state.0, i32::from(sys::LUA_REGISTRYINDEX), b"userdata_store\0".as_ptr() as *const _);
+            sys::lua_getfield(
+                lua.state.0,
+                i32::from(sys::LUA_REGISTRYINDEX),
+                b"userdata_store\0".as_ptr() as *const _,
+            );
             let userdata_store = sys::lua_touserdata(lua.state.0, -1) as *mut UserdataTable;
             internal::lua_pop(lua.state.0, 1);
 
@@ -1375,7 +1451,9 @@ impl <T> Ref<T>
             // Use lua user data to store the value in lua space
             let data = sys::lua_newuserdata(lua.state.0, mem::size_of::<T>());
             ptr::write(data as *mut T, val);
-            unsafe extern "C" fn free_value<T: Any>(state: *mut sys::lua_State) -> sys::libc::c_int {
+            unsafe extern "C" fn free_value<T: Any>(
+                state: *mut sys::lua_State,
+            ) -> sys::libc::c_int {
                 let val: *mut T = sys::lua_touserdata(state, 1) as *mut T;
                 ptr::drop_in_place(val);
                 0
@@ -1392,7 +1470,7 @@ impl <T> Ref<T>
                         value: r,
                         state: Rc::downgrade(&internal::LuaState::root(lua.state.clone())),
                         _t: PhantomData,
-                    }
+                    };
                 }
             }
             // Create/get a metatable so that we can free the userdata once the value isn't
@@ -1402,14 +1480,22 @@ impl <T> Ref<T>
 
                 internal::push_string(lua.state.0, "__index");
                 sys::lua_createtable(lua.state.0, 0, 0);
-                T::fields(&TypeBuilder{lua: Lua{state: lua.state.clone()}});
+                T::fields(&TypeBuilder {
+                    lua: Lua {
+                        state: lua.state.clone(),
+                    },
+                });
                 sys::lua_settable(lua.state.0, -3);
 
                 internal::push_string(lua.state.0, "__gc");
                 sys::lua_pushcclosure(lua.state.0, Some(free_value::<T>), 0);
                 sys::lua_settable(lua.state.0, -3);
 
-                T::metatable(&TypeBuilder{lua: Lua{state: lua.state.clone()}});
+                T::metatable(&TypeBuilder {
+                    lua: Lua {
+                        state: lua.state.clone(),
+                    },
+                });
 
                 // Lock the table
                 internal::push_string(lua.state.0, "__metatable");
@@ -1434,8 +1520,9 @@ impl <T> Ref<T>
     }
 }
 
-impl <T> Deref for Ref<T>
-    where T: LuaUsable
+impl<T> Deref for Ref<T>
+where
+    T: LuaUsable,
 {
     type Target = T;
     #[inline]
@@ -1455,8 +1542,9 @@ impl <T> Deref for Ref<T>
     }
 }
 
-unsafe impl <T> internal::InternalValue for Ref<T>
-    where T: LuaUsable
+unsafe impl<T> internal::InternalValue for Ref<T>
+where
+    T: LuaUsable,
 {
     unsafe fn to_rust(state: &Rc<internal::LuaState>, idx: i32) -> Result<Self, Error> {
         if sys::lua_type(state.0, idx) != i32::from(sys::LUA_TUSERDATA) {
@@ -1470,7 +1558,11 @@ unsafe impl <T> internal::InternalValue for Ref<T>
                 wanted: "<native type>",
             });
         }
-        sys::lua_getfield(state.0, i32::from(sys::LUA_REGISTRYINDEX), b"userdata_store\0".as_ptr() as *const _);
+        sys::lua_getfield(
+            state.0,
+            i32::from(sys::LUA_REGISTRYINDEX),
+            b"userdata_store\0".as_ptr() as *const _,
+        );
         let userdata_store = sys::lua_touserdata(state.0, -1) as *mut UserdataTable;
         internal::lua_pop(state.0, 1);
 
@@ -1507,13 +1599,13 @@ unsafe impl <T> internal::InternalValue for Ref<T>
 
 // Common
 
-impl <T> Clone for Ref<T> {
+impl<T> Clone for Ref<T> {
     fn clone(&self) -> Self {
         unsafe {
             let state = if let Some(state) = self.state.upgrade() {
                 state
             } else {
-               panic!("Lua instance shutdown")
+                panic!("Lua instance shutdown")
             };
             sys::lua_rawgeti(state.0, i32::from(sys::LUA_REGISTRYINDEX), self.value);
             let r = sys::luaL_ref(state.0, i32::from(sys::LUA_REGISTRYINDEX));
@@ -1526,7 +1618,7 @@ impl <T> Clone for Ref<T> {
     }
 }
 
-impl <T> Drop for Ref<T> {
+impl<T> Drop for Ref<T> {
     #[inline]
     fn drop(&mut self) {
         unsafe {
@@ -1544,30 +1636,20 @@ pub enum Error {
     ///
     /// Contains the name of the expected type
     #[fail(display = "type mismatch: wanted {}", wanted)]
-    TypeMismatch {
-        wanted: &'static str,
-    },
+    TypeMismatch { wanted: &'static str },
     /// A raw error normally from lua itself
     #[fail(display = "{}", msg)]
-    Raw {
-        msg: Box<str>,
-    },
+    Raw { msg: Box<str> },
     /// An error from an external source e.g. a panicking
     /// closure.
     #[fail(display = "external error: {}", err)]
-    External {
-        err: Box<str>
-    },
+    External { err: Box<str> },
     /// Unsupported (de)serialization type
     #[fail(display = "unsupported type: {}", ty)]
-    UnsupportedType {
-        ty: &'static str,
-    },
+    UnsupportedType { ty: &'static str },
     /// Unsupported (de)serialization type
     #[fail(display = "unsupported type: {}", ty)]
-    UnsupportedDynamicType {
-        ty: String,
-    },
+    UnsupportedDynamicType { ty: String },
     #[fail(display = "the lua instance has be shutdown")]
     Shutdown,
 }
@@ -1778,7 +1860,11 @@ mod internal {
         fn drop(&mut self) {
             unsafe {
                 if self.1.is_none() {
-                    sys::lua_getfield(self.0, i32::from(sys::LUA_REGISTRYINDEX), b"userdata_store\0".as_ptr() as *const _);
+                    sys::lua_getfield(
+                        self.0,
+                        i32::from(sys::LUA_REGISTRYINDEX),
+                        b"userdata_store\0".as_ptr() as *const _,
+                    );
                     ptr::drop_in_place(sys::lua_touserdata(self.0, -1) as *mut UserdataTable);
                     internal::lua_pop(self.0, 1);
                     sys::lua_close(self.0);
@@ -1787,8 +1873,7 @@ mod internal {
         }
     }
 
-    pub unsafe trait InternalRef {
-    }
+    pub unsafe trait InternalRef {}
 
     pub unsafe trait InternalValue: Sized {
         unsafe fn to_rust(state: &Rc<LuaState>, idx: i32) -> Result<Self, Error>;
@@ -1799,11 +1884,12 @@ mod internal {
     }
 
     pub unsafe fn lua_pop(state: *mut sys::lua_State, num: i32) {
-        sys::lua_settop(state, -num-1);
+        sys::lua_settop(state, -num - 1);
     }
 
     pub unsafe fn push_string<S>(state: *mut sys::lua_State, s: S)
-        where S: Into<Vec<u8>>
+    where
+        S: Into<Vec<u8>>,
     {
         let s = CString::new(s).unwrap();
         sys::lua_pushstring(state, s.as_ptr());
@@ -1817,25 +1903,34 @@ mod tests {
     #[test]
     fn test() {
         let lua = Lua::new();
-        let test: i32 = lua.execute_string(r#"
+        let test: i32 = lua
+            .execute_string(
+                r#"
 return 5 + 5
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         assert_eq!(test, 10);
     }
 
     #[test]
     fn test_string() {
         let lua = Lua::new();
-        let test: Ref<String> = lua.execute_string(r#"
+        let test: Ref<String> = lua
+            .execute_string(
+                r#"
 return "hello world"
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         assert_eq!(&*test, "hello world");
     }
 
     #[test]
     fn test_invoke() {
         let lua = Lua::new();
-        lua.execute_string::<()>(r#"
+        lua.execute_string::<()>(
+            r#"
 function test_num(a)
     assert(a == 5)
     return a * 3
@@ -1844,7 +1939,9 @@ end
 function test_str(a)
     assert(a == "hello world")
 end
-        "#).unwrap();
+        "#,
+        )
+        .unwrap();
         assert_eq!(lua.invoke_function::<_, i32>("test_num", 5), Ok(15));
         let s = Ref::new_string(&lua, "hello world");
         lua.invoke_function::<_, ()>("test_str", s).unwrap();
@@ -1858,11 +1955,16 @@ end
         state.set(Scope::Global, "int_val", 76);
         state.set(Scope::Global, "bool_val", true);
         state.set(Scope::Global, "bool_val2", false);
-        state.set(Scope::Global, "string_val", Ref::new_string(&state, "hello world"));
+        state.set(
+            Scope::Global,
+            "string_val",
+            Ref::new_string(&state, "hello world"),
+        );
         state.set(Scope::Global, "option_val", Some(3.0));
         state.set(Scope::Global, "option_val2", None as Option<f64>);
 
-        let ret = state.execute_string::<(i32, Ref<String>)>(r#"
+        let ret = state.execute_string::<(i32, Ref<String>)>(
+            r#"
     assert(float_val == 5.0);
     assert(int_val == 76);
     assert(bool_val);
@@ -1871,7 +1973,8 @@ end
     assert(option_val == 3.0);
     assert(option_val2 == nil);
     return 3, "hi";
-        "#);
+        "#,
+        );
         let ret = ret.as_ref().map(|&(i, ref s)| (i, s.deref()));
         assert_eq!(ret, Ok((3, "hi")));
     }
@@ -1886,9 +1989,13 @@ end
     #[test]
     fn test_return() {
         let state = Lua::new();
-        let (a, b) = state.execute_string::<(i32, i32)>(r#"
+        let (a, b) = state
+            .execute_string::<(i32, i32)>(
+                r#"
     return 5, 7
-    "#).unwrap();
+    "#,
+            )
+            .unwrap();
         assert_eq!(a, 5);
         assert_eq!(b, 7);
     }
@@ -1896,55 +2003,93 @@ end
     #[test]
     fn test_return_multi() {
         let state = Lua::new();
-        state.set(Scope::Global, "test", closure(|_lua| -> Result<(i32, i32), Error> {
-            Ok((5, 7))
-        }));
-        state.execute_string::<()>(r#"
+        state.set(
+            Scope::Global,
+            "test",
+            closure(|_lua| -> Result<(i32, i32), Error> { Ok((5, 7)) }),
+        );
+        state
+            .execute_string::<()>(
+                r#"
     local a, b = test()
     assert(a == 5)
     assert(b == 7)
-    "#).unwrap();
-        state.set(Scope::Global, "test2", closure(|_lua| -> Option<(i32, i32)> {
-            Some((5, 7))
-        }));
-        state.execute_string::<()>(r#"
+    "#,
+            )
+            .unwrap();
+        state.set(
+            Scope::Global,
+            "test2",
+            closure(|_lua| -> Option<(i32, i32)> { Some((5, 7)) }),
+        );
+        state
+            .execute_string::<()>(
+                r#"
     local a, b = test2()
     assert(a == 5)
     assert(b == 7)
-    "#).unwrap();
-        state.set(Scope::Global, "test3", closure(|_lua| -> Option<(i32, i32)> {
-            None
-        }));
-        state.execute_string::<()>(r#"
+    "#,
+            )
+            .unwrap();
+        state.set(
+            Scope::Global,
+            "test3",
+            closure(|_lua| -> Option<(i32, i32)> { None }),
+        );
+        state
+            .execute_string::<()>(
+                r#"
     local a, b = test3()
     assert(a == nil)
     assert(b == nil)
-    "#).unwrap();
+    "#,
+            )
+            .unwrap();
     }
 
     #[test]
     fn test_closure() {
         let state = Lua::new();
 
-        state.set(Scope::Global, "my_func", closure1(|_, i: f64| (i * 3.0, i * 5.0)));
+        state.set(
+            Scope::Global,
+            "my_func",
+            closure1(|_, i: f64| (i * 3.0, i * 5.0)),
+        );
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
     print("Start");
     local a, b = my_func(5);
     print("ret: " .. a .. " + " .. b);
     print("End");
-    "#).unwrap();
+    "#,
+            )
+            .unwrap();
     }
 
     #[test]
     fn test_closure_error() {
         let state = Lua::new();
 
-        state.set(Scope::Global, "will_fail", closure(|_| -> Result<(), Error> { Err(Error::External { err: "Failed".into() }) }));
+        state.set(
+            Scope::Global,
+            "will_fail",
+            closure(|_| -> Result<(), Error> {
+                Err(Error::External {
+                    err: "Failed".into(),
+                })
+            }),
+        );
 
-        assert!(state.execute_string::<()>(r#"
+        assert!(state
+            .execute_string::<()>(
+                r#"
     will_fail();
-        "#).is_err());
+        "#
+            )
+            .is_err());
     }
 
     #[test]
@@ -1952,31 +2097,36 @@ end
         use std::cell::RefCell;
         let state = Lua::new();
         struct CustomType {
-            thing: i32
+            thing: i32,
         }
         impl LuaUsable for CustomType {
             fn fields(t: &TypeBuilder) {
-                t.field("change", closure2(|_, c: Ref<RefCell<CustomType>>, val: i32| {
-                    let mut c = c.borrow_mut();
-                    c.thing = val;
-                }));
+                t.field(
+                    "change",
+                    closure2(|_, c: Ref<RefCell<CustomType>>, val: i32| {
+                        let mut c = c.borrow_mut();
+                        c.thing = val;
+                    }),
+                );
             }
         }
 
         state.set(
-            Scope::Global, "custom",
-            Ref::new(
-                &state,
-                RefCell::new(CustomType{thing: -5})
-            )
+            Scope::Global,
+            "custom",
+            Ref::new(&state, RefCell::new(CustomType { thing: -5 })),
         );
         {
-            let c = state.get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom").unwrap();
+            let c = state
+                .get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom")
+                .unwrap();
             let c = c.borrow();
             assert_eq!(c.thing, -5);
         }
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
 for k, v in pairs(debug.getmetatable(custom)) do
     print(k, v);
 end
@@ -1985,10 +2135,14 @@ for k, v in pairs(debug.getregistry()) do
 end
 
 custom:change(22);
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         {
-            let c = state.get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom").unwrap();
+            let c = state
+                .get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom")
+                .unwrap();
             let c = c.borrow();
             assert_eq!(c.thing, 22);
         }
@@ -1997,10 +2151,9 @@ custom:change(22);
     #[test]
     fn test_userdata_data() {
         struct CustomType {
-            drop_check: *mut i32
+            drop_check: *mut i32,
         }
-        impl LuaUsable for CustomType {
-        }
+        impl LuaUsable for CustomType {}
         impl Drop for CustomType {
             fn drop(&mut self) {
                 unsafe {
@@ -2013,16 +2166,23 @@ custom:change(22);
         {
             let state = Lua::new();
             state.set(
-                Scope::Global, "custom",
+                Scope::Global,
+                "custom",
                 Ref::new(
                     &state,
-                    CustomType{drop_check: &mut drop_check}
-                )
+                    CustomType {
+                        drop_check: &mut drop_check,
+                    },
+                ),
             );
 
-            state.execute_string::<()>(r#"
+            state
+                .execute_string::<()>(
+                    r#"
     local temp = custom;
-            "#).unwrap();
+            "#,
+                )
+                .unwrap();
         }
 
         assert_eq!(drop_check, 1);
@@ -2031,7 +2191,9 @@ custom:change(22);
     #[test]
     fn test_env() {
         let state = Lua::new();
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
     function trapped()
         print("Halp")
         lib_print("Halp")
@@ -2053,67 +2215,95 @@ custom:change(22);
     trapped()
     debug.sethook()
     print("trap global: " .. trap.test)
-    "#).unwrap();
+    "#,
+            )
+            .unwrap();
     }
 
     #[test]
     fn test_table() {
         let state = Lua::new();
 
-        state.set(Scope::Global, "invert_color", closure1(|lua, col: Ref<Table>| {
-            let ret = Ref::new_table(lua);
+        state.set(
+            Scope::Global,
+            "invert_color",
+            closure1(|lua, col: Ref<Table>| {
+                let ret = Ref::new_table(lua);
 
-            let rs = Ref::new_string(lua, "r");
-            if let Some(r) = col.get::<_, i32>(rs.clone()) {
-                ret.insert(rs, 255 - r);
-            }
+                let rs = Ref::new_string(lua, "r");
+                if let Some(r) = col.get::<_, i32>(rs.clone()) {
+                    ret.insert(rs, 255 - r);
+                }
 
-            let gs = Ref::new_string(lua, "g");
-            if let Some(g) = col.get::<_, i32>(gs.clone()) {
-                ret.insert(gs, 255 - g);
-            }
+                let gs = Ref::new_string(lua, "g");
+                if let Some(g) = col.get::<_, i32>(gs.clone()) {
+                    ret.insert(gs, 255 - g);
+                }
 
-            let bs = Ref::new_string(lua, "b");
-            if let Some(b) = col.get::<_, i32>(bs.clone()) {
-                ret.insert(bs, 255 - b);
-            }
-            ret
-        }));
+                let bs = Ref::new_string(lua, "b");
+                if let Some(b) = col.get::<_, i32>(bs.clone()) {
+                    ret.insert(bs, 255 - b);
+                }
+                ret
+            }),
+        );
 
-        state.set(Scope::Global, "assert", closure1(|_, val: bool| -> Result<(), Error> {
-            if val {
-                Ok(())
-            } else {
-                Err(Error::External { err: "Lua Assert failed".into() })
-            }
-        }));
+        state.set(
+            Scope::Global,
+            "assert",
+            closure1(|_, val: bool| -> Result<(), Error> {
+                if val {
+                    Ok(())
+                } else {
+                    Err(Error::External {
+                        err: "Lua Assert failed".into(),
+                    })
+                }
+            }),
+        );
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
     local color = {r = 120, g = 50, b = 255};
     local new_color = invert_color(color);
     assert(new_color.r == 255 - color.r);
     assert(new_color.g == 255 - color.g);
     assert(new_color.b == 255 - color.b);
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
     }
 
     #[test]
     fn test_table_ref() {
         let state = Lua::new();
 
-        state.set(Scope::Global, "mut_table", closure1(|lua, table: Ref<Table>| {
-            table.insert(Ref::new_string(lua, "hello"), 55);
-        }));
+        state.set(
+            Scope::Global,
+            "mut_table",
+            closure1(|lua, table: Ref<Table>| {
+                table.insert(Ref::new_string(lua, "hello"), 55);
+            }),
+        );
 
-        state.set(Scope::Global, "assert", closure1(|_, val: bool| -> Result<(), Error> {
-            if val {
-                Ok(())
-            } else {
-                Err(Error::External{ err: "Lua Assert failed".into()})
-            }
-        }));
+        state.set(
+            Scope::Global,
+            "assert",
+            closure1(|_, val: bool| -> Result<(), Error> {
+                if val {
+                    Ok(())
+                } else {
+                    Err(Error::External {
+                        err: "Lua Assert failed".into(),
+                    })
+                }
+            }),
+        );
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
     local test_table = {hello = 5, world = 6}
     assert(test_table.hello == 5);
     assert(test_table.world == 6);
@@ -2122,7 +2312,9 @@ custom:change(22);
 
     assert(test_table.hello == 55);
     assert(test_table.world == 6);
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
     }
 
     #[test]
@@ -2132,28 +2324,37 @@ custom:change(22);
         let c = 55i32;
         let mut s = String::from("hello");
 
-        state.set(Scope::Global, "check_borrow", closure(|lua| {
-            let c = lua.get_borrow::<i32>();
-            assert_eq!(*c, 55);
-            {
-                let s = lua.read_borrow::<String>();
-                if &*s != "hello" && &*s != "cake" {
-                    panic!("String error");
+        state.set(
+            Scope::Global,
+            "check_borrow",
+            closure(|lua| {
+                let c = lua.get_borrow::<i32>();
+                assert_eq!(*c, 55);
+                {
+                    let s = lua.read_borrow::<String>();
+                    if &*s != "hello" && &*s != "cake" {
+                        panic!("String error");
+                    }
                 }
-            }
-            {
-                let mut s = lua.write_borrow::<String>();
-                s.push_str(" world");
-            }
-        }));
+                {
+                    let mut s = lua.write_borrow::<String>();
+                    s.push_str(" world");
+                }
+            }),
+        );
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
     function test()
         check_borrow()
     end
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
-        state.with_borrows()
+        state
+            .with_borrows()
             .borrow(&c)
             .borrow_mut(&mut s)
             .invoke_function::<(), ()>("test", ())
@@ -2164,7 +2365,8 @@ custom:change(22);
 
         let mut s2 = String::from("cake");
 
-        state.with_borrows()
+        state
+            .with_borrows()
             .borrow(&c)
             .borrow_mut(&mut s2)
             .invoke_function::<(), ()>("test", ())
@@ -2186,13 +2388,17 @@ custom:change(22);
     fn test_lua_func_ret() {
         let state = Lua::new();
 
-        let func = state.execute_string::<Ref<Function>>(r#"
+        let func = state
+            .execute_string::<Ref<Function>>(
+                r#"
         return function(a)
             return function(b)
                 return a * b
             end
         end
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         let mul = func.invoke::<i32, Ref<Function>>(6).unwrap();
         assert_eq!(mul.invoke::<i32, i32>(7).unwrap(), 6 * 7);
@@ -2203,41 +2409,54 @@ custom:change(22);
         use std::cell::RefCell;
         let state = Lua::new();
         struct CustomType {
-            thing: i32
+            thing: i32,
         }
         impl LuaUsable for CustomType {
             fn fields(t: &TypeBuilder) {
                 t.metatable(|t| {
-                    t.field("__index", Ref::new_function(&t.lua, r#"
+                    t.field(
+                        "__index",
+                        Ref::new_function(
+                            &t.lua,
+                            r#"
                         return function (self, index)
                             return 15
                         end
-                    "#).invoke::<(), Ref<Function>>(()));
+                    "#,
+                        )
+                        .invoke::<(), Ref<Function>>(()),
+                    );
                 })
             }
         }
 
         state.set(
-            Scope::Global, "custom",
-            Ref::new(
-                &state,
-                RefCell::new(CustomType{thing: -5})
-            )
+            Scope::Global,
+            "custom",
+            Ref::new(&state, RefCell::new(CustomType { thing: -5 })),
         );
         {
-            let c = state.get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom").unwrap();
+            let c = state
+                .get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom")
+                .unwrap();
             let c = c.borrow();
             assert_eq!(c.thing, -5);
         }
 
-        state.execute_string::<()>(r#"
+        state
+            .execute_string::<()>(
+                r#"
         print("custom " .. tostring(custom.thing))
         assert(custom.thing, 15)
         assert(custom.test, 15)
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         {
-            let c = state.get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom").unwrap();
+            let c = state
+                .get::<Ref<RefCell<CustomType>>>(Scope::Global, "custom")
+                .unwrap();
             let c = c.borrow();
             assert_eq!(c.thing, -5);
         }

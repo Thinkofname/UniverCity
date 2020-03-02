@@ -1,11 +1,12 @@
 use super::super::*;
 
 impl Level {
-
     /// Places the room back into a planning state from building
     pub fn undo_placement<P: player::Player, EC: EntityCreator>(
-            &mut self, p: &mut P,
-            entities: &mut Container, room_id: room::Id
+        &mut self,
+        p: &mut P,
+        entities: &mut Container,
+        room_id: room::Id,
     ) -> room::Id {
         use std::mem;
         self.cancel_object_placement::<EC>(room_id, entities);
@@ -45,9 +46,13 @@ impl Level {
         room_id
     }
 
-
     /// Marks the room as built and allows it to be used
-    pub fn finalize_room<EC: EntityCreator, E: Invokable>(&mut self, engine: &E, entities: &mut Container, room_id: room::Id) -> UResult<()> {
+    pub fn finalize_room<EC: EntityCreator, E: Invokable>(
+        &mut self,
+        engine: &E,
+        entities: &mut Container,
+        room_id: room::Id,
+    ) -> UResult<()> {
         use std::mem;
         let log = self.log.clone();
         self.cancel_object_placement::<EC>(room_id, entities);
@@ -67,7 +72,8 @@ impl Level {
         }
         // Same for the virtual level
         let mut new_objs = Vec::with_capacity(virt.objects.len());
-        for obj in mem::replace(&mut virt.objects, vec![]).into_iter()
+        for obj in mem::replace(&mut virt.objects, vec![])
+            .into_iter()
             .rev()
             .filter_map(|v| v)
         {
@@ -80,11 +86,14 @@ impl Level {
             let mut tiles = self.tiles.borrow_mut();
             let keys = virt.tile_map.keys().collect::<Vec<_>>();
             for id in keys {
-                tiles.tile_map.insert(id, assume!(self.log, virt.tile_map.remove(id)));
+                tiles
+                    .tile_map
+                    .insert(id, assume!(self.log, virt.tile_map.remove(id)));
             }
             for loc in area {
                 let idx = LevelTiles::location_index(loc, self.width);
-                let mut td = virt.tiles[RoomVirtualLevel::location_index(loc - virt.offset, virt.width)];
+                let mut td =
+                    virt.tiles[RoomVirtualLevel::location_index(loc - virt.offset, virt.width)];
                 // Update the owner
                 td.owner = Some(room_id);
                 td.flags.remove(TileFlag::BUILDING);
@@ -98,7 +107,10 @@ impl Level {
         let (info, area) = {
             let mut applied_objs = Vec::with_capacity(new_objs.len());
             for obj in new_objs {
-                let rev = assume!(self.log, obj.apply::<_, EC>(&log, self, entities, room_id, false));
+                let rev = assume!(
+                    self.log,
+                    obj.apply::<_, EC>(&log, self, entities, room_id, false)
+                );
                 applied_objs.push(Some((obj, rev)));
             }
             let mut rooms = self.rooms.borrow_mut();
@@ -112,29 +124,39 @@ impl Level {
             // Create the room controller
             if room.controller.is_invalid() {
                 let controller = entities.new_entity();
-                entities.add_component(controller, RoomController {
-                    room_id: room.id,
-                    active: false,
-                    waiting_list: vec![],
-                    potential_list: Default::default(),
-                    entities: vec![],
-                    visitors: vec![],
-                    timetabled_visitors: Default::default(),
-                    active_staff: None,
-                    capacity: 0,
-                    script_requests: FNVMap::default(),
-                    ticks_missing_staff: 0,
-                    have_warned_missing: false,
-                });
-                entities.add_component(controller, Owned {
-                    player_id: room.owner,
-                });
+                entities.add_component(
+                    controller,
+                    RoomController {
+                        room_id: room.id,
+                        active: false,
+                        waiting_list: vec![],
+                        potential_list: Default::default(),
+                        entities: vec![],
+                        visitors: vec![],
+                        timetabled_visitors: Default::default(),
+                        active_staff: None,
+                        capacity: 0,
+                        script_requests: FNVMap::default(),
+                        ticks_missing_staff: 0,
+                        have_warned_missing: false,
+                    },
+                );
+                entities.add_component(
+                    controller,
+                    Owned {
+                        player_id: room.owner,
+                    },
+                );
                 room.controller = controller;
             }
             room.needs_update = true;
             (
-                assume!(self.log, self.asset_manager.loader_open::<room::Loader>(room.key.borrow())),
-                room.area
+                assume!(
+                    self.log,
+                    self.asset_manager
+                        .loader_open::<room::Loader>(room.key.borrow())
+                ),
+                room.area,
             )
         };
 

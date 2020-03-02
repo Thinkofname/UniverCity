@@ -1,7 +1,6 @@
-
 use super::super::*;
-use crate::state;
 use crate::server::event;
+use crate::state;
 use server::network;
 
 pub(super) const DAYS: &[&str] = &[
@@ -11,7 +10,7 @@ pub(super) const DAYS: &[&str] = &[
     "Thursday",
     "Friday",
     "Saturday",
-    "Sunday"
+    "Sunday",
 ];
 
 struct RemoveCourse(course::CourseId);
@@ -47,7 +46,11 @@ impl state::State for CourseList {
         })
     }
 
-    fn added(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn added(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         if !instance.player.state.is_none() {
             // Can't view courses whilst editing anything
@@ -56,8 +59,14 @@ impl state::State for CourseList {
         state::Action::Nothing
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(ResourceKey::new("base", "manage/courses"));
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "manage/courses"));
         self.ui = Some(ui.clone());
 
         let instance = assume!(state.global_logger, instance.as_mut());
@@ -68,7 +77,11 @@ impl state::State for CourseList {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         if self.request.is_none() {
@@ -93,7 +106,13 @@ impl state::State for CourseList {
         }
     }
 
-    fn ui_event_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
 
@@ -103,12 +122,17 @@ impl state::State for CourseList {
                 self.request = None;
                 self.next_request = 20 * 5;
 
-                let target = assume!(state.global_logger, query!(ui, scroll_panel > content).next());
+                let target = assume!(
+                    state.global_logger,
+                    query!(ui, scroll_panel > content).next()
+                );
                 for c in target.children() {
                     target.remove_child(c);
                 }
 
-                pck.courses.0.sort_by(|a, b| a.deprecated.cmp(&b.deprecated));
+                pck.courses
+                    .0
+                    .sort_by(|a, b| a.deprecated.cmp(&b.deprecated));
 
                 for c in pck.courses.0 {
                     let uid = c.uid;
@@ -167,7 +191,7 @@ impl state::State for CourseList {
                             }
                         };
                         for p in info {
-                            d.add_child(node!(course_period(booked=*p)));
+                            d.add_child(node!(course_period(booked = *p)));
                         }
 
                         timetable.add_child(d);
@@ -187,54 +211,84 @@ impl state::State for CourseList {
         evt.handle_event::<RemoveCourse, _>(|evt| {
             let mut cmd: Command = DeprecateCourse::new(evt.0).into();
             let mut proxy = super::GameProxy::proxy(state);
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                self.next_request = 20;
-            });
+            try_cmd!(
+                instance.log,
+                cmd.execute(
+                    &mut proxy,
+                    &mut instance.player,
+                    CommandParams {
+                        log: &instance.log,
+                        level: &mut instance.level,
+                        engine: &instance.scripting,
+                        entities: &mut instance.entities,
+                        snapshots: &instance.snapshots,
+                        mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                    }
+                ),
+                {
+                    instance.push_command(cmd, req);
+                    self.next_request = 20;
+                }
+            );
         });
 
-        evt.handle_event_if::<super::CloseWindowOthers, _, _>(|evt| {
-            // Handle in event_if in order to not consume the event and let
-            // other windows read it too
-            if !evt.0.is_same(&ui) {
+        evt.handle_event_if::<super::CloseWindowOthers, _, _>(
+            |evt| {
+                // Handle in event_if in order to not consume the event and let
+                // other windows read it too
+                if !evt.0.is_same(&ui) {
+                    action = state::Action::Pop;
+                }
+                false
+            },
+            |_| {},
+        );
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
                 action = state::Action::Pop;
-            }
-            false
-        }, |_| {});
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Pop;
-        });
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
-            let course = course::NetworkCourse {
-                // With an id of 0 the server will generate an id when saved
-                uid: course::CourseId(0),
-                name: "Course Name".into(),
-                group: lm.groups[0].clone(),
-                timetable: Default::default(),
-                cost: UniDollar(1000),
-            };
-            action = state::Action::Switch(Box::new(CourseEdit::new(course, true)))
-        });
+            },
+        );
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                let lm = assume!(
+                    state.global_logger,
+                    instance
+                        .entities
+                        .get_component::<course::LessonManager>(Container::WORLD)
+                );
+                let course = course::NetworkCourse {
+                    // With an id of 0 the server will generate an id when saved
+                    uid: course::CourseId(0),
+                    name: "Course Name".into(),
+                    group: lm.groups[0].clone(),
+                    timetable: Default::default(),
+                    cost: UniDollar(1000),
+                };
+                action = state::Action::Switch(Box::new(CourseEdit::new(course, true)))
+            },
+        );
         evt.handle_event::<EditCourse, _>(|evt| {
             // Request the full course information from the server
             // and block the user interface until we get it
-            self.request_open = Some(instance.request_manager.request(player::CourseInfo {
-                uid: evt.0,
-            }));
+            self.request_open = Some(
+                instance
+                    .request_manager
+                    .request(player::CourseInfo { uid: evt.0 }),
+            );
             ui.add_child(node!(darken_ui));
         });
         action
     }
 
-    fn key_action(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, action: keybinds::KeyAction, _mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        _mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
 
         match action {
@@ -282,13 +336,15 @@ struct AutoFillLesson {
 
 impl AutoFillState {
     fn new(
-        target: &course::NetworkCourse, blocked_periods: [[bool; 4]; 7],
-        snapshots: &snapshot::Snapshots, lm: &course::LessonManager
+        target: &course::NetworkCourse,
+        blocked_periods: [[bool; 4]; 7],
+        snapshots: &snapshot::Snapshots,
+        lm: &course::LessonManager,
     ) -> AutoFillState {
         let mut lessons: Vec<AutoFillLesson> = Vec::new();
         for (di, d) in target.timetable.iter().enumerate() {
             for p in d {
-                if let course::NetworkCourseEntry::Lesson{ref key, ref rooms} = p {
+                if let course::NetworkCourseEntry::Lesson { ref key, ref rooms } = p {
                     let lesson = if let Some(l) = lessons.iter_mut().find(|v| v.key == *key) {
                         l
                     } else {
@@ -304,9 +360,11 @@ impl AutoFillState {
                     lesson.missing_lessons -= 1;
                     lesson.valid_days[di] = false;
                     lesson.valid_staff.extend(
-                        rooms.0.iter()
+                        rooms
+                            .0
+                            .iter()
                             .map(|v| v.staff)
-                            .filter_map(|v| snapshots.get_entity_by_id(v))
+                            .filter_map(|v| snapshots.get_entity_by_id(v)),
                     );
                 }
             }
@@ -324,10 +382,7 @@ impl AutoFillState {
         }
     }
 
-    fn handle_event(
-        &mut self,
-        evt: &mut event::EventHandler,
-    ) {
+    fn handle_event(&mut self, evt: &mut event::EventHandler) {
         if let Some(req) = self.request {
             network::RequestManager::handle_reply(evt, req, |pck| {
                 self.request = None;
@@ -365,7 +420,8 @@ impl AutoFillState {
                     self.first_try = false;
                     self.current_day = 0;
                     // Remove the one lesson a day limit
-                    self.lessons.iter_mut()
+                    self.lessons
+                        .iter_mut()
                         .for_each(|v| v.valid_days = [true; 7]);
                 } else {
                     return true;
@@ -384,17 +440,23 @@ impl AutoFillState {
                 continue;
             }
             if let Some(reply) = self.reply.take() {
-                if let Some(staff) = reply.staff.0.iter()
+                if let Some(staff) = reply
+                    .staff
+                    .0
+                    .iter()
                     .filter_map(|v| snapshots.get_entity_by_id(v.0))
                     .find(|v| lesson.valid_staff.contains(v))
                 {
                     if let Some(room) = reply.rooms.0.choose(&mut rng) {
-                        *cur = course::NetworkCourseEntry::Lesson{
+                        *cur = course::NetworkCourseEntry::Lesson {
                             key: lesson.key.clone(),
                             rooms: delta_encode::AlwaysVec(vec![course::NetworkLessonRoom {
-                                staff: entities.get_component::<NetworkId>(staff).map(|v| v.0).unwrap_or(0),
+                                staff: entities
+                                    .get_component::<NetworkId>(staff)
+                                    .map(|v| v.0)
+                                    .unwrap_or(0),
                                 room: *room,
-                            }])
+                            }]),
                         };
                         lesson.missing_lessons -= 1;
                         if self.first_try {
@@ -425,7 +487,7 @@ impl CourseEdit {
             is_new,
             last_cost: "0".into(),
             autofill: None,
-            blocked_periods: [[false; 4]; 7]
+            blocked_periods: [[false; 4]; 7],
         }
     }
 }
@@ -442,7 +504,11 @@ impl state::State for CourseEdit {
         })
     }
 
-    fn added(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn added(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         if !instance.player.state.is_none() {
             // Can't place a room whilst one is already in progress
@@ -451,25 +517,39 @@ impl state::State for CourseEdit {
         state::Action::Nothing
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(ResourceKey::new("base", "manage/course_edit"));
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "manage/course_edit"));
         self.ui = Some(ui.clone());
 
         let instance = assume!(state.global_logger, instance.as_mut());
-        let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
+        let lm = assume!(
+            state.global_logger,
+            instance
+                .entities
+                .get_component::<course::LessonManager>(Container::WORLD)
+        );
 
         if let Some(name) = query!(ui, textbox(id="name") > content > @text).next() {
             name.set_text(self.course.name.as_str());
         }
 
-        if let Some(autofill) = query!(ui, button(id="autofill")).next() {
-            autofill.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(AutoFill);
-                true
-            }));
+        if let Some(autofill) = query!(ui, button(id = "autofill")).next() {
+            autofill.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(AutoFill);
+                    true
+                }),
+            );
         }
 
-        if let Some(subjects) = query!(ui, dropdown(id="subjects")).next() {
+        if let Some(subjects) = query!(ui, dropdown(id = "subjects")).next() {
             if self.is_new {
                 let mut count = 0;
 
@@ -504,9 +584,9 @@ impl state::State for CourseEdit {
                         }
                     }
                 };
-                for period in 0 .. 4 {
+                for period in 0..4 {
                     let info = &self.course.timetable[idx][period];
-                    let p = node!{
+                    let p = node! {
                         course_period(
                             booked=!info.is_free(),
                             blocked=self.blocked_periods[idx][period],
@@ -516,20 +596,23 @@ impl state::State for CourseEdit {
                     };
                     let tooltip = match info {
                         course::NetworkCourseEntry::Free => "Free Period".to_string(),
-                        course::NetworkCourseEntry::Lesson{ref key, ref rooms} => {
+                        course::NetworkCourseEntry::Lesson { ref key, ref rooms } => {
                             let lesson = assume!(state.global_logger, lm.get(key.borrow()));
                             format!("{}\nBooked rooms: {}", lesson.name, rooms.0.len())
-                        },
+                        }
                     };
                     p.set_property("tooltip", tooltip);
-                    p.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, p| {
-                        if p.button == ui::MouseButton::Left {
-                            evt.emit(EditPeriod(idx, period));
-                        } else {
-                            evt.emit(BlockPeriod(idx, period));
-                        }
-                        true
-                    }));
+                    p.set_property(
+                        "on_click",
+                        ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, p| {
+                            if p.button == ui::MouseButton::Left {
+                                evt.emit(EditPeriod(idx, period));
+                            } else {
+                                evt.emit(BlockPeriod(idx, period));
+                            }
+                            true
+                        }),
+                    );
                     n.add_child(p);
                 }
                 overview.add_child(n);
@@ -539,13 +622,22 @@ impl state::State for CourseEdit {
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         let ui = assume!(state.global_logger, self.ui.clone());
 
         let remove = if let Some(autofill) = self.autofill.as_mut() {
-            autofill.do_fill(&mut self.course, &instance.snapshots, &mut instance.entities, &mut instance.request_manager)
+            autofill.do_fill(
+                &mut self.course,
+                &instance.snapshots,
+                &mut instance.entities,
+                &mut instance.request_manager,
+            )
         } else {
             false
         };
@@ -555,15 +647,23 @@ impl state::State for CourseEdit {
             return state::Action::Switch(Box::new(new));
         }
 
-        let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
+        let lm = assume!(
+            state.global_logger,
+            instance
+                .entities
+                .get_component::<course::LessonManager>(Container::WORLD)
+        );
 
-        if let Some(subjects) = query!(ui, dropdown(id="subjects")).next() {
+        if let Some(subjects) = query!(ui, dropdown(id = "subjects")).next() {
             let val: i32 = subjects.get_property("value").unwrap_or(1) - 1;
             let sgroup = &lm.groups[val as usize];
             if self.course.group != *sgroup && self.is_new {
                 self.course.group = sgroup.clone();
                 self.course.timetable = Default::default();
-                return state::Action::Switch(Box::new(Self::new(self.course.clone(), self.is_new)));
+                return state::Action::Switch(Box::new(Self::new(
+                    self.course.clone(),
+                    self.is_new,
+                )));
             }
         }
         if let Some(name) = query!(ui, textbox(id="name") > content > @text).next() {
@@ -599,7 +699,13 @@ impl state::State for CourseEdit {
         }
     }
 
-    fn ui_event_req(&mut self, req: &mut state::CaptureRequester, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event_req(
+        &mut self,
+        req: &mut state::CaptureRequester,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         if let Some(autofill) = self.autofill.as_mut() {
@@ -608,30 +714,49 @@ impl state::State for CourseEdit {
 
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<super::CancelEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Switch(Box::new(CourseList::new()))
-        });
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            let mut cmd: Command = UpdateCourse::new(self.course.clone()).into();
-            let mut proxy = super::GameProxy::proxy(state);
-            try_cmd!(instance.log, cmd.execute(&mut proxy, &mut instance.player, CommandParams {
-                log: &instance.log,
-                level: &mut instance.level,
-                engine: &instance.scripting,
-                entities: &mut instance.entities,
-                snapshots: &instance.snapshots,
-                mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
-            }), {
-                instance.push_command(cmd, req);
-                action = state::Action::Switch(Box::new(CourseList::new()))
-            });
-        });
+        evt.handle_event_if::<super::CancelEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| action = state::Action::Switch(Box::new(CourseList::new())),
+        );
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                let mut cmd: Command = UpdateCourse::new(self.course.clone()).into();
+                let mut proxy = super::GameProxy::proxy(state);
+                try_cmd!(
+                    instance.log,
+                    cmd.execute(
+                        &mut proxy,
+                        &mut instance.player,
+                        CommandParams {
+                            log: &instance.log,
+                            level: &mut instance.level,
+                            engine: &instance.scripting,
+                            entities: &mut instance.entities,
+                            snapshots: &instance.snapshots,
+                            mission_handler: instance.mission_handler.as_ref().map(|v| v.borrow()),
+                        }
+                    ),
+                    {
+                        instance.push_command(cmd, req);
+                        action = state::Action::Switch(Box::new(CourseList::new()))
+                    }
+                );
+            },
+        );
         evt.handle_event::<EditPeriod, _>(|EditPeriod(day, period)| {
-            action = state::Action::Switch(Box::new(CoursePeriodEdit::new(self.course.clone(), self.is_new, day, period)))
+            action = state::Action::Switch(Box::new(CoursePeriodEdit::new(
+                self.course.clone(),
+                self.is_new,
+                day,
+                period,
+            )))
         });
         evt.handle_event::<BlockPeriod, _>(|BlockPeriod(day, period)| {
             self.blocked_periods[day][period] = !self.blocked_periods[day][period];
-            if let Some(p) = query!(ui, course_period(day = day as i32,period = period as i32)).next() {
+            if let Some(p) =
+                query!(ui, course_period(day = day as i32, period = period as i32)).next()
+            {
                 p.set_property("blocked", self.blocked_periods[day][period]);
             }
         });
@@ -643,13 +768,29 @@ impl state::State for CourseEdit {
                     }
                 }
             }));
-            let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
-            self.autofill = Some(AutoFillState::new(&self.course, self.blocked_periods, &instance.snapshots, &lm));
+            let lm = assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<course::LessonManager>(Container::WORLD)
+            );
+            self.autofill = Some(AutoFillState::new(
+                &self.course,
+                self.blocked_periods,
+                &instance.snapshots,
+                &lm,
+            ));
         });
         action
     }
 
-    fn key_action(&mut self, _instance: &mut Option<GameInstance>, _state: &mut crate::GameState, action: keybinds::KeyAction, _mouse_pos: (i32, i32)) -> state::Action {
+    fn key_action(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        _state: &mut crate::GameState,
+        action: keybinds::KeyAction,
+        _mouse_pos: (i32, i32),
+    ) -> state::Action {
         use crate::keybinds::KeyAction::*;
 
         match action {
@@ -681,7 +822,12 @@ struct AddRoom;
 struct RemoveRoom(usize);
 
 impl CoursePeriodEdit {
-    pub fn new(course: course::NetworkCourse, is_new_course: bool, day: usize, period: usize) -> CoursePeriodEdit {
+    pub fn new(
+        course: course::NetworkCourse,
+        is_new_course: bool,
+        day: usize,
+        period: usize,
+    ) -> CoursePeriodEdit {
         CoursePeriodEdit {
             ui: None,
 
@@ -710,13 +856,16 @@ fn gen_room_list(
     matching_entities: &[ecs::Entity],
     matching_rooms: &[room::Id],
 ) {
-    let erooms = if let course::NetworkCourseEntry::Lesson{ref rooms, ..} = &entry {
+    let erooms = if let course::NetworkCourseEntry::Lesson { ref rooms, .. } = &entry {
         rooms
     } else {
         return;
     };
 
-    let rooms = assume!(state.global_logger, query!(ui, content(id="rooms")).next());
+    let rooms = assume!(
+        state.global_logger,
+        query!(ui, content(id = "rooms")).next()
+    );
     // Remove existing entries
     for c in rooms.children() {
         rooms.remove_child(c);
@@ -770,7 +919,8 @@ fn gen_room_list(
         rooms.add_child(node.clone());
 
         let mut index = 2;
-        let list = assume!(state.global_logger,
+        let list = assume!(
+            state.global_logger,
             query!(node, staff_selection > dropdown).next()
         );
 
@@ -779,25 +929,38 @@ fn gen_room_list(
             if Some(*e) == instance.snapshots.get_entity_by_id(rm.staff) {
                 selected = index;
             }
-            let living = assume!(state.global_logger, instance.entities.get_component::<Living>(*e));
-            list.set_property(&format!("option{}", index), format!("{} {}", living.name.0, living.name.1));
+            let living = assume!(
+                state.global_logger,
+                instance.entities.get_component::<Living>(*e)
+            );
+            list.set_property(
+                &format!("option{}", index),
+                format!("{} {}", living.name.0, living.name.1),
+            );
             index += 1;
         }
         list.set_property("options", index - 1);
         list.set_property("value", selected);
 
-        let list = assume!(state.global_logger,
+        let list = assume!(
+            state.global_logger,
             query!(node, room_selection > dropdown).next()
         );
         index = 2;
         selected = 1;
-        for (id, room) in matching_rooms.iter()
+        for (id, room) in matching_rooms
+            .iter()
             .map(|v| (*v, instance.level.get_room_info(*v)))
         {
             if id == rm.room {
                 selected = index;
             }
-            let info = assume!(state.global_logger, state.asset_manager.loader_open::<room::Loader>(room.key.borrow()));
+            let info = assume!(
+                state.global_logger,
+                state
+                    .asset_manager
+                    .loader_open::<room::Loader>(room.key.borrow())
+            );
             list.set_property(&format!("option{}", index), info.name.clone());
             index += 1;
         }
@@ -827,7 +990,11 @@ impl state::State for CoursePeriodEdit {
         })
     }
 
-    fn added(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn added(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         if !instance.player.state.is_none() {
             // Can't place a room whilst one is already in progress
@@ -836,14 +1003,25 @@ impl state::State for CoursePeriodEdit {
         state::Action::Nothing
     }
 
-    fn active(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
-        let ui = state.ui_manager.create_node(ResourceKey::new("base", "manage/course_edit_period"));
+    fn active(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
+        let ui = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "manage/course_edit_period"));
         self.ui = Some(ui.clone());
 
         let instance = assume!(state.global_logger, instance.as_mut());
 
         if let Some(lesson) = query!(ui, dropdown(id = "lesson")).next() {
-            let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
+            let lm = assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<course::LessonManager>(Container::WORLD)
+            );
             let mut count = 1;
             lesson.set_property("option1", "Free Period".to_string());
             for l in lm.lessons_in_group(&self.course.group) {
@@ -858,39 +1036,57 @@ impl state::State for CoursePeriodEdit {
             lesson.set_property("value", self.selected_lesson);
         }
 
-        if let course::NetworkCourseEntry::Lesson{ref key, ..} = self.course.timetable[self.day][self.period] {
+        if let course::NetworkCourseEntry::Lesson { ref key, .. } =
+            self.course.timetable[self.day][self.period]
+        {
             ui.add_child(node!(darken_ui));
-            self.request = Some(instance.request_manager.request(player::LessonValidOptions {
-                course: self.course.uid,
-                key: key.clone(),
-                day: self.day as u8,
-                period: self.period as u8,
-            }));
+            self.request = Some(
+                instance
+                    .request_manager
+                    .request(player::LessonValidOptions {
+                        course: self.course.uid,
+                        key: key.clone(),
+                        day: self.day as u8,
+                        period: self.period as u8,
+                    }),
+            );
         }
 
-        if let Some(add) = query!(ui, button(id="add_room")).next() {
+        if let Some(add) = query!(ui, button(id = "add_room")).next() {
             if self.selected_lesson == 1 {
                 add.set_property("disabled", true);
             }
-            add.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(AddRoom);
-                true
-            }));
+            add.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(AddRoom);
+                    true
+                }),
+            );
         }
 
         state::Action::Nothing
     }
 
-    fn tick(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState) -> state::Action {
+    fn tick(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
         if !instance.player.state.is_none() {
             state::Action::Pop
         } else {
             let ui = assume!(state.global_logger, self.ui.as_ref());
 
-            let lm = assume!(state.global_logger, instance.entities.get_component::<course::LessonManager>(Container::WORLD));
+            let lm = assume!(
+                state.global_logger,
+                instance
+                    .entities
+                    .get_component::<course::LessonManager>(Container::WORLD)
+            );
 
-            if let Some(lesson) = query!(ui, dropdown(id="lesson")).next() {
+            if let Some(lesson) = query!(ui, dropdown(id = "lesson")).next() {
                 let val = lesson.get_property("value").unwrap_or(1);
                 if val != self.selected_lesson {
                     // Clear the booked rooms
@@ -899,20 +1095,36 @@ impl state::State for CoursePeriodEdit {
                             for c in details.children() {
                                 details.remove_child(c);
                             }
-                            details.add_child(ui::Node::new_text("Free period.\nStudents are able to relax during this time"));
+                            details.add_child(ui::Node::new_text(
+                                "Free period.\nStudents are able to relax during this time",
+                            ));
                         }
                         course::NetworkCourseEntry::Free
                     } else {
-                        let lesson = assume!(state.global_logger, lm.lessons_in_group(&self.course.group).nth((val - 2) as usize));
+                        let lesson = assume!(
+                            state.global_logger,
+                            lm.lessons_in_group(&self.course.group)
+                                .nth((val - 2) as usize)
+                        );
                         if let Some(details) = query!(ui, lesson_details).next() {
                             for c in details.children() {
                                 details.remove_child(c);
                             }
                             details.add_child(ui::Node::new_text(lesson.description.clone()));
-                            details.add_child(ui::Node::new_text(format!("\n\nRequired lessons: {}", lesson.required_lessons)));
+                            details.add_child(ui::Node::new_text(format!(
+                                "\n\nRequired lessons: {}",
+                                lesson.required_lessons
+                            )));
                             details.add_child(ui::Node::new_text("\n\nCan be taught by:"));
                             for key in &lesson.valid_staff {
-                                let staff = assume!(state.global_logger, state.asset_manager.loader_open::<Loader<entity::ClientComponent>>(key.borrow()));
+                                let staff = assume!(
+                                    state.global_logger,
+                                    state
+                                        .asset_manager
+                                        .loader_open::<Loader<entity::ClientComponent>>(
+                                            key.borrow()
+                                        )
+                                );
                                 details.add_child(ui::Node::new_text("\n"));
                                 details.add_child(ui::Node::new("bullet_point"));
                                 let n = ui::Node::new_text(format!(" {}", staff.display_name));
@@ -921,7 +1133,12 @@ impl state::State for CoursePeriodEdit {
                             }
                             details.add_child(ui::Node::new_text("\n\nCan be taught in:"));
                             for key in &lesson.valid_rooms {
-                                let room = assume!(state.global_logger, state.asset_manager.loader_open::<room::Loader>(key.borrow()));
+                                let room = assume!(
+                                    state.global_logger,
+                                    state
+                                        .asset_manager
+                                        .loader_open::<room::Loader>(key.borrow())
+                                );
                                 details.add_child(ui::Node::new_text("\n"));
                                 details.add_child(ui::Node::new("bullet_point"));
                                 let n = ui::Node::new_text(format!(" {}", room.name));
@@ -935,25 +1152,32 @@ impl state::State for CoursePeriodEdit {
                         }
                     };
 
-                    let rooms = assume!(state.global_logger, query!(ui, content(id="rooms")).next());
+                    let rooms = assume!(
+                        state.global_logger,
+                        query!(ui, content(id = "rooms")).next()
+                    );
                     for pr in query!(rooms, period_room).matches() {
                         rooms.remove_child(pr);
                     }
 
                     self.selected_lesson = val;
 
-                    if let Some(add) = query!(ui, button(id="add_room")).next() {
+                    if let Some(add) = query!(ui, button(id = "add_room")).next() {
                         add.set_property("disabled", self.selected_lesson == 1);
                     }
 
-                    if let course::NetworkCourseEntry::Lesson{ref key, ..} = self.course.timetable[self.day][self.period] {
+                    if let course::NetworkCourseEntry::Lesson { ref key, .. } =
+                        self.course.timetable[self.day][self.period]
+                    {
                         ui.add_child(node!(darken_ui));
-                        self.request = Some(instance.request_manager.request(player::LessonValidOptions {
-                            course: self.course.uid,
-                            key: key.clone(),
-                            day: self.day as u8,
-                            period: self.period as u8,
-                        }));
+                        self.request = Some(instance.request_manager.request(
+                            player::LessonValidOptions {
+                                course: self.course.uid,
+                                key: key.clone(),
+                                day: self.day as u8,
+                                period: self.period as u8,
+                            },
+                        ));
                     }
                 }
             }
@@ -963,7 +1187,7 @@ impl state::State for CoursePeriodEdit {
 
             let mut valid = match &self.course.timetable[self.day][self.period] {
                 course::NetworkCourseEntry::Free => true,
-                course::NetworkCourseEntry::Lesson{ref rooms, ..} => {
+                course::NetworkCourseEntry::Lesson { ref rooms, .. } => {
                     for rm in &rooms.0 {
                         if let Some(staff) = instance.snapshots.get_entity_by_id(rm.staff) {
                             *used_staff.entry(staff).or_insert(0) += 1;
@@ -971,7 +1195,7 @@ impl state::State for CoursePeriodEdit {
                         *used_rooms.entry(rm.room).or_insert(0) += 1;
                     }
                     !rooms.0.is_empty()
-                },
+                }
             };
 
             let mut set = false;
@@ -981,8 +1205,9 @@ impl state::State for CoursePeriodEdit {
                     if self.focused_entity != Some(val) && val >= 2 {
                         self.focused_entity = Some(val);
 
-
-                        if let Some(e) = self.matching_entities.get(val as usize - 2)
+                        if let Some(e) = self
+                            .matching_entities
+                            .get(val as usize - 2)
                             .cloned()
                             .filter(|v| instance.entities.is_valid(*v))
                         {
@@ -990,17 +1215,22 @@ impl state::State for CoursePeriodEdit {
                         }
                     }
                 }
-                if let (Some(val), Some(idx)) = (list.get_property::<i32>("value"), list.get_property::<i32>("idx")) {
-                    if let course::NetworkCourseEntry::Lesson{ref mut rooms, ..} = &mut self.course.timetable[self.day][self.period] {
+                if let (Some(val), Some(idx)) = (
+                    list.get_property::<i32>("value"),
+                    list.get_property::<i32>("idx"),
+                ) {
+                    if let course::NetworkCourseEntry::Lesson { ref mut rooms, .. } =
+                        &mut self.course.timetable[self.day][self.period]
+                    {
                         if val >= 2 {
-                            if let Some(e) = self.matching_entities.get(val as usize - 2)
+                            if let Some(e) = self
+                                .matching_entities
+                                .get(val as usize - 2)
                                 .cloned()
                                 .filter(|v| instance.entities.is_valid(*v))
                             {
                                 let self_valid = list.get_property("valid").unwrap_or(true);
-                                let this_valid = used_staff.get(&e)
-                                    .cloned()
-                                    .unwrap_or(0) == 1;
+                                let this_valid = used_staff.get(&e).cloned().unwrap_or(0) == 1;
 
                                 if self_valid != this_valid {
                                     list.set_property("valid", this_valid);
@@ -1008,7 +1238,9 @@ impl state::State for CoursePeriodEdit {
                                 if !this_valid {
                                     valid = false;
                                 }
-                                if let Some(e) = instance.entities.get_component::<NetworkId>(e).map(|v| v.0) {
+                                if let Some(e) =
+                                    instance.entities.get_component::<NetworkId>(e).map(|v| v.0)
+                                {
                                     rooms.0[idx as usize].staff = e;
                                 }
                             }
@@ -1030,30 +1262,38 @@ impl state::State for CoursePeriodEdit {
                     if self.focused_room != Some(val) && val >= 2 {
                         self.focused_room = Some(val);
 
-                        if let Some(room) = self.matching_rooms.get(val as usize - 2)
+                        if let Some(room) = self
+                            .matching_rooms
+                            .get(val as usize - 2)
                             .map(|v| instance.level.get_room_info(*v))
                             .filter(|v| v.owner == player)
                         {
                             state.renderer.suggest_camera_position(
                                 room.area.min.x as f32 + room.area.width() as f32 / 2.0,
                                 room.area.min.y as f32 + room.area.height() as f32 / 2.0,
-                                45.0
+                                45.0,
                             );
                         }
                         break;
                     }
                 }
-                if let (Some(val), Some(idx)) = (list.get_property::<i32>("value"), list.get_property::<i32>("idx")) {
-                    if let course::NetworkCourseEntry::Lesson{ref mut rooms, ..} = &mut self.course.timetable[self.day][self.period] {
+                if let (Some(val), Some(idx)) = (
+                    list.get_property::<i32>("value"),
+                    list.get_property::<i32>("idx"),
+                ) {
+                    if let course::NetworkCourseEntry::Lesson { ref mut rooms, .. } =
+                        &mut self.course.timetable[self.day][self.period]
+                    {
                         if val >= 2 {
-                            if let Some(room) = self.matching_rooms.get(val as usize - 2)
+                            if let Some(room) = self
+                                .matching_rooms
+                                .get(val as usize - 2)
                                 .map(|v| instance.level.get_room_info(*v))
                                 .filter(|v| v.owner == player)
                             {
                                 let self_valid = list.get_property("valid").unwrap_or(true);
-                                let this_valid = used_rooms.get(&room.id)
-                                    .cloned()
-                                    .unwrap_or(0) == 1;
+                                let this_valid =
+                                    used_rooms.get(&room.id).cloned().unwrap_or(0) == 1;
 
                                 if self_valid != this_valid {
                                     list.set_property("valid", this_valid);
@@ -1074,13 +1314,12 @@ impl state::State for CoursePeriodEdit {
                 self.focused_room = None;
             }
 
-            if let Some(save) = query!(ui, button(id="save")).next() {
+            if let Some(save) = query!(ui, button(id = "save")).next() {
                 let disabled = save.get_property("disabled").unwrap_or(false);
                 if disabled == valid {
                     save.set_property("disabled", !valid);
                 }
             }
-
 
             state::Action::Nothing
         }
@@ -1092,7 +1331,12 @@ impl state::State for CoursePeriodEdit {
         }
     }
 
-    fn ui_event(&mut self, instance: &mut Option<GameInstance>, state: &mut crate::GameState, evt: &mut event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        instance: &mut Option<GameInstance>,
+        state: &mut crate::GameState,
+        evt: &mut event::EventHandler,
+    ) -> state::Action {
         let instance = assume!(state.global_logger, instance.as_mut());
 
         let mut action = state::Action::Nothing;
@@ -1105,7 +1349,10 @@ impl state::State for CoursePeriodEdit {
                     ui.remove_child(darken);
                 }
 
-                self.matching_entities = pck.staff.0.into_iter()
+                self.matching_entities = pck
+                    .staff
+                    .0
+                    .into_iter()
                     .filter_map(|v| instance.snapshots.get_entity_by_id(v.0))
                     .collect();
                 self.matching_rooms = pck.rooms.0;
@@ -1121,11 +1368,19 @@ impl state::State for CoursePeriodEdit {
             });
         }
 
-        evt.handle_event_if::<super::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            action = state::Action::Switch(Box::new(CourseEdit::new(self.course.clone(), self.is_new_course)))
-        });
+        evt.handle_event_if::<super::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                action = state::Action::Switch(Box::new(CourseEdit::new(
+                    self.course.clone(),
+                    self.is_new_course,
+                )))
+            },
+        );
         evt.handle_event::<RemoveRoom, _>(|RemoveRoom(idx)| {
-            if let course::NetworkCourseEntry::Lesson{ref mut rooms, ..} = &mut self.course.timetable[self.day][self.period] {
+            if let course::NetworkCourseEntry::Lesson { ref mut rooms, .. } =
+                &mut self.course.timetable[self.day][self.period]
+            {
                 rooms.0.remove(idx);
             }
 
@@ -1139,7 +1394,9 @@ impl state::State for CoursePeriodEdit {
             );
         });
         evt.handle_event::<AddRoom, _>(|_| {
-            if let course::NetworkCourseEntry::Lesson{ref mut rooms, ..} = &mut self.course.timetable[self.day][self.period] {
+            if let course::NetworkCourseEntry::Lesson { ref mut rooms, .. } =
+                &mut self.course.timetable[self.day][self.period]
+            {
                 rooms.0.push(course::NetworkLessonRoom {
                     staff: 0xFF_FF_FF_FF,
                     room: room::Id(0),

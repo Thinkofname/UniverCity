@@ -2,18 +2,19 @@
 //!
 //! Allows the use for virtual systems (e.g. steam cloud)
 
-use std::io::{Read, Write, Seek, Result};
-use std::path::{Path, PathBuf};
-use std::fs;
 use chrono;
+use std::fs;
+use std::io::{Read, Result, Seek, Write};
 use std::mem::ManuallyDrop;
+use std::path::{Path, PathBuf};
 
 /// A boxed filesystem
-pub type BoxedFileSystem = Box<dyn FileSystem<Reader=Box<dyn ReadSeeker>, Writer=Box<dyn Write>>>;
+pub type BoxedFileSystem =
+    Box<dyn FileSystem<Reader = Box<dyn ReadSeeker>, Writer = Box<dyn Write>>>;
 
 #[doc(hidden)]
 pub trait ReadSeeker: Read + Seek {}
-impl <T> ReadSeeker for T where T: Read + Seek {}
+impl<T> ReadSeeker for T where T: Read + Seek {}
 
 /// A wrapper around a filesystem
 pub trait FileSystem {
@@ -39,10 +40,11 @@ pub trait FileSystem {
 
     /// Converts the filesystem into a boxed version erasing the
     /// type.
-    fn into_boxed(self) -> BoxedFileSystem where Self: Sized + 'static {
-        Box::new(BoxedFS {
-            inner: self
-        })
+    fn into_boxed(self) -> BoxedFileSystem
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(BoxedFS { inner: self })
     }
 }
 
@@ -50,10 +52,11 @@ struct BoxedFS<Inner> {
     inner: Inner,
 }
 
-impl <Inner> FileSystem for BoxedFS<Inner>
-    where Inner: FileSystem,
-        Inner::Reader: 'static,
-        Inner::Writer: 'static,
+impl<Inner> FileSystem for BoxedFS<Inner>
+where
+    Inner: FileSystem,
+    Inner::Reader: 'static,
+    Inner::Writer: 'static,
 {
     type Reader = Box<dyn ReadSeeker>;
     type Writer = Box<dyn Write>;
@@ -83,8 +86,9 @@ impl <Inner> FileSystem for BoxedFS<Inner>
     }
 }
 
-impl <W, R, F> FileSystem for Box<F>
-where F: FileSystem<Reader=R, Writer=W> + ?Sized,
+impl<W, R, F> FileSystem for Box<F>
+where
+    F: FileSystem<Reader = R, Writer = W> + ?Sized,
     W: Write + Sized,
     R: Read + Seek + Sized,
 {
@@ -208,10 +212,12 @@ impl FileSystem for NativeFileSystem {
             .filter_map(|v| v.ok())
             .map(|v| v)
             .map(|v| v.path())
-            .map(|v| v.strip_prefix(&self.path)
-                .expect("File is missing prefix")
-                .to_string_lossy()
-                .into_owned())
+            .map(|v| {
+                v.strip_prefix(&self.path)
+                    .expect("File is missing prefix")
+                    .to_string_lossy()
+                    .into_owned()
+            })
             .collect()
     }
 }
@@ -223,12 +229,14 @@ pub struct SubfolderFileSystem<I> {
     sub_path: String,
 }
 
-impl <I> SubfolderFileSystem<I>
-    where I: FileSystem
+impl<I> SubfolderFileSystem<I>
+where
+    I: FileSystem,
 {
     /// Creates a view onto the subfolder of the passed filesystem.
     pub fn new<S>(fs: I, sub_path: S) -> SubfolderFileSystem<I>
-        where S: Into<String>
+    where
+        S: Into<String>,
     {
         SubfolderFileSystem {
             inner: fs,
@@ -237,8 +245,9 @@ impl <I> SubfolderFileSystem<I>
     }
 }
 
-impl <I> FileSystem for SubfolderFileSystem<I>
-    where I: FileSystem
+impl<I> FileSystem for SubfolderFileSystem<I>
+where
+    I: FileSystem,
 {
     type Reader = I::Reader;
     type Writer = I::Writer;
@@ -274,7 +283,6 @@ impl <I> FileSystem for SubfolderFileSystem<I>
     }
 }
 
-
 /// Reads/Writes to `A` falling back to `B` for reads if missing
 #[derive(Clone)]
 pub struct JoinedFileSystem<A, B> {
@@ -282,24 +290,24 @@ pub struct JoinedFileSystem<A, B> {
     b: B,
 }
 
-impl <A, B> JoinedFileSystem<A, B>
-    where A: FileSystem,
-        B: FileSystem,
+impl<A, B> JoinedFileSystem<A, B>
+where
+    A: FileSystem,
+    B: FileSystem,
 {
     /// Joins the two filesystems
     pub fn new(a: A, b: B) -> JoinedFileSystem<A, B> {
-        JoinedFileSystem {
-            a, b,
-        }
+        JoinedFileSystem { a, b }
     }
 }
 
-impl <A, B> FileSystem for JoinedFileSystem<A, B>
-    where A: FileSystem + 'static,
-        B: FileSystem + 'static,
-        A::Reader: 'static,
-        B::Reader: 'static,
-        A::Writer: 'static,
+impl<A, B> FileSystem for JoinedFileSystem<A, B>
+where
+    A: FileSystem + 'static,
+    B: FileSystem + 'static,
+    A::Reader: 'static,
+    B::Reader: 'static,
+    A::Writer: 'static,
 {
     type Reader = Box<dyn ReadSeeker>;
     type Writer = Box<dyn Write>;

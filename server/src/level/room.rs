@@ -4,19 +4,19 @@ use super::*;
 
 use serde_json;
 
-use crate::util::{BitSet, FNVMap};
-use std::collections::hash_map::Entry;
-use std::sync::Arc;
 use crate::assets;
 use crate::level::Check;
 use crate::player;
 use crate::prelude::*;
 use crate::script;
+use crate::util::{BitSet, FNVMap};
+use std::collections::hash_map::Entry;
+use std::sync::Arc;
 
 /// Loads room descriptions from an asset manager.
 pub enum Loader {}
 
-impl <'a> assets::AssetLoader<'a> for Loader {
+impl<'a> assets::AssetLoader<'a> for Loader {
     type LoaderData = LoaderData;
     type Return = Arc<Room>;
     type Key = assets::ResourceKey<'a>;
@@ -28,12 +28,19 @@ impl <'a> assets::AssetLoader<'a> for Loader {
         }
     }
 
-    fn load(data: &mut Self::LoaderData, assets: &assets::AssetManager, resource: Self::Key) -> UResult<Self::Return> {
+    fn load(
+        data: &mut Self::LoaderData,
+        assets: &assets::AssetManager,
+        resource: Self::Key,
+    ) -> UResult<Self::Return> {
         if let Some(room) = data.by_name.get(&resource) {
             return Ok(room.clone());
         }
 
-        let file = assets.open_from_pack(resource.module_key(), &format!("rooms/{}.json", resource.resource()))?;
+        let file = assets.open_from_pack(
+            resource.module_key(),
+            &format!("rooms/{}.json", resource.resource()),
+        )?;
         let info: RoomInfo = serde_json::from_reader(file)?;
 
         let mut checks = vec![];
@@ -53,31 +60,44 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                 let objects = match data.object_groups.entry(group) {
                     Entry::Occupied(val) => val.into_mut(),
                     Entry::Vacant(val) => {
-                        let file = assets.open_from_pack(val.key().module_key(), &format!("objects/groups/{}.json", val.key().resource()))?;
+                        let file = assets.open_from_pack(
+                            val.key().module_key(),
+                            &format!("objects/groups/{}.json", val.key().resource()),
+                        )?;
                         let info: Vec<String> = serde_json::from_reader(file)?;
 
-                        val.insert(info.into_iter()
-                            .map(|v|
-                                LazyResourceKey::parse(&v)
-                                    .or_module(resource.module_key())
-                                    .into_owned()
-                            )
-                            .collect())
+                        val.insert(
+                            info.into_iter()
+                                .map(|v| {
+                                    LazyResourceKey::parse(&v)
+                                        .or_module(resource.module_key())
+                                        .into_owned()
+                                })
+                                .collect(),
+                        )
                     }
                 };
                 valid_objects.extend(objects.iter().cloned());
             } else {
-                valid_objects.push(assets::LazyResourceKey::parse(&v)
-                    .or_module(resource.module_key())
-                    .into_owned());
+                valid_objects.push(
+                    assets::LazyResourceKey::parse(&v)
+                        .or_module(resource.module_key())
+                        .into_owned(),
+                );
             }
         }
 
         let room = Arc::new(Room {
             name: info.name,
             min_size: (info.min_size.x, info.min_size.y),
-            tile: assets::LazyResourceKey::parse(&info.tile).or_module(resource.module_key()).into_owned(),
-            border_tile: info.border_tile.map(|v| assets::LazyResourceKey::parse(&v).or_module(resource.module_key()).into_owned()),
+            tile: assets::LazyResourceKey::parse(&info.tile)
+                .or_module(resource.module_key())
+                .into_owned(),
+            border_tile: info.border_tile.map(|v| {
+                assets::LazyResourceKey::parse(&v)
+                    .or_module(resource.module_key())
+                    .into_owned()
+            }),
             tile_placer: info.tile_placer.map(|v| {
                 let (sub, method) = if let Some(pos) = v.char_indices().find(|v| v.1 == '#') {
                     v.split_at(pos.0)
@@ -88,7 +108,7 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                     assets::LazyResourceKey::parse(sub)
                         .or_module(resource.module_key())
                         .into_owned(),
-                    method[1..].into()
+                    method[1..].into(),
                 )
             }),
             tile_updater: info.tile_updater.map(|v| {
@@ -100,39 +120,55 @@ impl <'a> assets::AssetLoader<'a> for Loader {
                 texture: assets::LazyResourceKey::parse(&v.texture)
                     .or_module(resource.module_key())
                     .into_owned(),
-                texture_top: v.texture_top.map(|v| assets::LazyResourceKey::parse(&v)
-                    .or_module(resource.module_key())
-                    .into_owned()),
+                texture_top: v.texture_top.map(|v| {
+                    assets::LazyResourceKey::parse(&v)
+                        .or_module(resource.module_key())
+                        .into_owned()
+                }),
                 priority: v.priority,
             }),
             placement_checks: checks,
-            only_within: info.only_within.map(|v| assets::LazyResourceKey::parse(&v)
-                .or_module(resource.module_key())
-                .into_owned()),
+            only_within: info.only_within.map(|v| {
+                assets::LazyResourceKey::parse(&v)
+                    .or_module(resource.module_key())
+                    .into_owned()
+            }),
             valid_objects,
-            required_objects: info.required_objects
+            required_objects: info
+                .required_objects
                 .into_iter()
-                .map(|(k, v)| (
-                    assets::LazyResourceKey::parse(&k).or_module(resource.module_key()).into_owned(),
-                    v
-                ))
+                .map(|(k, v)| {
+                    (
+                        assets::LazyResourceKey::parse(&k)
+                            .or_module(resource.module_key())
+                            .into_owned(),
+                        v,
+                    )
+                })
                 .collect(),
-            required_entities: info.required_entities
+            required_entities: info
+                .required_entities
                 .into_iter()
-                .map(|(k, v)| (
-                    assets::LazyResourceKey::parse(&k).or_module(resource.module_key()).into_owned(),
-                    v
-                ))
+                .map(|(k, v)| {
+                    (
+                        assets::LazyResourceKey::parse(&k)
+                            .or_module(resource.module_key())
+                            .into_owned(),
+                        v,
+                    )
+                })
                 .collect(),
             build_anywhere: info.build_anywhere,
-            requirements: info.requirements.into_iter()
+            requirements: info
+                .requirements
+                .into_iter()
                 .map(|v| match v {
-                    RequirementInfo::Room{key, count} => Requirement::Room {
+                    RequirementInfo::Room { key, count } => Requirement::Room {
                         key: LazyResourceKey::parse(&key)
                             .or_module(resource.module_key())
                             .into_owned(),
                         count,
-                    }
+                    },
                 })
                 .collect(),
             controller: info.controller.map(|v| {
@@ -258,18 +294,18 @@ pub enum Requirement {
         key: ResourceKey<'static>,
         /// The number required
         count: usize,
-    }
+    },
 }
 
 impl Requirement {
-
     /// Returns whether the player meets the requirement
     pub fn check_requirement(&self, level: &Level, player: PlayerId) -> bool {
         use self::Requirement::*;
         match *self {
-            Room{ref key, count} => {
+            Room { ref key, count } => {
                 let ids = level.room_ids();
-                let c = ids.into_iter()
+                let c = ids
+                    .into_iter()
                     .map(|v| level.get_room_info(v))
                     .filter(|v| v.owner == player)
                     .filter(|v| v.key == *key)
@@ -277,17 +313,18 @@ impl Requirement {
                 if c < count {
                     return false;
                 }
-            },
+            }
         }
         true
     }
     /// Prints a formatted version of this requirement
     pub fn print_tooltip<W>(&self, assets: &AssetManager, w: &mut W) -> ::std::fmt::Result
-        where W: ::std::fmt::Write
+    where
+        W: ::std::fmt::Write,
     {
         use self::Requirement::*;
         match *self {
-            Room{ref key, count} => {
+            Room { ref key, count } => {
                 let ty;
                 let s;
                 let name = if let Ok(t) = assets.loader_open::<Loader>(key.borrow()) {
@@ -313,8 +350,17 @@ impl Room {
     pub fn cost_for_room(&self, level: &Level, room_id: Id) -> UniDollar {
         let info = level.get_room_info(room_id);
         let mut cost = self.cost_for_area(info.area);
-        for obj in level.get_room_objects(room_id).iter().filter_map(|v| v.as_ref()) {
-            let obj = assume!(level.log, level.asset_manager.loader_open::<object::Loader>(obj.0.key.borrow()));
+        for obj in level
+            .get_room_objects(room_id)
+            .iter()
+            .filter_map(|v| v.as_ref())
+        {
+            let obj = assume!(
+                level.log,
+                level
+                    .asset_manager
+                    .loader_open::<object::Loader>(obj.0.key.borrow())
+            );
             cost += obj.cost;
         }
         cost
@@ -359,9 +405,9 @@ impl Room {
     /// for the display of the remaining requirements.
     /// Currently this only checks object requirements.
     pub fn check_valid_placement<F>(&self, level: &Level, room_id: Id, mut cb: F) -> bool
-        where F: FnMut(usize, i32)
+    where
+        F: FnMut(usize, i32),
     {
-
         let required = &self.required_objects;
         // Check each requirement against the currently
         // placed objects.
@@ -388,10 +434,12 @@ impl Room {
             }
             // Find the ui elements of matching objects
             // and update their requirements text.
-            for id in self.valid_objects.iter()
-                    .enumerate()
-                    .filter(|&(_, o)| k.weak_match(o))
-                    .map(|(id, _)| id)
+            for id in self
+                .valid_objects
+                .iter()
+                .enumerate()
+                .filter(|&(_, o)| k.weak_match(o))
+                .map(|(id, _)| id)
             {
                 cb(id, count);
             }
@@ -401,7 +449,9 @@ impl Room {
 }
 
 /// Represents a room id
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, DeltaEncode)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, DeltaEncode,
+)]
 pub struct Id(pub i16);
 
 /// Marks a room placed in the level
@@ -467,11 +517,14 @@ pub struct RoomPlacement {
 impl RoomPlacement {
     /// Optionally runs the rooms update script
     pub fn do_update<E, T: script::ScriptTypes>(
-        log: &Logger, assets: &AssetManager, engine: &E,
+        log: &Logger,
+        assets: &AssetManager,
+        engine: &E,
         entities: &mut Container,
-        rooms: &RefCell<LevelRooms>, room_id: RoomId,
-    )
-        where E: script::Invokable
+        rooms: &RefCell<LevelRooms>,
+        room_id: RoomId,
+    ) where
+        E: script::Invokable,
     {
         use lua::*;
         let (key, is_virtual) = {
@@ -482,45 +535,56 @@ impl RoomPlacement {
         let room = assume!(log, assets.loader_open::<Loader>(key.borrow()));
         if let Some(tile_updater) = room.tile_updater.as_ref() {
             if is_virtual {
-                engine.set::<Option<i32>>(Scope::Registry, "level_virtual_mode", Some(i32::from(room_id.0)));
+                engine.set::<Option<i32>>(
+                    Scope::Registry,
+                    "level_virtual_mode",
+                    Some(i32::from(room_id.0)),
+                );
             }
-            let lua_room = entities.with(|
-                _em: EntityManager<'_>,
-                mut props: ecs::Write<T::RoomRef>,
-                rc: ecs::Read<RoomController>,
-                mut entity_ref: ecs::Write<T::EntityRef>,
-                living: ecs::Read<Living>,
-                object: ecs::Read<Object>,
-            | {
-                T::from_room(
-                    log,
-                    engine,
-                    &*rooms.borrow(),
-                    &mut props,
-                    &rc,
-                    &mut entity_ref,
-                    &living,
-                    &object,
-                    room_id,
-                )
-            });
+            let lua_room = entities.with(
+                |_em: EntityManager<'_>,
+                 mut props: ecs::Write<T::RoomRef>,
+                 rc: ecs::Read<RoomController>,
+                 mut entity_ref: ecs::Write<T::EntityRef>,
+                 living: ecs::Read<Living>,
+                 object: ecs::Read<Object>| {
+                    T::from_room(
+                        log,
+                        engine,
+                        &*rooms.borrow(),
+                        &mut props,
+                        &rc,
+                        &mut entity_ref,
+                        &living,
+                        &object,
+                        room_id,
+                    )
+                },
+            );
             let prev = {
                 let rooms = rooms.borrow();
                 let room = rooms.get_room_info(room_id);
                 room.tile_update_state.as_ref().map(|v| {
                     let mut de = serde_cbor::de::Deserializer::from_slice(v);
-                    assume!(log, with_table_serializer(engine, |se| serde_transcode::transcode(&mut de, se)))
+                    assume!(
+                        log,
+                        with_table_serializer(engine, |se| serde_transcode::transcode(&mut de, se))
+                    )
                 })
             };
-            let res = engine.with_borrows()
+            let res = engine
+                .with_borrows()
                 .borrow_mut(entities)
-                .invoke_function::<_, Ref<Table>>("invoke_module_method", (
-                    Ref::new_string(engine, tile_updater.module()),
-                    Ref::new_string(engine, tile_updater.resource()),
-                    Ref::new_string(engine, "update"),
-                    lua_room,
-                    prev,
-                ));
+                .invoke_function::<_, Ref<Table>>(
+                    "invoke_module_method",
+                    (
+                        Ref::new_string(engine, tile_updater.module()),
+                        Ref::new_string(engine, tile_updater.resource()),
+                        Ref::new_string(engine, "update"),
+                        lua_room,
+                        prev,
+                    ),
+                );
             if is_virtual {
                 engine.set::<Option<i32>>(Scope::Registry, "level_virtual_mode", None);
             }
@@ -532,9 +596,10 @@ impl RoomPlacement {
                 }
             };
             let mut se = serde_cbor::ser::Serializer::new(vec![]);
-            assume!(log, with_table_deserializer(&res, |de| {
-                serde_transcode::transcode(de, &mut se)
-            }));
+            assume!(
+                log,
+                with_table_deserializer(&res, |de| { serde_transcode::transcode(de, &mut se) })
+            );
             let data = se.into_inner();
             {
                 let mut rooms = rooms.borrow_mut();
@@ -545,11 +610,14 @@ impl RoomPlacement {
     }
     /// Optionally runs the rooms update apply script
     pub fn do_update_apply<E, T: script::ScriptTypes>(
-        log: &Logger, assets: &AssetManager, engine: &E,
+        log: &Logger,
+        assets: &AssetManager,
+        engine: &E,
         entities: &mut Container,
-        rooms: &RefCell<LevelRooms>, room_id: RoomId,
-    )
-        where E: script::Invokable
+        rooms: &RefCell<LevelRooms>,
+        room_id: RoomId,
+    ) where
+        E: script::Invokable,
     {
         use lua::*;
         let (key, is_virtual) = {
@@ -560,28 +628,32 @@ impl RoomPlacement {
         let room = assume!(log, assets.loader_open::<Loader>(key.borrow()));
         if let Some(tile_updater) = room.tile_updater.as_ref() {
             if is_virtual {
-                engine.set::<Option<i32>>(Scope::Registry, "level_virtual_mode", Some(i32::from(room_id.0)));
+                engine.set::<Option<i32>>(
+                    Scope::Registry,
+                    "level_virtual_mode",
+                    Some(i32::from(room_id.0)),
+                );
             }
-            let lua_room = entities.with(|
-                _em: EntityManager<'_>,
-                mut props: ecs::Write<T::RoomRef>,
-                rc: ecs::Read<RoomController>,
-                mut entity_ref: ecs::Write<T::EntityRef>,
-                living: ecs::Read<Living>,
-                object: ecs::Read<Object>,
-            | {
-                T::from_room(
-                    log,
-                    engine,
-                    &*rooms.borrow(),
-                    &mut props,
-                    &rc,
-                    &mut entity_ref,
-                    &living,
-                    &object,
-                    room_id,
-                )
-            });
+            let lua_room = entities.with(
+                |_em: EntityManager<'_>,
+                 mut props: ecs::Write<T::RoomRef>,
+                 rc: ecs::Read<RoomController>,
+                 mut entity_ref: ecs::Write<T::EntityRef>,
+                 living: ecs::Read<Living>,
+                 object: ecs::Read<Object>| {
+                    T::from_room(
+                        log,
+                        engine,
+                        &*rooms.borrow(),
+                        &mut props,
+                        &rc,
+                        &mut entity_ref,
+                        &living,
+                        &object,
+                        room_id,
+                    )
+                },
+            );
             let (prev, module) = {
                 let mut rooms = rooms.borrow_mut();
                 let room = rooms.get_room_info_mut(room_id);
@@ -589,9 +661,14 @@ impl RoomPlacement {
                 (
                     room.tile_update_state.as_ref().map(|v| {
                         let mut de = serde_cbor::de::Deserializer::from_slice(v);
-                        assume!(log, with_table_serializer(engine, |se| serde_transcode::transcode(&mut de, se)))
+                        assume!(
+                            log,
+                            with_table_serializer(engine, |se| serde_transcode::transcode(
+                                &mut de, se
+                            ))
+                        )
                     }),
-                    room.key.module_key().into_owned()
+                    room.key.module_key().into_owned(),
                 )
             };
 
@@ -600,18 +677,26 @@ impl RoomPlacement {
                 module: ModuleKey<'static>,
             }
 
-            fn set_tile(lua: &lua::Lua, placer: Ref<Placer>, x: i32, y: i32, tile: Ref<String>) -> UResult<()> {
-                let tile = assets::LazyResourceKey::parse(&tile)
-                    .or_module(placer.module.borrow());
+            fn set_tile(
+                lua: &lua::Lua,
+                placer: Ref<Placer>,
+                x: i32,
+                y: i32,
+                tile: Ref<String>,
+            ) -> UResult<()> {
+                let tile = assets::LazyResourceKey::parse(&tile).or_module(placer.module.borrow());
 
-                let rooms = lua.get_tracked::<LevelRooms>()
+                let rooms = lua
+                    .get_tracked::<LevelRooms>()
                     .ok_or_else(|| ErrorKind::InvalidState)?;
-                let tiles = lua.get_tracked::<LevelTiles>()
+                let tiles = lua
+                    .get_tracked::<LevelTiles>()
                     .ok_or_else(|| ErrorKind::InvalidState)?;
 
                 let mut tiles = tiles.borrow_mut();
                 let mut rooms = rooms.borrow_mut();
-                let room = rooms.try_room_info_mut(placer.room_id)
+                let room = rooms
+                    .try_room_info_mut(placer.room_id)
                     .ok_or_else(|| ErrorKind::StaleScriptReference)?;
 
                 let location = Location::new(x, y);
@@ -625,10 +710,12 @@ impl RoomPlacement {
             }
 
             fn depends_on(lua: &lua::Lua, placer: Ref<Placer>, x: i32, y: i32) -> UResult<()> {
-                let rooms = lua.get_tracked::<LevelRooms>()
+                let rooms = lua
+                    .get_tracked::<LevelRooms>()
                     .ok_or_else(|| ErrorKind::InvalidState)?;
                 let mut rooms = rooms.borrow_mut();
-                let room = rooms.try_room_info_mut(placer.room_id)
+                let room = rooms
+                    .try_room_info_mut(placer.room_id)
                     .ok_or_else(|| ErrorKind::StaleScriptReference)?;
 
                 room.required_tiles.push(Location::new(x, y));
@@ -646,21 +733,23 @@ impl RoomPlacement {
                 }
             }
 
-            let placer = Ref::new(engine, Placer {
-                room_id,
-                module,
-            });
+            let placer = Ref::new(engine, Placer { room_id, module });
 
-            if let Err(err) = engine.with_borrows()
+            if let Err(err) = engine
+                .with_borrows()
                 .borrow_mut(entities)
-                .invoke_function::<_, ()>("invoke_module_method", (
-                    Ref::new_string(engine, tile_updater.module()),
-                    Ref::new_string(engine, tile_updater.resource()),
-                    Ref::new_string(engine, "apply"),
-                    lua_room,
-                    placer,
-                    prev,
-                )) {
+                .invoke_function::<_, ()>(
+                    "invoke_module_method",
+                    (
+                        Ref::new_string(engine, tile_updater.module()),
+                        Ref::new_string(engine, tile_updater.resource()),
+                        Ref::new_string(engine, "apply"),
+                        lua_room,
+                        placer,
+                        prev,
+                    ),
+                )
+            {
                 error!(log, "room tile apply failed"; "error" => %err);
             }
             if is_virtual {
@@ -674,20 +763,22 @@ impl RoomPlacement {
     }
 
     pub(super) fn build_placement_map(
-            placement_map: &mut BitSet,
-            area: Bound,
-            objects: &[Option<(ObjectPlacement, ReverseObjectPlacement)>]
+        placement_map: &mut BitSet,
+        area: Bound,
+        objects: &[Option<(ObjectPlacement, ReverseObjectPlacement)>],
     ) {
         placement_map.clear();
         for obj in objects.iter().filter_map(|v| v.as_ref()) {
             for action in &obj.0.actions.0 {
-                if let ObjectPlacementAction::PlacementBound{location, size} = *action {
+                if let ObjectPlacementAction::PlacementBound { location, size } = *action {
                     let min_x = (location.0.max(area.min.x as f32) * 4.0).floor() as usize;
                     let min_y = (location.1.max(area.min.y as f32) * 4.0).floor() as usize;
-                    let max_x = ((location.0 + size.0).min(area.max.x as f32 + 1.0) * 4.0).ceil() as usize;
-                    let max_y = ((location.1 + size.1).min(area.max.y as f32 + 1.0) * 4.0).ceil() as usize;
-                    for y in min_y .. max_y {
-                        for x in min_x .. max_x {
+                    let max_x =
+                        ((location.0 + size.0).min(area.max.x as f32 + 1.0) * 4.0).ceil() as usize;
+                    let max_y =
+                        ((location.1 + size.1).min(area.max.y as f32 + 1.0) * 4.0).ceil() as usize;
+                    for y in min_y..max_y {
+                        for x in min_x..max_x {
                             let lx = x - (area.min.x * 4) as usize;
                             let ly = y - (area.min.y * 4) as usize;
                             placement_map.set(lx + ly * (area.width() as usize * 4), true);
@@ -713,44 +804,58 @@ impl RoomPlacement {
         for obj in self.objects.iter().filter_map(|v| v.as_ref()) {
             for action in &obj.0.actions.0 {
                 match *action {
-                    ObjectPlacementAction::CollisionBound{location, size} => {
+                    ObjectPlacementAction::CollisionBound { location, size } => {
                         let min_x = (location.0.max(self.area.min.x as f32) * 4.0).floor() as usize;
                         let min_y = (location.1.max(self.area.min.y as f32) * 4.0).floor() as usize;
-                        let max_x = ((location.0 + size.0).min(self.area.max.x as f32 + 1.0) * 4.0).ceil() as usize;
-                        let max_y = ((location.1 + size.1).min(self.area.max.y as f32 + 1.0) * 4.0).ceil() as usize;
-                        for y in min_y .. max_y {
-                            for x in min_x .. max_x {
+                        let max_x = ((location.0 + size.0).min(self.area.max.x as f32 + 1.0) * 4.0)
+                            .ceil() as usize;
+                        let max_y = ((location.1 + size.1).min(self.area.max.y as f32 + 1.0) * 4.0)
+                            .ceil() as usize;
+                        for y in min_y..max_y {
+                            for x in min_x..max_x {
                                 let lx = x - (self.area.min.x * 4) as usize;
                                 let ly = y - (self.area.min.y * 4) as usize;
-                                self.collision_map.set(lx + ly * (self.area.width() as usize * 4), true);
+                                self.collision_map
+                                    .set(lx + ly * (self.area.width() as usize * 4), true);
                             }
                         }
-                    },
-                    ObjectPlacementAction::PlacementBound{location, size} => {
+                    }
+                    ObjectPlacementAction::PlacementBound { location, size } => {
                         let min_x = location.0.max(self.area.min.x as f32).floor() as usize;
                         let min_y = location.1.max(self.area.min.y as f32).floor() as usize;
-                        let max_x = (location.0 + size.0).min(self.area.max.x as f32 + 1.0).ceil() as usize;
-                        let max_y = (location.1 + size.1).min(self.area.max.y as f32 + 1.0).ceil() as usize;
-                        for y in min_y .. max_y {
-                            for x in min_x .. max_x {
+                        let max_x = (location.0 + size.0)
+                            .min(self.area.max.x as f32 + 1.0)
+                            .ceil() as usize;
+                        let max_y = (location.1 + size.1)
+                            .min(self.area.max.y as f32 + 1.0)
+                            .ceil() as usize;
+                        for y in min_y..max_y {
+                            for x in min_x..max_x {
                                 let lx = x - self.area.min.x as usize;
                                 let ly = y - self.area.min.y as usize;
-                                self.blocked_map.set(lx + ly * (self.area.width() as usize), true);
+                                self.blocked_map
+                                    .set(lx + ly * (self.area.width() as usize), true);
                             }
                         }
-                    },
+                    }
                     ObjectPlacementAction::BlocksTile(location) => {
                         let loc = location - (self.area.min.x, self.area.min.y);
-                        self.blocked_map.set((loc.x + loc.y * self.area.width()) as usize, true);
-                    },
-                    _ => {},
+                        self.blocked_map
+                            .set((loc.x + loc.y * self.area.width()) as usize, true);
+                    }
+                    _ => {}
                 }
             }
         }
     }
 
     /// Finds a free location within a room
-    pub fn find_free_point(&self, tiles: &LevelTiles, rooms: &LevelRooms, target: (f32, f32)) -> Option<(f32, f32)> {
+    pub fn find_free_point(
+        &self,
+        tiles: &LevelTiles,
+        rooms: &LevelRooms,
+        target: (f32, f32),
+    ) -> Option<(f32, f32)> {
         let tx = (target.0 * 4.0) as i32;
         let ty = (target.1 * 4.0) as i32;
 
@@ -764,25 +869,23 @@ impl RoomPlacement {
         let mut visited = BitSet::new((self.area.width() * 4 * self.area.height() * 4) as usize);
 
         while let Some((x, y)) = queue.pop() {
-            let idx = (x - self.area.min.x * 4 + (y - self.area.min.y * 4) * self.area.width() * 4) as usize;
-            if !self.area.in_bounds(Location::new(x / 4, y / 4))
-                || visited.get(idx)
-            {
+            let idx = (x - self.area.min.x * 4 + (y - self.area.min.y * 4) * self.area.width() * 4)
+                as usize;
+            if !self.area.in_bounds(Location::new(x / 4, y / 4)) || visited.get(idx) {
                 continue;
             }
 
             visited.set(idx, true);
 
             if can_visit(tiles, rooms, x as usize, y as usize) {
-                return Some((
-                    ((x as f32 + 0.5) / 4.0),
-                    ((y as f32 + 0.5) / 4.0),
-                ));
+                return Some((((x as f32 + 0.5) / 4.0), ((y as f32 + 0.5) / 4.0)));
             }
 
             for d in &ALL_DIRECTIONS {
                 let (ox, oy) = d.offset();
-                let idx = ((x + ox - self.area.min.x * 4) + (y + oy - self.area.min.y * 4) * self.area.width() * 4) as usize;
+                let idx = ((x + ox - self.area.min.x * 4)
+                    + (y + oy - self.area.min.y * 4) * self.area.width() * 4)
+                    as usize;
                 if !visited.get(idx) {
                     queue.push((x + ox, y + oy));
                 }
@@ -796,7 +899,8 @@ impl RoomPlacement {
     pub fn collides_at_scaled(&self, x: i32, y: i32) -> bool {
         let lx = x as usize - (self.area.min.x * 4) as usize;
         let ly = y as usize - (self.area.min.y * 4) as usize;
-        self.collision_map.get(lx + ly * (self.area.width() as usize * 4))
+        self.collision_map
+            .get(lx + ly * (self.area.width() as usize * 4))
     }
 
     /// Returns whether the location is blocked by an object
@@ -811,7 +915,8 @@ impl RoomPlacement {
     pub fn is_placeable_scaled(&self, x: i32, y: i32) -> bool {
         let lx = x as usize - (self.area.min.x * 4) as usize;
         let ly = y as usize - (self.area.min.y * 4) as usize;
-        self.placement_map.get(lx + ly * (self.area.width() as usize * 4))
+        self.placement_map
+            .get(lx + ly * (self.area.width() as usize * 4))
     }
 
     /// Returns whether the scaled (* 4) coordinates collide
@@ -833,7 +938,9 @@ impl RoomPlacement {
     pub fn get_placement_bounds(&self) -> Option<(f32, f32, f32, f32)> {
         use std::f32;
 
-        let obj_placement = self.building_level.as_ref()
+        let obj_placement = self
+            .building_level
+            .as_ref()
             .and_then(|v| v.object_placement.as_ref())
             .or_else(|| self.temp_placement.as_ref());
 
@@ -846,7 +953,7 @@ impl RoomPlacement {
 
             if let Some(placement) = obj.placement.as_ref() {
                 for action in &placement.actions.0 {
-                    if let ObjectPlacementAction::PlacementBound{location, size} = *action {
+                    if let ObjectPlacementAction::PlacementBound { location, size } = *action {
                         min_x = location.0.min(min_x);
                         min_y = location.1.min(min_y);
                         max_x = (location.0 + size.0).max(max_x);
@@ -890,7 +997,7 @@ impl RoomState {
 
     /// Returns whether the room is being planned and may be resized
     pub fn is_planning(self) -> bool {
-        if let RoomState::Planning{..} = self {
+        if let RoomState::Planning { .. } = self {
             true
         } else {
             false
@@ -899,7 +1006,7 @@ impl RoomState {
 
     /// Returns whether the room is being built and cannot be resized
     pub fn is_building(self) -> bool {
-        if let RoomState::Building{..} = self {
+        if let RoomState::Building { .. } = self {
             true
         } else {
             false
@@ -912,7 +1019,7 @@ pub(super) struct LimitedRoom<'a> {
     pub(super) level: &'a mut super::Level,
 }
 
-impl <'a> LevelView for LimitedRoom<'a> {
+impl<'a> LevelView for LimitedRoom<'a> {
     fn get_tile(&self, loc: Location) -> Arc<tile::Type> {
         self.level.get_tile(loc)
     }
@@ -937,7 +1044,7 @@ impl <'a> LevelView for LimitedRoom<'a> {
     }
 }
 
-impl <'a> LevelAccess for LimitedRoom<'a> {
+impl<'a> LevelAccess for LimitedRoom<'a> {
     fn set_tile(&mut self, loc: Location, tile: assets::ResourceKey<'_>) {
         self.level.set_tile(loc, tile);
     }
@@ -957,7 +1064,7 @@ impl <'a> LevelAccess for LimitedRoom<'a> {
     }
 }
 
-impl <'a> placement::ObjectPlaceable for LimitedRoom<'a> {
+impl<'a> placement::ObjectPlaceable for LimitedRoom<'a> {
     fn id(&self) -> room::Id {
         self.room_id
     }
@@ -990,16 +1097,21 @@ impl <'a> placement::ObjectPlaceable for LimitedRoom<'a> {
     fn can_place_object(&self, obj: &ObjectPlacement) -> bool {
         let room = self.level.get_room_info(self.room_id);
         for action in &obj.actions.0 {
-            if let ObjectPlacementAction::PlacementBound{location, size} = *action {
+            if let ObjectPlacementAction::PlacementBound { location, size } = *action {
                 let min_x = (location.0.max(room.area.min.x as f32) * 4.0).floor() as usize;
                 let min_y = (location.1.max(room.area.min.y as f32) * 4.0).floor() as usize;
-                let max_x = ((location.0 + size.0).min(room.area.max.x as f32 + 1.0) * 4.0).ceil() as usize;
-                let max_y = ((location.1 + size.1).min(room.area.max.y as f32 + 1.0) * 4.0).ceil() as usize;
-                for y in min_y .. max_y {
-                    for x in min_x .. max_x {
+                let max_x =
+                    ((location.0 + size.0).min(room.area.max.x as f32 + 1.0) * 4.0).ceil() as usize;
+                let max_y =
+                    ((location.1 + size.1).min(room.area.max.y as f32 + 1.0) * 4.0).ceil() as usize;
+                for y in min_y..max_y {
+                    for x in min_x..max_x {
                         let lx = x - (room.area.min.x * 4) as usize;
                         let ly = y - (room.area.min.y * 4) as usize;
-                        if room.placement_map.get(lx + ly * (room.area.width() as usize * 4)) {
+                        if room
+                            .placement_map
+                            .get(lx + ly * (room.area.width() as usize * 4))
+                        {
                             return false;
                         }
                     }
@@ -1047,13 +1159,26 @@ impl <'a> placement::ObjectPlaceable for LimitedRoom<'a> {
         ret
     }
 
-    fn is_virtual() -> bool { false }
-
-    fn remove_object<EC: EntityCreator>(&mut self, entities: &mut Container, object_id: usize) -> UResult<ObjectPlacement> {
-        self.level.remove_object::<EC>(entities, self.room_id, object_id)
+    fn is_virtual() -> bool {
+        false
     }
-    fn replace_object<EC: EntityCreator>(&mut self, entities: &mut Container, object_id: usize, obj: ObjectPlacement) {
-        self.level.replace_object::<EC>(entities, self.room_id, object_id, obj)
+
+    fn remove_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        object_id: usize,
+    ) -> UResult<ObjectPlacement> {
+        self.level
+            .remove_object::<EC>(entities, self.room_id, object_id)
+    }
+    fn replace_object<EC: EntityCreator>(
+        &mut self,
+        entities: &mut Container,
+        object_id: usize,
+        obj: ObjectPlacement,
+    ) {
+        self.level
+            .replace_object::<EC>(entities, self.room_id, object_id, obj)
     }
     fn get_remove_target(&self, loc: Location) -> Option<usize> {
         let room = self.level.get_room_info(self.room_id);
@@ -1063,7 +1188,9 @@ impl <'a> placement::ObjectPlaceable for LimitedRoom<'a> {
 
 // Raw json structs
 
-fn returns_one() -> usize { 1 }
+fn returns_one() -> usize {
+    1
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -1073,7 +1200,7 @@ enum RequirementInfo {
         key: String,
         #[serde(default = "returns_one")]
         count: usize,
-    }
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1121,7 +1248,9 @@ struct RoomWallsInfo {
     priority: bool,
 }
 
-fn return_true() -> bool { true }
+fn return_true() -> bool {
+    true
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Size {
@@ -1156,10 +1285,10 @@ impl IntKey for Id {
 
 #[cfg(test)]
 mod tests {
+    use crate::assets::*;
+    use std::env;
     use std::fs;
     use std::path::Path;
-    use std::env;
-    use crate::assets::*;
 
     #[test]
     fn try_load_rooms() {
@@ -1189,7 +1318,9 @@ mod tests {
                     continue;
                 }
                 println!("Trying to load: {:?}", path_str);
-                assets.loader_open::<super::Loader>(ResourceKey::new("base", path_str)).unwrap();
+                assets
+                    .loader_open::<super::Loader>(ResourceKey::new("base", path_str))
+                    .unwrap();
             }
         }
     }

@@ -1,10 +1,10 @@
 #![allow(dead_code, missing_docs)]
 
-use crate::prelude::*;
 use super::gl;
+use crate::prelude::*;
 use std::any::Any;
-use std::cell::Cell;
 use std::borrow::Cow;
+use std::cell::Cell;
 use std::rc::Rc;
 
 pub struct Pipeline<Flag> {
@@ -34,7 +34,7 @@ pub struct PipelineBuilder<Flag> {
     _quad_buffer: gl::Buffer,
 }
 
-impl <Flag> Pipeline<Flag> {
+impl<Flag> Pipeline<Flag> {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(log: &Logger, assets: AssetManager, global_scale: f32) -> PipelineBuilder<Flag> {
         let log = log.new(o!("source" => "pipeline"));
@@ -42,15 +42,13 @@ impl <Flag> Pipeline<Flag> {
         vao.bind();
         let buf = gl::Buffer::new();
         buf.bind(gl::BufferTarget::Array);
-        buf.set_data(gl::BufferTarget::Array, &[
-            -1.0f32, 1.0,
-            1.0, 1.0,
-            1.0, -1.0,
-
-            -1.0, 1.0,
-            1.0, -1.0,
-            -1.0, -1.0,
-        ], gl::BufferUsage::Static);
+        buf.set_data(
+            gl::BufferTarget::Array,
+            &[
+                -1.0f32, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0, 1.0, 1.0, -1.0, -1.0, -1.0,
+            ],
+            gl::BufferUsage::Static,
+        );
 
         let a = gl::Attribute::new(0);
         a.enable();
@@ -96,10 +94,10 @@ impl <Flag> Pipeline<Flag> {
     }
 }
 
-impl <Flag> PipelineBuilder<Flag>
-    where Flag: Clone
+impl<Flag> PipelineBuilder<Flag>
+where
+    Flag: Clone,
 {
-
     pub fn build(self) -> Pipeline<Flag> {
         let mut attachments: Vec<(usize, AInfo, InternalAttachment)> = vec![];
         let mut passes = vec![];
@@ -122,10 +120,22 @@ impl <Flag> PipelineBuilder<Flag>
         let (w, h) = (512, 512);
         init_attachment(w, h, &tex, Type::U8, Components::RGB);
 
-        tex.set_parameter::<gl::TextureMinFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Linear);
-        tex.set_parameter::<gl::TextureMagFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Linear);
-        tex.set_parameter::<gl::TextureWrapS>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
-        tex.set_parameter::<gl::TextureWrapT>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
+        tex.set_parameter::<gl::TextureMinFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Linear,
+        );
+        tex.set_parameter::<gl::TextureMagFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Linear,
+        );
+        tex.set_parameter::<gl::TextureWrapS>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToBorder,
+        );
+        tex.set_parameter::<gl::TextureWrapT>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToBorder,
+        );
         tex.set_parameter::<gl::TextureBaseLevel>(gl::TextureTarget::Texture2D, 0);
         tex.set_parameter::<gl::TextureMaxLevel>(gl::TextureTarget::Texture2D, 0);
 
@@ -136,7 +146,6 @@ impl <Flag> PipelineBuilder<Flag>
             scale: 1,
             ty: Type::U8,
             components: Components::RGB,
-
         };
         let tex = gl::Texture::new();
         tex.bind(gl::TextureTarget::Texture2D);
@@ -145,10 +154,22 @@ impl <Flag> PipelineBuilder<Flag>
         let (w, h) = (512, 512);
         init_attachment(w, h, &tex, Type::U8, Components::RGB);
 
-        tex.set_parameter::<gl::TextureMinFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Linear);
-        tex.set_parameter::<gl::TextureMagFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Linear);
-        tex.set_parameter::<gl::TextureWrapS>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
-        tex.set_parameter::<gl::TextureWrapT>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
+        tex.set_parameter::<gl::TextureMinFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Linear,
+        );
+        tex.set_parameter::<gl::TextureMagFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Linear,
+        );
+        tex.set_parameter::<gl::TextureWrapS>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToBorder,
+        );
+        tex.set_parameter::<gl::TextureWrapT>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToBorder,
+        );
         tex.set_parameter::<gl::TextureBaseLevel>(gl::TextureTarget::Texture2D, 0);
         tex.set_parameter::<gl::TextureMaxLevel>(gl::TextureTarget::Texture2D, 0);
 
@@ -159,11 +180,9 @@ impl <Flag> PipelineBuilder<Flag>
             scale: 1,
             ty: Type::U8,
             components: Components::RGB,
-
         };
 
         for (idx, &(name, ref pass)) in self.passes.iter().enumerate() {
-
             let mut local_attachments = vec![];
             let mut local_names = FNVMap::default();
 
@@ -172,14 +191,9 @@ impl <Flag> PipelineBuilder<Flag>
             } else {
                 let framebuffer = gl::Framebuffer::new();
                 framebuffer.bind(gl::TargetFramebuffer::Both);
-                let mut color = if pass.final_color {
-                    1
-                } else {
-                    0
-                };
+                let mut color = if pass.final_color { 1 } else { 0 };
 
-                'attachments:
-                for &(attach_name, ref attachment) in &pass.attachments {
+                'attachments: for &(attach_name, ref attachment) in &pass.attachments {
                     let a_target = if let AttachTarget::Depth = attachment.target {
                         if let Components::Depth24Stencil8 = attachment.components {
                             gl::Attachment::DepthStencil
@@ -208,7 +222,8 @@ impl <Flag> PipelineBuilder<Flag>
                     };
 
                     let mut last_use = idx;
-                    for (idx, &(_name, ref pass)) in self.passes[idx + 1..].iter()
+                    for (idx, &(_name, ref pass)) in self.passes[idx + 1..]
+                        .iter()
                         .enumerate()
                         .map(|(i, p)| (i + idx + 1, p))
                     {
@@ -233,7 +248,13 @@ impl <Flag> PipelineBuilder<Flag>
                                 clear_value: attachment.clear_value,
                             });
                             a.2.texture.bind(gl::TextureTarget::Texture2D);
-                            framebuffer.texture_2d(gl::TargetFramebuffer::Both, a_target, gl::TextureTarget::Texture2D, &a.2.texture, 0);
+                            framebuffer.texture_2d(
+                                gl::TargetFramebuffer::Both,
+                                a_target,
+                                gl::TextureTarget::Texture2D,
+                                &a.2.texture,
+                                0,
+                            );
                             local_names.insert(attach_name, offset);
                             a.0 = last_use; // Prevent others from re-using this until we are done
                             continue 'attachments;
@@ -260,16 +281,31 @@ impl <Flag> PipelineBuilder<Flag>
                     };
                     tex.set_parameter::<gl::TextureMinFilter>(gl::TextureTarget::Texture2D, filter);
                     tex.set_parameter::<gl::TextureMagFilter>(gl::TextureTarget::Texture2D, filter);
-                    tex.set_parameter::<gl::TextureWrapS>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
-                    tex.set_parameter::<gl::TextureWrapT>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToBorder);
+                    tex.set_parameter::<gl::TextureWrapS>(
+                        gl::TextureTarget::Texture2D,
+                        gl::TextureWrap::ClampToBorder,
+                    );
+                    tex.set_parameter::<gl::TextureWrapT>(
+                        gl::TextureTarget::Texture2D,
+                        gl::TextureWrap::ClampToBorder,
+                    );
                     tex.set_parameter::<gl::TextureBaseLevel>(gl::TextureTarget::Texture2D, 0);
                     tex.set_parameter::<gl::TextureMaxLevel>(gl::TextureTarget::Texture2D, 0);
                     if let Some(border) = attachment.border_color {
-                        tex.set_parameter::<gl::TextureBorderColor>(gl::TextureTarget::Texture2D, border);
+                        tex.set_parameter::<gl::TextureBorderColor>(
+                            gl::TextureTarget::Texture2D,
+                            border,
+                        );
                     }
                     if attachment.compare_ref {
-                        tex.set_parameter::<gl::TextureCompareMode>(gl::TextureTarget::Texture2D, gl::CompareMode::CompareRefToTexture);
-                        tex.set_parameter::<gl::TextureCompareFunc>(gl::TextureTarget::Texture2D, gl::Func::GreaterOrEqual);
+                        tex.set_parameter::<gl::TextureCompareMode>(
+                            gl::TextureTarget::Texture2D,
+                            gl::CompareMode::CompareRefToTexture,
+                        );
+                        tex.set_parameter::<gl::TextureCompareFunc>(
+                            gl::TextureTarget::Texture2D,
+                            gl::Func::GreaterOrEqual,
+                        );
                     }
 
                     local_names.insert(attach_name, attachments.len());
@@ -280,13 +316,18 @@ impl <Flag> PipelineBuilder<Flag>
                         scale: attachment.scale,
                         ty: attachment.ty,
                         components: attachment.components,
-
                     };
                     local_attachments.push(Attachment {
                         target: attachment.target,
                         clear_value: attachment.clear_value,
                     });
-                    framebuffer.texture_2d(gl::TargetFramebuffer::Both, a_target, gl::TextureTarget::Texture2D, &in_attachment.texture, 0);
+                    framebuffer.texture_2d(
+                        gl::TargetFramebuffer::Both,
+                        a_target,
+                        gl::TextureTarget::Texture2D,
+                        &in_attachment.texture,
+                        0,
+                    );
                     attachments.push((last_use, info, in_attachment));
                 }
 
@@ -322,9 +363,7 @@ impl <Flag> PipelineBuilder<Flag>
             global_scale: self.global_scale,
             programs: self.programs,
             passes,
-            attachments: attachments.into_iter()
-                .map(|v| v.2)
-                .collect(),
+            attachments: attachments.into_iter().map(|v| v.2).collect(),
             final_color_a: final_color_a,
             final_color_b: final_color_b,
             quad_vao: self.quad_vao,
@@ -333,7 +372,11 @@ impl <Flag> PipelineBuilder<Flag>
     }
 
     pub fn program<D>(mut self, name: &'static str, def: D) -> PipelineBuilder<Flag>
-        where D: FnOnce(&mut Context<'_>, ProgramBuilder<Missing, Missing, Missing>) -> ProgramBuilder<&'static str, &'static str, Vec<(&'static str, u32)>>
+    where
+        D: FnOnce(
+            &mut Context<'_>,
+            ProgramBuilder<Missing, Missing, Missing>,
+        ) -> ProgramBuilder<&'static str, &'static str, Vec<(&'static str, u32)>>,
     {
         let builder = {
             let mut ctx = Context {
@@ -369,7 +412,10 @@ impl <Flag> PipelineBuilder<Flag>
             }
         }
         // Load the shader from the file
-        vert_full.push_str(&assume!(self.log, load_shader(&self.assets, builder.vertex)));
+        vert_full.push_str(&assume!(
+            self.log,
+            load_shader(&self.assets, builder.vertex)
+        ));
         vertex_shader.set_source(&vert_full);
         assume!(self.log, vertex_shader.compile());
 
@@ -384,7 +430,10 @@ impl <Flag> PipelineBuilder<Flag>
             }
         }
         // Load the shader from the file
-        frag_full.push_str(&assume!(self.log, load_shader(&self.assets, builder.fragment)));
+        frag_full.push_str(&assume!(
+            self.log,
+            load_shader(&self.assets, builder.fragment)
+        ));
         frag_shader.set_source(&frag_full);
         assume!(self.log, frag_shader.compile());
 
@@ -392,7 +441,7 @@ impl <Flag> PipelineBuilder<Flag>
         program.attach_shader(frag_shader);
 
         let mut attributes = FNVMap::default();
-        for (k, v) in builder.attribute_binds  {
+        for (k, v) in builder.attribute_binds {
             program.bind_attribute_location(k, v);
             attributes.insert(k, gl::Attribute::new(v));
         }
@@ -400,19 +449,23 @@ impl <Flag> PipelineBuilder<Flag>
         program.link();
         program.use_program();
 
-        self.programs.insert(name, Program {
+        self.programs.insert(
             name,
-            program,
-            attributes,
-            uniforms: FNVMap::default(),
-            uniform_blocks: FNVMap::default(),
-        });
+            Program {
+                name,
+                program,
+                attributes,
+                uniforms: FNVMap::default(),
+                uniform_blocks: FNVMap::default(),
+            },
+        );
 
         self
     }
 
     pub fn pass<D>(mut self, name: &'static str, def: D) -> PipelineBuilder<Flag>
-        where D: FnOnce(&mut Context<'_>, PassBuilder<()>) -> PassBuilder<Flag>
+    where
+        D: FnOnce(&mut Context<'_>, PassBuilder<()>) -> PassBuilder<Flag>,
     {
         let builder = {
             let mut ctx = Context {
@@ -438,8 +491,7 @@ pub struct DrawSetup<'a, Flag> {
     pass_vars: FNVMap<&'static str, FNVMap<&'static str, Box<dyn Any>>>,
 }
 
-impl <'a, Flag> DrawSetup<'a, Flag> {
-
+impl<'a, Flag> DrawSetup<'a, Flag> {
     pub fn var<V: Any>(mut self, name: &'static str, v: V) -> Self {
         self.vars.insert(name, Box::new(v));
         self
@@ -454,7 +506,8 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
     }
 
     pub fn draw<F>(mut self, width: u32, height: u32, mut f: F)
-        where F: FnMut(&mut Context<'_>, &Flag)
+    where
+        F: FnMut(&mut Context<'_>, &Flag),
     {
         let mut ctx = Context {
             log: &self.pipeline.log,
@@ -463,17 +516,33 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
             replacements: None,
         };
 
-        self.pipeline.final_color_a.resize(width, height, self.pipeline.global_scale);
-        self.pipeline.final_color_b.resize(width, height, self.pipeline.global_scale);
+        self.pipeline
+            .final_color_a
+            .resize(width, height, self.pipeline.global_scale);
+        self.pipeline
+            .final_color_b
+            .resize(width, height, self.pipeline.global_scale);
 
         for attachment in &self.pipeline.attachments {
-            attachment.resize(width, height, if attachment.size.is_none() {
-                self.pipeline.global_scale
-            } else { 1.0 });
+            attachment.resize(
+                width,
+                height,
+                if attachment.size.is_none() {
+                    self.pipeline.global_scale
+                } else {
+                    1.0
+                },
+            );
         }
 
-        let passes = self.pipeline.passes.iter()
-            .filter(|v| v.runtime_enable.map_or(true, |r| *ctx.var::<bool>(r).unwrap_or(&false)))
+        let passes = self
+            .pipeline
+            .passes
+            .iter()
+            .filter(|v| {
+                v.runtime_enable
+                    .map_or(true, |r| *ctx.var::<bool>(r).unwrap_or(&false))
+            })
             .collect::<Vec<_>>();
         let num_passes = passes.len();
 
@@ -490,7 +559,10 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
 
             for &(pass, name, idx) in &pass.bind_texture {
                 let attachments = &self.pipeline.attachments;
-                if let Some(tex) = self.pipeline.passes.iter()
+                if let Some(tex) = self
+                    .pipeline
+                    .passes
+                    .iter()
                     .filter(|p| p.name == pass)
                     .map(|p| &attachments[p.attachment_names[name]])
                     .next()
@@ -511,14 +583,20 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
                         0 => {
                             current_final = 1;
                             &self.pipeline.final_color_a
-                        },
+                        }
                         _ => {
                             current_final = 0;
                             &self.pipeline.final_color_b
-                        },
+                        }
                     };
                     final_color.texture.bind(gl::TextureTarget::Texture2D);
-                    framebuffer.texture_2d(gl::TargetFramebuffer::Draw, gl::Attachment::Color0, gl::TextureTarget::Texture2D, &final_color.texture, 0);
+                    framebuffer.texture_2d(
+                        gl::TargetFramebuffer::Draw,
+                        gl::Attachment::Color0,
+                        gl::TextureTarget::Texture2D,
+                        &final_color.texture,
+                        0,
+                    );
                     buffers.push(gl::Attachment::Color0);
                 }
 
@@ -541,9 +619,15 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
                         gl::TargetBuffer::Color
                     };
                     if let Some(clear) = a.clear_value {
-                        gl::clear_buffer(d, if let gl::TargetBuffer::Depth = d {
-                            0
-                        } else { c }, &clear);
+                        gl::clear_buffer(
+                            d,
+                            if let gl::TargetBuffer::Depth = d {
+                                0
+                            } else {
+                                c
+                            },
+                            &clear,
+                        );
                     }
                 }
 
@@ -558,21 +642,24 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
 
             if let Some((width, height)) = pass.size {
                 gl::view_port(
-                    0, 0,
+                    0,
+                    0,
                     width / (pass.scale as u32),
-                    height / (pass.scale as u32)
+                    height / (pass.scale as u32),
                 );
             } else if !pass.attachments.is_empty() {
                 gl::view_port(
-                    0, 0,
+                    0,
+                    0,
                     ((width / (pass.scale as u32)) as f32 * self.pipeline.global_scale) as u32,
-                    ((height / (pass.scale as u32)) as f32 * self.pipeline.global_scale) as u32
+                    ((height / (pass.scale as u32)) as f32 * self.pipeline.global_scale) as u32,
                 );
             } else {
                 gl::view_port(
-                    0, 0,
+                    0,
+                    0,
                     width / (pass.scale as u32),
-                    height / (pass.scale as u32)
+                    height / (pass.scale as u32),
                 );
             }
             if let Some(flags) = pass.clear_flags {
@@ -587,12 +674,8 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
 
                     if let Some(name) = fullscreen.final_color_input {
                         let final_color = match last_final {
-                            1 => {
-                                &self.pipeline.final_color_a
-                            },
-                            _ => {
-                                &self.pipeline.final_color_b
-                            },
+                            1 => &self.pipeline.final_color_a,
+                            _ => &self.pipeline.final_color_b,
                         };
                         gl::active_texture(next_tid);
                         final_color.texture.bind(gl::TextureTarget::Texture2D);
@@ -602,14 +685,18 @@ impl <'a, Flag> DrawSetup<'a, Flag> {
 
                     for input in &fullscreen.inputs {
                         let attachments = &self.pipeline.attachments;
-                        if let Some(tex) = self.pipeline.passes.iter()
+                        if let Some(tex) = self
+                            .pipeline
+                            .passes
+                            .iter()
                             .filter(|p| p.name == input.pass)
                             .map(|p| &attachments[p.attachment_names[input.name]])
                             .next()
                         {
                             gl::active_texture(next_tid);
                             tex.texture.bind(gl::TextureTarget::Texture2D);
-                            prog.uniform(input.uniform).map(|v| v.set_int(next_tid as i32));
+                            prog.uniform(input.uniform)
+                                .map(|v| v.set_int(next_tid as i32));
                             next_tid += 1;
                         }
                     }
@@ -637,7 +724,7 @@ pub struct Context<'a> {
     vars: FNVMap<&'static str, Box<dyn Any>>,
 }
 
-impl <'a> Context<'a> {
+impl<'a> Context<'a> {
     pub fn program(&mut self, mut name: &'static str) -> &mut Program {
         if let Some(replace) = self.replacements.as_ref().and_then(|v| v.get(name)) {
             name = replace;
@@ -698,8 +785,7 @@ impl PassBuilder<()> {
     }
 }
 
-impl <Flag> PassBuilder<Flag> {
-
+impl<Flag> PassBuilder<Flag> {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -711,7 +797,8 @@ impl <Flag> PassBuilder<Flag> {
     }
 
     pub fn when<F>(self, flag: bool, func: F) -> Self
-        where F: FnOnce(Self) -> Self
+    where
+        F: FnOnce(Self) -> Self,
     {
         if flag {
             func(self)
@@ -751,7 +838,8 @@ impl <Flag> PassBuilder<Flag> {
     }
 
     pub fn attachment<D>(mut self, name: &'static str, def: D) -> PassBuilder<Flag>
-        where D: FnOnce(AttachmentBuilder) -> AttachmentBuilder
+    where
+        D: FnOnce(AttachmentBuilder) -> AttachmentBuilder,
     {
         let builder = {
             let builder = AttachmentBuilder {
@@ -773,7 +861,8 @@ impl <Flag> PassBuilder<Flag> {
     }
 
     pub fn fullscreen<D>(mut self, def: D) -> PassBuilder<Flag>
-        where D: FnOnce(FullscreenPassBuilder<Missing>) -> FullscreenPassBuilder<&'static str>
+    where
+        D: FnOnce(FullscreenPassBuilder<Missing>) -> FullscreenPassBuilder<&'static str>,
     {
         let builder = {
             let builder = FullscreenPassBuilder {
@@ -812,7 +901,6 @@ impl PassBuilder<()> {
     }
 }
 
-
 #[derive(Clone)]
 pub struct FullscreenPass {
     shader: &'static str,
@@ -846,10 +934,10 @@ impl FullscreenPassBuilder<Missing> {
     }
 }
 
-impl <S> FullscreenPassBuilder<S> {
-
+impl<S> FullscreenPassBuilder<S> {
     pub fn when<Fun>(self, flag: bool, func: Fun) -> Self
-        where Fun: FnOnce(Self) -> Self
+    where
+        Fun: FnOnce(Self) -> Self,
     {
         if flag {
             func(self)
@@ -873,13 +961,13 @@ impl <S> FullscreenPassBuilder<S> {
     }
 
     pub fn pre<F>(mut self, f: F) -> Self
-        where F: Fn(&mut Context<'_>) + 'static,
+    where
+        F: Fn(&mut Context<'_>) + 'static,
     {
         self.pre_func = Some(Rc::new(f));
         self
     }
 }
-
 
 pub struct InternalAttachment {
     texture: gl::Texture,
@@ -909,15 +997,17 @@ fn init_attachment(w: u32, h: u32, tex: &gl::Texture, ty: Type, components: Comp
         (Components::Depth24, _) => {
             gl_ty = gl::Type::UnsignedInt;
             (
-                gl::TextureFormat::DepthComponent24, gl::TextureFormat::DepthComponent
+                gl::TextureFormat::DepthComponent24,
+                gl::TextureFormat::DepthComponent,
             )
-        },
+        }
         (Components::Depth24Stencil8, _) => {
             gl_ty = gl::Type::UnsignedInt248;
             (
-                gl::TextureFormat::Depth24Stencil8, gl::TextureFormat::DepthStencil
+                gl::TextureFormat::Depth24Stencil8,
+                gl::TextureFormat::DepthStencil,
             )
-        },
+        }
         (Components::R, Type::Float) => (gl::TextureFormat::R32F, gl::TextureFormat::Red),
         (Components::RG, Type::Float) => (gl::TextureFormat::Rg32F, gl::TextureFormat::Rg),
         (Components::RGB, Type::Float) => (gl::TextureFormat::Rgb32F, gl::TextureFormat::Rgb),
@@ -925,7 +1015,9 @@ fn init_attachment(w: u32, h: u32, tex: &gl::Texture, ty: Type, components: Comp
         (Components::R, Type::HalfFloat) => (gl::TextureFormat::R16F, gl::TextureFormat::Red),
         (Components::RG, Type::HalfFloat) => (gl::TextureFormat::Rg16F, gl::TextureFormat::Rg),
         (Components::RGB, Type::HalfFloat) => (gl::TextureFormat::Rgb16F, gl::TextureFormat::Rgb),
-        (Components::RGBA, Type::HalfFloat) => (gl::TextureFormat::Rgba16F, gl::TextureFormat::Rgba),
+        (Components::RGBA, Type::HalfFloat) => {
+            (gl::TextureFormat::Rgba16F, gl::TextureFormat::Rgba)
+        }
 
         (Components::R, Type::U8) => (gl::TextureFormat::R8, gl::TextureFormat::Red),
         (Components::RG, Type::U8) => (gl::TextureFormat::Rg8, gl::TextureFormat::Rg),
@@ -945,10 +1037,13 @@ fn init_attachment(w: u32, h: u32, tex: &gl::Texture, ty: Type, components: Comp
 
     tex.image_2d_ex(
         gl::TextureTarget::Texture2D,
-        0, w, h,
-        iformat, format,
+        0,
+        w,
+        h,
+        iformat,
+        format,
         gl_ty,
-        None
+        None,
     );
 }
 
@@ -1048,14 +1143,15 @@ pub struct ProgramBuilder<V, F, A> {
     attribute_binds: A,
 }
 
-impl <V, F, A> ProgramBuilder<V, F, A> {
+impl<V, F, A> ProgramBuilder<V, F, A> {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
     }
 
     pub fn when<Fun>(self, flag: bool, func: Fun) -> Self
-        where Fun: FnOnce(Self) -> Self
+    where
+        Fun: FnOnce(Self) -> Self,
     {
         if flag {
             func(self)
@@ -1065,7 +1161,7 @@ impl <V, F, A> ProgramBuilder<V, F, A> {
     }
 }
 
-impl <F, A> ProgramBuilder<Missing, F, A> {
+impl<F, A> ProgramBuilder<Missing, F, A> {
     pub fn vertex(self, name: &'static str) -> ProgramBuilder<&'static str, F, A> {
         ProgramBuilder {
             enabled: self.enabled,
@@ -1078,20 +1174,20 @@ impl <F, A> ProgramBuilder<Missing, F, A> {
     }
 }
 
-impl <F, A> ProgramBuilder<&'static str, F, A> {
+impl<F, A> ProgramBuilder<&'static str, F, A> {
     pub fn vertex_defines<S>(mut self, defines: Vec<S>) -> Self
-        where S: Into<Cow<'static, str>>
+    where
+        S: Into<Cow<'static, str>>,
     {
         {
             let defs = self.vertex_defines.get_or_insert_with(Vec::new);
-            defs.extend(defines.into_iter()
-                .map(|v| v.into()));
+            defs.extend(defines.into_iter().map(|v| v.into()));
         }
         self
     }
 }
 
-impl <V, A> ProgramBuilder<V, Missing, A> {
+impl<V, A> ProgramBuilder<V, Missing, A> {
     pub fn fragment(self, name: &'static str) -> ProgramBuilder<V, &'static str, A> {
         ProgramBuilder {
             enabled: self.enabled,
@@ -1104,20 +1200,23 @@ impl <V, A> ProgramBuilder<V, Missing, A> {
     }
 }
 
-impl <V, A> ProgramBuilder<V, &'static str, A> {
+impl<V, A> ProgramBuilder<V, &'static str, A> {
     pub fn fragment_defines<S>(mut self, defines: Vec<S>) -> Self
-        where S: Into<Cow<'static, str>>
+    where
+        S: Into<Cow<'static, str>>,
     {
         {
             let defs = self.fragment_defines.get_or_insert_with(Vec::new);
-            defs.extend(defines.into_iter()
-                .map(|v| v.into()));
+            defs.extend(defines.into_iter().map(|v| v.into()));
         }
         self
     }
 }
-impl <V, F> ProgramBuilder<V, F, Missing> {
-    pub fn attribute_binds(self, binds: &[(&'static str, u32)]) -> ProgramBuilder<V, F, Vec<(&'static str, u32)>> {
+impl<V, F> ProgramBuilder<V, F, Missing> {
+    pub fn attribute_binds(
+        self,
+        binds: &[(&'static str, u32)],
+    ) -> ProgramBuilder<V, F, Vec<(&'static str, u32)>> {
         ProgramBuilder {
             enabled: self.enabled,
             vertex: self.vertex,
@@ -1150,16 +1249,19 @@ impl Program {
 
     pub fn uniform(&mut self, name: &'static str) -> Option<gl::Uniform> {
         let program = &self.program;
-        self.uniforms.entry(name).or_insert_with(|| {
-            program.uniform_location(name)
-        }).as_ref().cloned()
+        self.uniforms
+            .entry(name)
+            .or_insert_with(|| program.uniform_location(name))
+            .as_ref()
+            .cloned()
     }
 
     pub fn uniform_block(&mut self, name: &'static str) -> gl::UniformBlock {
         let program = &self.program;
-        *self.uniform_blocks.entry(name).or_insert_with(|| {
-            program.uniform_block(name)
-        })
+        *self
+            .uniform_blocks
+            .entry(name)
+            .or_insert_with(|| program.uniform_block(name))
     }
 }
 

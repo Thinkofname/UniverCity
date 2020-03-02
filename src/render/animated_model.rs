@@ -1,13 +1,12 @@
-
 use cgmath;
 
-use super::{gl, exmodel, atlas, image, pipeline, PassFlag, ModelKey, ModelKeyBorrow};
-use crate::util::FNVMap;
-use crate::server::assets;
+use super::{atlas, exmodel, gl, image, pipeline, ModelKey, ModelKeyBorrow, PassFlag};
 use crate::ecs;
 use crate::entity;
 use crate::prelude::*;
+use crate::server::assets;
 use crate::server::common::AnimationSet;
+use crate::util::FNVMap;
 
 pub struct Info {
     log: Logger,
@@ -89,45 +88,98 @@ pub(super) struct DynInfo {
 }
 
 impl Info {
-    pub(super) fn new(log: &Logger, asset_manager: &AssetManager, ctx: &mut pipeline::Context<'_>) -> Info {
+    pub(super) fn new(
+        log: &Logger,
+        asset_manager: &AssetManager,
+        ctx: &mut pipeline::Context<'_>,
+    ) -> Info {
         let (
-            attrib_position, attrib_normal, attrib_uv, attrib_bones, attrib_bone_weights, attrib_matrix, attrib_tint,
+            attrib_position,
+            attrib_normal,
+            attrib_uv,
+            attrib_bones,
+            attrib_bone_weights,
+            attrib_matrix,
+            attrib_tint,
             attrib_highlight,
-            attrib_bone_offset, attrib_tint_offset,
+            attrib_bone_offset,
+            attrib_tint_offset,
         ) = {
             let program = ctx.program("animated");
             program.use_program();
             (
-                program.attribute("attrib_position").expect("Missing `attrib_position`"),
-                program.attribute("attrib_normal").expect("Missing `attrib_normal`"),
+                program
+                    .attribute("attrib_position")
+                    .expect("Missing `attrib_position`"),
+                program
+                    .attribute("attrib_normal")
+                    .expect("Missing `attrib_normal`"),
                 program.attribute("attrib_uv").expect("Missing `attrib_uv`"),
-                program.attribute("attrib_bones").expect("Missing `attrib_bones`"),
-                program.attribute("attrib_bone_weights").expect("Missing `attrib_bone_weights`"),
-                program.attribute("attrib_matrix").expect("Missing `attrib_matrix`"),
-                program.attribute("attrib_tint").expect("Missing `attrib_tint`"),
-                program.attribute("attrib_highlight").expect("Missing `attrib_highlight`"),
-                program.attribute("attrib_bone_offset").expect("Missing `attrib_bone_offset`"),
-                program.attribute("attrib_tint_offset").expect("Missing `attrib_tint_offset`"),
+                program
+                    .attribute("attrib_bones")
+                    .expect("Missing `attrib_bones`"),
+                program
+                    .attribute("attrib_bone_weights")
+                    .expect("Missing `attrib_bone_weights`"),
+                program
+                    .attribute("attrib_matrix")
+                    .expect("Missing `attrib_matrix`"),
+                program
+                    .attribute("attrib_tint")
+                    .expect("Missing `attrib_tint`"),
+                program
+                    .attribute("attrib_highlight")
+                    .expect("Missing `attrib_highlight`"),
+                program
+                    .attribute("attrib_bone_offset")
+                    .expect("Missing `attrib_bone_offset`"),
+                program
+                    .attribute("attrib_tint_offset")
+                    .expect("Missing `attrib_tint_offset`"),
             )
         };
         let log = log.new(o!("source" => "animated_model"));
 
-        let img = assume!(log, asset_manager.loader_open::<image::Loader>(ResourceKey::new("base", "no_tint")));
+        let img = assume!(
+            log,
+            asset_manager.loader_open::<image::Loader>(ResourceKey::new("base", "no_tint"))
+        );
         let tex_data = img.wait_take_image().expect("Missing default tint texture");
 
         let texture = gl::Texture::new();
         texture.bind(gl::TextureTarget::Texture2D);
         texture.image_2d_ex(
-            gl::TextureTarget::Texture2D, 0,
-            tex_data.width, tex_data.height,
-            gl::TextureFormat::R8, gl::TextureFormat::Red,
+            gl::TextureTarget::Texture2D,
+            0,
+            tex_data.width,
+            tex_data.height,
+            gl::TextureFormat::R8,
+            gl::TextureFormat::Red,
             gl::Type::UnsignedByte,
-            Some(&tex_data.data.chunks_exact(4).map(|v| v[0]).collect::<Vec<_>>())
+            Some(
+                &tex_data
+                    .data
+                    .chunks_exact(4)
+                    .map(|v| v[0])
+                    .collect::<Vec<_>>(),
+            ),
         );
-        texture.set_parameter::<gl::TextureMinFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Nearest);
-        texture.set_parameter::<gl::TextureMagFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Nearest);
-        texture.set_parameter::<gl::TextureWrapS>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToEdge);
-        texture.set_parameter::<gl::TextureWrapT>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToEdge);
+        texture.set_parameter::<gl::TextureMinFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Nearest,
+        );
+        texture.set_parameter::<gl::TextureMagFilter>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureFilter::Nearest,
+        );
+        texture.set_parameter::<gl::TextureWrapS>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToEdge,
+        );
+        texture.set_parameter::<gl::TextureWrapT>(
+            gl::TextureTarget::Texture2D,
+            gl::TextureWrap::ClampToEdge,
+        );
         texture.set_parameter::<gl::TextureBaseLevel>(gl::TextureTarget::Texture2D, 0);
         texture.set_parameter::<gl::TextureMaxLevel>(gl::TextureTarget::Texture2D, 0);
 
@@ -156,9 +208,7 @@ impl Info {
     }
 }
 
-
-impl <'a> super::EntityRender<'a> for Info {
-
+impl<'a> super::EntityRender<'a> for Info {
     type Component = entity::AnimatedModel;
     type Params = (
         ecs::Read<'a, Rotation>,
@@ -177,7 +227,8 @@ impl <'a> super::EntityRender<'a> for Info {
         }
     }
 
-    fn compute_frame(&mut self,
+    fn compute_frame(
+        &mut self,
         asset_manager: &assets::AssetManager,
         config: &Config,
         global_atlas: &mut super::GlobalAtlas,
@@ -193,28 +244,31 @@ impl <'a> super::EntityRender<'a> for Info {
         ents: &[ecs::Entity],
         _delta: f64,
     ) {
-        use std::collections::hash_map::Entry;
         use cgmath::prelude::*;
         use rayon::prelude::*;
+        use std::collections::hash_map::Entry;
 
         let key = ModelKey {
             key: ModelKeyBorrow(
                 model_key.into_owned(),
-                texture.as_ref().map(|v| v.borrow().into_owned())
-            )
+                texture.as_ref().map(|v| v.borrow().into_owned()),
+            ),
         };
 
         let model = match self.info.models.entry(key.0.clone()) {
             Entry::Occupied(val) => val.into_mut(),
-            Entry::Vacant(val) => {
-                init_model(&self.log, asset_manager, val)
-            }
+            Entry::Vacant(val) => init_model(&self.log, asset_manager, val),
         };
         let gl_model = match self.gl_models.entry(key) {
             Entry::Occupied(val) => val.into_mut(),
-            Entry::Vacant(val) => {
-                init_gl_model(&self.log, asset_manager, global_atlas, &self.attributes, model, val)
-            }
+            Entry::Vacant(val) => init_gl_model(
+                &self.log,
+                asset_manager,
+                global_atlas,
+                &self.attributes,
+                model,
+                val,
+            ),
         };
 
         gl_model.array.bind();
@@ -227,20 +281,34 @@ impl <'a> super::EntityRender<'a> for Info {
 
         let selection_invalid = config.placement_invalid_colour.get();
 
-        let root_inv = model.info.root_node.transform.invert()
+        let root_inv = model
+            .info
+            .root_node
+            .transform
+            .invert()
             .expect("Failed to invert root transform");
         let identity: cgmath::Matrix4<f32> = cgmath::Matrix4::identity();
 
-        gl_model.bone_info.resize(ents.len() * (1 + model.bone_copy_map.len()), model.info.transform);
-        gl_model.tint_info.resize(ents.len() * gl_model.tint_count, (255, 255, 255, 255));
-        gl_model.bone_node_info.resize(ents.len() * model.bones.len(), model.info.transform);
-        gl_model.dyn_info.resize(ents.len(), DynInfo {
-            matrix: identity,
-            tint: (0, 0, 0, 0),
-            highlight: (0, 0, 0, 0),
-            bone_offset: 0,
-            tint_offset: 0,
-        });
+        gl_model.bone_info.resize(
+            ents.len() * (1 + model.bone_copy_map.len()),
+            model.info.transform,
+        );
+        gl_model
+            .tint_info
+            .resize(ents.len() * gl_model.tint_count, (255, 255, 255, 255));
+        gl_model
+            .bone_node_info
+            .resize(ents.len() * model.bones.len(), model.info.transform);
+        gl_model.dyn_info.resize(
+            ents.len(),
+            DynInfo {
+                matrix: identity,
+                tint: (0, 0, 0, 0),
+                highlight: (0, 0, 0, 0),
+                bone_offset: 0,
+                tint_offset: 0,
+            },
+        );
 
         let minfo = &model.info;
         let animations = &model.animations;
@@ -249,8 +317,13 @@ impl <'a> super::EntityRender<'a> for Info {
         let bone_node_count = model.bones.len();
         let bone_copy_map = &model.bone_copy_map;
 
-        let has_highlights = ents.par_iter()
-            .zip(gl_model.bone_info.par_chunks_mut(1 + model.info.bones.len()))
+        let has_highlights = ents
+            .par_iter()
+            .zip(
+                gl_model
+                    .bone_info
+                    .par_chunks_mut(1 + model.info.bones.len()),
+            )
             .zip(gl_model.bone_node_info.par_chunks_mut(bone_node_count))
             .zip(gl_model.tint_info.par_chunks_mut(gl_model.tint_count))
             .zip(gl_model.dyn_info.par_iter_mut())
@@ -260,17 +333,18 @@ impl <'a> super::EntityRender<'a> for Info {
                 let pos = pos.get_component(*e).expect("Missing component (Position)");
                 let rot = rot.get_component(*e).expect("Missing component (Rotation)");
                 let mat = cgmath::Decomposed {
-                    scale: 1.0/10.0,
+                    scale: 1.0 / 10.0,
                     rot: cgmath::Quaternion::from_angle_y(cgmath::Rad(rot.rotation.raw())),
-                    disp: cgmath::Vector3::new(
-                        pos.x,
-                        pos.y,
-                        pos.z,
-                    ),
+                    disp: cgmath::Vector3::new(pos.x, pos.y, pos.z),
                 };
                 let is_invalid = invalid.get_component(*e).is_some();
                 let tint = if is_invalid {
-                    (selection_invalid.0, selection_invalid.1, selection_invalid.2, 255)
+                    (
+                        selection_invalid.0,
+                        selection_invalid.1,
+                        selection_invalid.2,
+                        255,
+                    )
                 } else if let Some(col) = color.get_component(*e) {
                     col.color
                 } else {
@@ -280,7 +354,9 @@ impl <'a> super::EntityRender<'a> for Info {
                 let bone_offset = (1 + minfo.bones.len()) * idx;
                 let tint_offset = tint_count * idx;
 
-                let ainfo = component.get_component(*e).expect("Missing component (Model)");
+                let ainfo = component
+                    .get_component(*e)
+                    .expect("Missing component (Model)");
 
                 for tint in &mut tint_i[..] {
                     *tint = (255, 255, 255, 255);
@@ -291,7 +367,12 @@ impl <'a> super::EntityRender<'a> for Info {
                     }
                 }
 
-                if let Some(animation) = ainfo.animation_set.get(ainfo.animation_queue.first().expect("Entity missing animation in queue")) {
+                if let Some(animation) = ainfo.animation_set.get(
+                    ainfo
+                        .animation_queue
+                        .first()
+                        .expect("Entity missing animation in queue"),
+                ) {
                     let mut time = ainfo.time;
                     let ani = {
                         let mut ani = None;
@@ -311,14 +392,11 @@ impl <'a> super::EntityRender<'a> for Info {
                         ani
                     };
                     if let Some(ani) = ani {
-                        compute_nodes(
-                            ani,
-                            root_node, time as f32,
-                            bone_info,
-                            root_inv
-                        );
+                        compute_nodes(ani, root_node, time as f32, bone_info, root_inv);
 
-                        for ((bone, copy), bones) in minfo.bones.iter().zip(bone_copy_map).zip(&mut bones[1..]) {
+                        for ((bone, copy), bones) in
+                            minfo.bones.iter().zip(bone_copy_map).zip(&mut bones[1..])
+                        {
                             *bones = bone_info[*copy] * bone.offset;
                         }
                     }
@@ -346,22 +424,46 @@ impl <'a> super::EntityRender<'a> for Info {
         gl_model.has_highlights = has_highlights;
 
         gl_model.dyn_info.truncate(ents.len());
-        gl_model.bone_info.truncate(ents.len() * (1 + model.info.bones.len()));
+        gl_model
+            .bone_info
+            .truncate(ents.len() * (1 + model.info.bones.len()));
 
         gl_model.matrix_buffer.bind(gl::BufferTarget::Array);
         if gl_model.max_count < gl_model.dyn_info.len() {
-            gl_model.matrix_buffer.set_data(gl::BufferTarget::Array, &gl_model.dyn_info, gl::BufferUsage::Stream);
+            gl_model.matrix_buffer.set_data(
+                gl::BufferTarget::Array,
+                &gl_model.dyn_info,
+                gl::BufferUsage::Stream,
+            );
             gl_model.bone_matrix_buffer.bind(gl::BufferTarget::Texture);
-            gl_model.bone_matrix_buffer.set_data(gl::BufferTarget::Texture, &gl_model.bone_info, gl::BufferUsage::Stream);
+            gl_model.bone_matrix_buffer.set_data(
+                gl::BufferTarget::Texture,
+                &gl_model.bone_info,
+                gl::BufferUsage::Stream,
+            );
             gl_model.tint_col_buffer.bind(gl::BufferTarget::Texture);
-            gl_model.tint_col_buffer.set_data(gl::BufferTarget::Texture, &gl_model.tint_info, gl::BufferUsage::Stream);
+            gl_model.tint_col_buffer.set_data(
+                gl::BufferTarget::Texture,
+                &gl_model.tint_info,
+                gl::BufferUsage::Stream,
+            );
             gl_model.max_count = gl_model.dyn_info.len();
         } else {
-            gl_model.matrix_buffer.set_data_range(gl::BufferTarget::Array, &gl_model.dyn_info, 0);
+            gl_model
+                .matrix_buffer
+                .set_data_range(gl::BufferTarget::Array, &gl_model.dyn_info, 0);
             gl_model.bone_matrix_buffer.bind(gl::BufferTarget::Texture);
-            gl_model.bone_matrix_buffer.set_data_range(gl::BufferTarget::Texture, &gl_model.bone_info, 0);
+            gl_model.bone_matrix_buffer.set_data_range(
+                gl::BufferTarget::Texture,
+                &gl_model.bone_info,
+                0,
+            );
             gl_model.tint_col_buffer.bind(gl::BufferTarget::Texture);
-            gl_model.tint_col_buffer.set_data_range(gl::BufferTarget::Texture, &gl_model.tint_info, 0);
+            gl_model.tint_col_buffer.set_data_range(
+                gl::BufferTarget::Texture,
+                &gl_model.tint_info,
+                0,
+            );
         }
     }
 
@@ -373,18 +475,31 @@ impl <'a> super::EntityRender<'a> for Info {
     ) {
         let program = ctx.program("animated");
         program.use_program();
-        program.uniform("projection_matrix").map(|v| v.set_matrix4(matrix.projection));
-        program.uniform("view_matrix").map(|v| v.set_matrix4(matrix.view_matrix));
-        program.uniform("shadow_matrix").map(|v|
-            v.set_matrix4(matrix.shadow_view_matrix
-                .expect("Missing shadow view matrix"))
-        );
-        program.uniform("shadow_projection").map(|v| v.set_matrix4(assume!(self.log, matrix.shadow_projection)));
-        program.uniform("shadow_map").map(|v| v.set_int(super::SHADOW_MAP_LOCATION as i32));
+        program
+            .uniform("projection_matrix")
+            .map(|v| v.set_matrix4(matrix.projection));
+        program
+            .uniform("view_matrix")
+            .map(|v| v.set_matrix4(matrix.view_matrix));
+        program.uniform("shadow_matrix").map(|v| {
+            v.set_matrix4(
+                matrix
+                    .shadow_view_matrix
+                    .expect("Missing shadow view matrix"),
+            )
+        });
+        program
+            .uniform("shadow_projection")
+            .map(|v| v.set_matrix4(assume!(self.log, matrix.shadow_projection)));
+        program
+            .uniform("shadow_map")
+            .map(|v| v.set_int(super::SHADOW_MAP_LOCATION as i32));
         program.uniform("u_bone_matrices").map(|v| v.set_int(0));
         program.uniform("u_tints").map(|v| v.set_int(1));
         program.uniform("u_tint_info").map(|v| v.set_int(2));
-        program.uniform("u_textures").map(|v| v.set_int(super::GLOBAL_TEXTURE_LOCATION as i32));
+        program
+            .uniform("u_textures")
+            .map(|v| v.set_int(super::GLOBAL_TEXTURE_LOCATION as i32));
 
         for (key, gl_model) in &mut self.gl_models {
             let model = assume!(self.log, self.info.models.get(&key.0));
@@ -394,22 +509,38 @@ impl <'a> super::EntityRender<'a> for Info {
             }
 
             if !gl_model.dyn_info.is_empty() {
-
                 gl_model.array.bind();
                 gl::active_texture(0);
-                gl_model.bone_matrix_texture.bind(gl::TextureTarget::TextureBuffer);
+                gl_model
+                    .bone_matrix_texture
+                    .bind(gl::TextureTarget::TextureBuffer);
 
                 gl::active_texture(1);
-                gl_model.tint_col_texture.bind(gl::TextureTarget::TextureBuffer);
+                gl_model
+                    .tint_col_texture
+                    .bind(gl::TextureTarget::TextureBuffer);
 
                 gl::active_texture(2);
-                gl_model.tint_texture.as_ref().unwrap_or(&self.standard_tint).bind(gl::TextureTarget::Texture2D);
+                gl_model
+                    .tint_texture
+                    .as_ref()
+                    .unwrap_or(&self.standard_tint)
+                    .bind(gl::TextureTarget::Texture2D);
 
-                program.uniform("u_atlas").map(|v| v.set_int(gl_model.texture.0));
+                program
+                    .uniform("u_atlas")
+                    .map(|v| v.set_int(gl_model.texture.0));
                 let rect = gl_model.texture.1;
-                program.uniform("u_texture_info").map(|v| v.set_int4(rect.x, rect.y, rect.width, rect.height));
+                program
+                    .uniform("u_texture_info")
+                    .map(|v| v.set_int4(rect.x, rect.y, rect.width, rect.height));
 
-                gl::draw_elements_instanced(gl::DrawType::Triangles, model.info.faces.len() * 3, gl_model.index_ty, gl_model.dyn_info.len());
+                gl::draw_elements_instanced(
+                    gl::DrawType::Triangles,
+                    model.info.faces.len() * 3,
+                    gl_model.index_ty,
+                    gl_model.dyn_info.len(),
+                );
             }
         }
     }
@@ -418,11 +549,17 @@ impl <'a> super::EntityRender<'a> for Info {
 use std::collections::hash_map::VacantEntry;
 
 pub(crate) fn init_model<'a>(
-        log: &Logger,
-        asset_manager: &assets::AssetManager,
-        val: VacantEntry<'a, ResourceKey<'static>, Model>
+    log: &Logger,
+    asset_manager: &assets::AssetManager,
+    val: VacantEntry<'a, ResourceKey<'static>, Model>,
 ) -> &'a mut Model {
-    let mut file = assume!(log, asset_manager.open_from_pack(val.key().module_key(), &format!("models/{}.uamod", val.key().resource())));
+    let mut file = assume!(
+        log,
+        asset_manager.open_from_pack(
+            val.key().module_key(),
+            &format!("models/{}.uamod", val.key().resource())
+        )
+    );
     let minfo = assume!(log, exmodel::AniModel::read_from(&mut file));
 
     let mut bones = FNVMap::default();
@@ -431,9 +568,7 @@ pub(crate) fn init_model<'a>(
 
     let mut bone_copy_map = Vec::with_capacity(minfo.bones.len());
     for bone in &minfo.bones {
-        let id = bones.get(&bone.name)
-            .cloned()
-            .unwrap_or(0);
+        let id = bones.get(&bone.name).cloned().unwrap_or(0);
         bone_copy_map.push(id);
     }
 
@@ -448,14 +583,13 @@ pub(crate) fn init_model<'a>(
     })
 }
 
-
 fn init_gl_model<'a>(
-        log: &Logger,
-        asset_manager: &assets::AssetManager,
-        global_atlas: &mut super::GlobalAtlas,
-        attributes: &Attributes,
-        model: &Model,
-        val: VacantEntry<'a, ModelKey, GLModel>
+    log: &Logger,
+    asset_manager: &assets::AssetManager,
+    global_atlas: &mut super::GlobalAtlas,
+    attributes: &Attributes,
+    model: &Model,
+    val: VacantEntry<'a, ModelKey, GLModel>,
 ) -> &'a mut GLModel {
     use std::mem;
 
@@ -468,17 +602,50 @@ fn init_gl_model<'a>(
     model_buffer.bind(gl::BufferTarget::Array);
 
     attributes.position.enable();
-    attributes.position.vertex_pointer(3, gl::Type::Float, false, mem::size_of::<exmodel::AniVertex>() as i32, 0);
+    attributes.position.vertex_pointer(
+        3,
+        gl::Type::Float,
+        false,
+        mem::size_of::<exmodel::AniVertex>() as i32,
+        0,
+    );
     attributes.normal.enable();
-    attributes.normal.vertex_pointer(3, gl::Type::Float, false, mem::size_of::<exmodel::AniVertex>() as i32, 12);
+    attributes.normal.vertex_pointer(
+        3,
+        gl::Type::Float,
+        false,
+        mem::size_of::<exmodel::AniVertex>() as i32,
+        12,
+    );
     attributes.uv.enable();
-    attributes.uv.vertex_pointer(2, gl::Type::Float, false, mem::size_of::<exmodel::AniVertex>() as i32, 24);
+    attributes.uv.vertex_pointer(
+        2,
+        gl::Type::Float,
+        false,
+        mem::size_of::<exmodel::AniVertex>() as i32,
+        24,
+    );
     attributes.bones.enable();
-    attributes.bones.vertex_int_pointer(4, gl::Type::UnsignedByte, mem::size_of::<exmodel::AniVertex>() as i32, 32);
+    attributes.bones.vertex_int_pointer(
+        4,
+        gl::Type::UnsignedByte,
+        mem::size_of::<exmodel::AniVertex>() as i32,
+        32,
+    );
     attributes.bone_weights.enable();
-    attributes.bone_weights.vertex_pointer(4, gl::Type::Float, false, mem::size_of::<exmodel::AniVertex>() as i32, 36);
+    attributes.bone_weights.vertex_pointer(
+        4,
+        gl::Type::Float,
+        false,
+        mem::size_of::<exmodel::AniVertex>() as i32,
+        36,
+    );
 
-    model_buffer.set_data(gl::BufferTarget::Array, &minfo.verts, gl::BufferUsage::Static);
+    model_buffer.set_data(
+        gl::BufferTarget::Array,
+        &minfo.verts,
+        gl::BufferUsage::Static,
+    );
 
     let model_index_buffer = gl::Buffer::new();
     model_index_buffer.bind(gl::BufferTarget::ElementArray);
@@ -493,49 +660,73 @@ fn init_gl_model<'a>(
         gl::Type::UnsignedInt
     };
 
-
     let matrix_buffer = gl::Buffer::new();
     matrix_buffer.bind(gl::BufferTarget::Array);
 
-    for i in 0 .. 4 {
+    for i in 0..4 {
         let attrib = attributes.matrix.offset(i);
         attrib.enable();
-        attrib.vertex_pointer(4, gl::Type::Float, false, mem::size_of::<DynInfo>() as i32, i as i32 * 4 * 4);
+        attrib.vertex_pointer(
+            4,
+            gl::Type::Float,
+            false,
+            mem::size_of::<DynInfo>() as i32,
+            i as i32 * 4 * 4,
+        );
         attrib.divisor(1);
     }
     attributes.tint.enable();
-    attributes.tint.vertex_pointer(4, gl::Type::UnsignedByte, true, mem::size_of::<DynInfo>() as i32, 4 * 4 * 4);
+    attributes.tint.vertex_pointer(
+        4,
+        gl::Type::UnsignedByte,
+        true,
+        mem::size_of::<DynInfo>() as i32,
+        4 * 4 * 4,
+    );
     attributes.tint.divisor(1);
     attributes.highlight.enable();
-    attributes.highlight.vertex_pointer(4, gl::Type::UnsignedByte, true, mem::size_of::<DynInfo>() as i32, 4 * 4 * 4 + 4);
+    attributes.highlight.vertex_pointer(
+        4,
+        gl::Type::UnsignedByte,
+        true,
+        mem::size_of::<DynInfo>() as i32,
+        4 * 4 * 4 + 4,
+    );
     attributes.highlight.divisor(1);
     attributes.bone_offset.enable();
-    attributes.bone_offset.vertex_int_pointer(1, gl::Type::Int, mem::size_of::<DynInfo>() as i32, 4 * 4 * 4 + 4 + 4);
+    attributes.bone_offset.vertex_int_pointer(
+        1,
+        gl::Type::Int,
+        mem::size_of::<DynInfo>() as i32,
+        4 * 4 * 4 + 4 + 4,
+    );
     attributes.bone_offset.divisor(1);
     attributes.tint_offset.enable();
-    attributes.tint_offset.vertex_int_pointer(1, gl::Type::Int, mem::size_of::<DynInfo>() as i32, 4 * 4 * 4 + 4 + 4 + 4);
+    attributes.tint_offset.vertex_int_pointer(
+        1,
+        gl::Type::Int,
+        mem::size_of::<DynInfo>() as i32,
+        4 * 4 * 4 + 4 + 4 + 4,
+    );
     attributes.tint_offset.divisor(1);
-
 
     let texture = {
         let texture = val.key().1.as_ref().map(|v| v.borrow());
-        let tex = texture.unwrap_or_else(|| assets::LazyResourceKey::parse(&minfo.texture)
-            .or_module(val.key().0.module_key()));
-        super::RenderState::texture_info_for(
-            log,
-            asset_manager,
-            global_atlas,
-            tex
-        )
+        let tex = texture.unwrap_or_else(|| {
+            assets::LazyResourceKey::parse(&minfo.texture).or_module(val.key().0.module_key())
+        });
+        super::RenderState::texture_info_for(log, asset_manager, global_atlas, tex)
     };
 
     let tint_count;
     let tint_texture;
     {
         let key = format!("{}_tint", minfo.texture);
-        let tex = assets::LazyResourceKey::parse(&key)
-            .or_module(val.key().0.module_key());
-        let img = assume!(log, asset_manager.loader_open::<image::Loader>(tex.borrow()));
+        let tex = assets::LazyResourceKey::parse(&key).or_module(val.key().0.module_key());
+        let img = assume!(
+            log,
+            asset_manager.loader_open::<image::Loader>(tex.borrow())
+        );
         if let Ok(tint_tex) = img.wait_take_image() {
             let mut highest = 0;
             for c in tint_tex.data.chunks_exact(4) {
@@ -548,16 +739,37 @@ fn init_gl_model<'a>(
             let texture = gl::Texture::new();
             texture.bind(gl::TextureTarget::Texture2D);
             texture.image_2d_ex(
-                gl::TextureTarget::Texture2D, 0,
-                tint_tex.width, tint_tex.height,
-                gl::TextureFormat::R8, gl::TextureFormat::Red,
+                gl::TextureTarget::Texture2D,
+                0,
+                tint_tex.width,
+                tint_tex.height,
+                gl::TextureFormat::R8,
+                gl::TextureFormat::Red,
                 gl::Type::UnsignedByte,
-                Some(&tint_tex.data.chunks_exact(4).map(|v| v[0]).collect::<Vec<_>>())
+                Some(
+                    &tint_tex
+                        .data
+                        .chunks_exact(4)
+                        .map(|v| v[0])
+                        .collect::<Vec<_>>(),
+                ),
             );
-            texture.set_parameter::<gl::TextureMinFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Nearest);
-            texture.set_parameter::<gl::TextureMagFilter>(gl::TextureTarget::Texture2D, gl::TextureFilter::Nearest);
-            texture.set_parameter::<gl::TextureWrapS>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToEdge);
-            texture.set_parameter::<gl::TextureWrapT>(gl::TextureTarget::Texture2D, gl::TextureWrap::ClampToEdge);
+            texture.set_parameter::<gl::TextureMinFilter>(
+                gl::TextureTarget::Texture2D,
+                gl::TextureFilter::Nearest,
+            );
+            texture.set_parameter::<gl::TextureMagFilter>(
+                gl::TextureTarget::Texture2D,
+                gl::TextureFilter::Nearest,
+            );
+            texture.set_parameter::<gl::TextureWrapS>(
+                gl::TextureTarget::Texture2D,
+                gl::TextureWrap::ClampToEdge,
+            );
+            texture.set_parameter::<gl::TextureWrapT>(
+                gl::TextureTarget::Texture2D,
+                gl::TextureWrap::ClampToEdge,
+            );
             texture.set_parameter::<gl::TextureBaseLevel>(gl::TextureTarget::Texture2D, 0);
             texture.set_parameter::<gl::TextureMaxLevel>(gl::TextureTarget::Texture2D, 0);
 
@@ -572,13 +784,21 @@ fn init_gl_model<'a>(
     bone_matrix_buffer.bind(gl::BufferTarget::Texture);
     let bone_matrix_texture = gl::Texture::new();
     bone_matrix_texture.bind(gl::TextureTarget::TextureBuffer);
-    bone_matrix_texture.buffer(gl::TextureTarget::TextureBuffer, &bone_matrix_buffer, gl::TextureFormat::Rgba32F);
+    bone_matrix_texture.buffer(
+        gl::TextureTarget::TextureBuffer,
+        &bone_matrix_buffer,
+        gl::TextureFormat::Rgba32F,
+    );
 
     let tint_col_buffer = gl::Buffer::new();
     tint_col_buffer.bind(gl::BufferTarget::Texture);
     let tint_col_texture = gl::Texture::new();
     tint_col_texture.bind(gl::TextureTarget::TextureBuffer);
-    tint_col_texture.buffer(gl::TextureTarget::TextureBuffer, &tint_col_buffer, gl::TextureFormat::Rgba8);
+    tint_col_texture.buffer(
+        gl::TextureTarget::TextureBuffer,
+        &tint_col_buffer,
+        gl::TextureFormat::Rgba8,
+    );
 
     val.insert(GLModel {
         texture,
@@ -631,8 +851,7 @@ impl AnimationDetails {
         position: Vec<(f64, cgmath::Vector3<f32>)>,
         rotation: Vec<(f64, cgmath::Quaternion<f32>)>,
         scale: Vec<(f64, cgmath::Vector3<f32>)>,
-    ) -> AnimationDetails
-    {
+    ) -> AnimationDetails {
         use cgmath::prelude::*;
         AnimationDetails {
             position: ChannelData::new(cgmath::Vector3::zero(), position),
@@ -656,12 +875,15 @@ impl AniNode {
     pub(crate) fn convert(map: &mut FNVMap<String, usize>, info: &exmodel::AniNode) -> AniNode {
         let mut nodes = vec![];
         Self::collect(&mut nodes, map, info, None);
-        AniNode {
-            nodes,
-        }
+        AniNode { nodes }
     }
 
-    fn collect(output: &mut Vec<AniSubNode>, map: &mut FNVMap<String, usize>, info: &exmodel::AniNode, parent: Option<usize>) {
+    fn collect(
+        output: &mut Vec<AniSubNode>,
+        map: &mut FNVMap<String, usize>,
+        info: &exmodel::AniNode,
+        parent: Option<usize>,
+    ) {
         let len = map.len();
         let id = *map.entry(info.name.clone()).or_insert(len);
         output.push(AniSubNode {
@@ -676,10 +898,11 @@ impl AniNode {
 }
 
 fn compute_nodes(
-        ani: &Animation,
-        nodes: &AniNode, time: f32,
-        matrices: &mut [cgmath::Matrix4<f32>],
-        root_reverse_transform: cgmath::Matrix4<f32>,
+    ani: &Animation,
+    nodes: &AniNode,
+    time: f32,
+    matrices: &mut [cgmath::Matrix4<f32>],
+    root_reverse_transform: cgmath::Matrix4<f32>,
 ) {
     use cgmath::prelude::*;
 
@@ -696,7 +919,8 @@ fn compute_nodes(
             node.transform
         };
 
-        let parent = node.parent
+        let parent = node
+            .parent
             .and_then(|v| matrices.get(v))
             .cloned()
             .unwrap_or_else(cgmath::Matrix4::identity);
@@ -715,24 +939,35 @@ pub(super) trait FromU32 {
     fn from(v: u32) -> Self;
 }
 impl FromU32 for u8 {
-    fn from(v: u32) -> Self { v as Self }
+    fn from(v: u32) -> Self {
+        v as Self
+    }
 }
 impl FromU32 for u16 {
-    fn from(v: u32) -> Self { v as Self }
+    fn from(v: u32) -> Self {
+        v as Self
+    }
 }
 impl FromU32 for u32 {
-    fn from(v: u32) -> Self { v }
+    fn from(v: u32) -> Self {
+        v
+    }
 }
 
-pub (super) fn set_indices_packed<'a, I, T>(faces: I, buffer: &gl::Buffer)
-    where T: FromU32,
-          I: Iterator<Item=&'a exmodel::Face>
+pub(super) fn set_indices_packed<'a, I, T>(faces: I, buffer: &gl::Buffer)
+where
+    T: FromU32,
+    I: Iterator<Item = &'a exmodel::Face>,
 {
     let indices: Vec<T> = faces
         .flat_map(|v| &v.indices)
         .map(|v| T::from(*v))
         .collect();
-    buffer.set_data(gl::BufferTarget::ElementArray, &indices, gl::BufferUsage::Static);
+    buffer.set_data(
+        gl::BufferTarget::ElementArray,
+        &indices,
+        gl::BufferUsage::Static,
+    );
 }
 
 pub(crate) struct ChannelData<T> {
@@ -741,8 +976,9 @@ pub(crate) struct ChannelData<T> {
     default: T,
 }
 
-impl <T> ChannelData<T>
-    where T: Copy + Lerpable
+impl<T> ChannelData<T>
+where
+    T: Copy + Lerpable,
 {
     // TODO: This is invalid currently
     fn empty(def: T) -> ChannelData<T> {
@@ -765,11 +1001,9 @@ impl <T> ChannelData<T>
         let steps = (length / smallest_gap).ceil() as usize;
         let mut buckets = SmallVec::with_capacity(steps);
 
-        for offset in 0 ..= steps {
+        for offset in 0..=steps {
             let time = offset as f64 * smallest_gap;
-            let part = if let Some(parts) = data
-                    .windows(2)
-                    .find(|v| time <= v[1].0) {
+            let part = if let Some(parts) = data.windows(2).find(|v| time <= v[1].0) {
                 let rel_time = time - parts[0].0;
                 let delta = rel_time / (parts[1].0 - parts[0].0);
                 debug_assert!(delta >= 0.0 && delta <= 1.0);
@@ -826,19 +1060,17 @@ impl Lerpable for cgmath::Quaternion<f32> {
     }
 }
 
-pub(crate) fn decompose(m: &cgmath::Matrix4<f32>) -> (cgmath::Vector3<f32>, cgmath::Quaternion<f32>, cgmath::Vector3<f32>) {
-    use cgmath::{SquareMatrix, InnerSpace};
-    let pos = cgmath::Vector3::new(
-        m[3][0],
-        m[3][1],
-        m[3][2],
-    );
+pub(crate) fn decompose(
+    m: &cgmath::Matrix4<f32>,
+) -> (
+    cgmath::Vector3<f32>,
+    cgmath::Quaternion<f32>,
+    cgmath::Vector3<f32>,
+) {
+    use cgmath::{InnerSpace, SquareMatrix};
+    let pos = cgmath::Vector3::new(m[3][0], m[3][1], m[3][2]);
 
-    let mut cols = [
-        m[0].truncate(),
-        m[1].truncate(),
-        m[2].truncate(),
-    ];
+    let mut cols = [m[0].truncate(), m[1].truncate(), m[2].truncate()];
 
     let mut scaling = cgmath::Vector3::new(
         cols[0].magnitude(),

@@ -33,7 +33,10 @@ impl Container {
     ///
     /// Events are not consumed until `exec` is called on the handler
     pub fn handle_events(&mut self) -> Vec<EventHandler> {
-        self.event_queue.drain(..).map(|v| EventHandler{event:Some(v)}).collect()
+        self.event_queue
+            .drain(..)
+            .map(|v| EventHandler { event: Some(v) })
+            .collect()
     }
 }
 
@@ -43,17 +46,17 @@ pub struct EventHandler {
     event: Option<Box<dyn Any>>,
 }
 
-impl EventHandler
-{
+impl EventHandler {
     /// Tries to the handle the event with the passed handler
     pub fn handle_event<'a, T: Any, F>(&'a mut self, efunc: F)
-        where F: FnOnce(T) + 'a
+    where
+        F: FnOnce(T) + 'a,
     {
         if let Some(evt) = self.event.take() {
             match evt.downcast::<T>() {
                 Ok(val) => {
                     efunc(*val);
-                },
+                }
                 Err(val) => {
                     self.event = Some(val);
                 }
@@ -63,8 +66,9 @@ impl EventHandler
 
     /// Tries to the handle the event with the passed handler
     pub fn handle_event_if<'a, T: Any, IF, F>(&'a mut self, if_func: IF, efunc: F)
-        where F: FnOnce(T) + 'a,
-              IF: FnOnce(&T) -> bool + 'a
+    where
+        F: FnOnce(T) + 'a,
+        IF: FnOnce(&T) -> bool + 'a,
     {
         if let Some(evt) = self.event.take() {
             match evt.downcast::<T>() {
@@ -74,7 +78,7 @@ impl EventHandler
                     } else {
                         self.event = Some(val);
                     }
-                },
+                }
                 Err(val) => {
                     self.event = Some(val);
                 }
@@ -83,13 +87,14 @@ impl EventHandler
     }
     /// Tries to the handle the event with the passed handler
     pub fn inspect_event<'a, T: Any, F>(&'a mut self, mut efunc: F)
-        where F: FnMut(&T) + 'a
+    where
+        F: FnMut(&T) + 'a,
     {
         if let Some(evt) = self.event.as_ref() {
             match evt.downcast_ref::<T>() {
                 Some(val) => {
                     efunc(val);
-                },
+                }
                 None => {}
             }
         }
@@ -127,11 +132,7 @@ mod test {
         con.emit(TestEvent(10));
 
         let mut total = 0;
-        let mut strings = vec![
-            "testing",
-            "a",
-            "b",
-        ];
+        let mut strings = vec!["testing", "a", "b"];
 
         for mut evt in con.handle_events() {
             evt.handle_event::<TestEvent, _>(|evt| {

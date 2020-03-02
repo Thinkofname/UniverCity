@@ -1,18 +1,17 @@
-
 use crate::server;
 
+use super::{GameInstance, GameState};
+use crate::instance;
 use crate::prelude::*;
-use super::{GameState, GameInstance};
+use crate::server::saving::filesystem::FileSystem;
+use crate::server::saving::SaveType;
 use crate::state;
 use crate::ui;
-use crate::instance;
 use chrono::prelude::*;
-use crate::server::saving::SaveType;
-use crate::server::saving::filesystem::FileSystem;
 
-use std::time::SystemTime;
-use std::rc::Rc;
 use std::path::PathBuf;
+use std::rc::Rc;
+use std::time::SystemTime;
 
 pub(crate) struct MenuState<F> {
     ui: Option<ui::Node>,
@@ -21,8 +20,9 @@ pub(crate) struct MenuState<F> {
     start_func: Rc<F>,
 }
 
-impl <F> MenuState<F>
-    where F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static
+impl<F> MenuState<F>
+where
+    F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
 {
     pub(crate) fn new(save_type: SaveType, start_func: F) -> MenuState<F> {
         MenuState {
@@ -34,18 +34,26 @@ impl <F> MenuState<F>
     }
 }
 
-impl <F> state::State for MenuState<F>
-    where F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static
+impl<F> state::State for MenuState<F>
+where
+    F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
 {
     fn copy(&self) -> Box<dyn state::State> {
         panic!("Save file menu isn't clonable (Shouldn't be used during networking")
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
         // Look for save files, if none skip straight to the creation screen
-        let mut save_files = state.filesystem
+        let mut save_files = state
+            .filesystem
             .files()
             .into_iter()
             .filter(|v| !v.contains('/'))
@@ -64,25 +72,38 @@ impl <F> state::State for MenuState<F>
             .collect::<Vec<_>>();
 
         if save_files.is_empty() {
-            return state::Action::Switch(Box::new(NewSaveState::new(self.save_type, self.start_func.clone())));
+            return state::Action::Switch(Box::new(NewSaveState::new(
+                self.save_type,
+                self.start_func.clone(),
+            )));
         }
 
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/singleplayer"));
-        if let Some(new_game) = query!(node, button(id="new_game")).next() {
-            new_game.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(NewGame);
-                true
-            }));
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/singleplayer"));
+        if let Some(new_game) = query!(node, button(id = "new_game")).next() {
+            new_game.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(NewGame);
+                    true
+                }),
+            );
         }
-        if let Some(load_game) = query!(node, button(id="load_game")).next() {
-            load_game.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
-                evt.emit(LoadGame);
-                true
-            }));
+        if let Some(load_game) = query!(node, button(id = "load_game")).next() {
+            load_game.set_property(
+                "on_click",
+                ui::MethodDesc::<ui::MouseUpEvent>::native(|evt, _, _| {
+                    evt.emit(LoadGame);
+                    true
+                }),
+            );
         }
 
         save_files.sort_by_key(|(path, _)| {
-            let dt: DateTime<Local> = state.filesystem.timestamp(&*path.to_string_lossy())
+            let dt: DateTime<Local> = state
+                .filesystem
+                .timestamp(&*path.to_string_lossy())
                 .unwrap_or_else(|_| SystemTime::now().into());
             dt
         });
@@ -92,7 +113,9 @@ impl <F> state::State for MenuState<F>
             for (idx, (path, valid)) in save_files.into_iter().enumerate() {
                 let name = assume!(state.global_logger, path.file_stem()).to_string_lossy();
 
-                let dt: DateTime<Local> = state.filesystem.timestamp(&*path.to_string_lossy())
+                let dt: DateTime<Local> = state
+                    .filesystem
+                    .timestamp(&*path.to_string_lossy())
                     .unwrap_or_else(|_| SystemTime::now().into());
                 let is_valid = valid.is_ok();
 
@@ -110,16 +133,22 @@ impl <F> state::State for MenuState<F>
                     }
                 };
                 if is_valid {
-                    entry.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                        evt.emit(SelectEntry(idx));
-                        true
-                    }));
+                    entry.set_property(
+                        "on_click",
+                        ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                            evt.emit(SelectEntry(idx));
+                            true
+                        }),
+                    );
                 }
                 if let Some(delete) = query!(entry, delete_save).next() {
-                    delete.set_property("on_click", ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
-                        evt.emit(DeleteEntry(idx));
-                        true
-                    }));
+                    delete.set_property(
+                        "on_click",
+                        ui::MethodDesc::<ui::MouseUpEvent>::native(move |evt, _, _| {
+                            evt.emit(DeleteEntry(idx));
+                            true
+                        }),
+                    );
                 }
                 content.add_child(entry);
             }
@@ -137,16 +166,24 @@ impl <F> state::State for MenuState<F>
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         use std::io;
 
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
         evt.handle_event::<NewGame, _>(|_| {
-            action = state::Action::Switch(Box::new(NewSaveState::new(self.save_type, self.start_func.clone())));
+            action = state::Action::Switch(Box::new(NewSaveState::new(
+                self.save_type,
+                self.start_func.clone(),
+            )));
         });
         evt.handle_event::<LoadGame, _>(|_| {
-            if let Some(cur) = query!(ui, save_entry(entry=self.selected_item as i32)).next() {
+            if let Some(cur) = query!(ui, save_entry(entry = self.selected_item as i32)).next() {
                 let name = assume!(state.global_logger, cur.get_property_ref::<String>("name"));
                 if cur.get_property::<bool>("valid").unwrap_or(false) {
                     action = state::Action::Switch((self.start_func)(state, &*name));
@@ -154,8 +191,11 @@ impl <F> state::State for MenuState<F>
             }
         });
         evt.handle_event::<DeleteEntry, _>(|DeleteEntry(idx)| {
-            if let Some(cur) = query!(ui, save_entry(entry=idx as i32)).next() {
-                let fs = crate::make_filesystem(#[cfg(feature = "steam")] &state.steam);
+            if let Some(cur) = query!(ui, save_entry(entry = idx as i32)).next() {
+                let fs = crate::make_filesystem(
+                    #[cfg(feature = "steam")]
+                    &state.steam,
+                );
                 let name = assume!(state.global_logger, cur.get_property::<String>("name"));
                 action = state::Action::Push(Box::new(ui::prompt::Confirm::new(
                     ui::prompt::ConfirmConfig {
@@ -167,20 +207,20 @@ impl <F> state::State for MenuState<F>
                         if rpl == ui::prompt::ConfirmResponse::Accept {
                             let _ = server::saving::delete_save(&fs, &name);
                         }
-                    }
+                    },
                 )));
             }
         });
         evt.handle_event::<SelectEntry, _>(|SelectEntry(idx)| {
-            if let Some(old) = query!(ui, save_entry(entry=self.selected_item as i32)).next() {
+            if let Some(old) = query!(ui, save_entry(entry = self.selected_item as i32)).next() {
                 old.set_property("selected", false);
             }
             self.selected_item = idx;
-            if let Some(new) = query!(ui, save_entry(entry=self.selected_item as i32)).next() {
+            if let Some(new) = query!(ui, save_entry(entry = self.selected_item as i32)).next() {
                 new.set_property("selected", true);
             }
 
-            if let Some(cur) = query!(ui, save_entry(entry=self.selected_item as i32)).next() {
+            if let Some(cur) = query!(ui, save_entry(entry = self.selected_item as i32)).next() {
                 let name = assume!(state.global_logger, cur.get_property::<String>("name"));
 
                 let data = if let Some(icon) = server::saving::get_icon(&state.filesystem, &name) {
@@ -201,7 +241,12 @@ impl <F> state::State for MenuState<F>
                     o[2] = i[2];
                 }
 
-                state.renderer.update_image(ResourceKey::new("dynamic", "800@600@save_icon"), 800, 600, rgba);
+                state.renderer.update_image(
+                    ResourceKey::new("dynamic", "800@600@save_icon"),
+                    800,
+                    600,
+                    rgba,
+                );
             }
         });
         action
@@ -219,8 +264,9 @@ struct NewSaveState<F> {
     start_func: Rc<F>,
 }
 
-impl <F> NewSaveState<F>
-    where F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
+impl<F> NewSaveState<F>
+where
+    F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
 {
     fn new(save_type: SaveType, start_func: Rc<F>) -> NewSaveState<F> {
         NewSaveState {
@@ -231,17 +277,26 @@ impl <F> NewSaveState<F>
     }
 }
 
-impl <F> state::State for NewSaveState<F>
-    where F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
+impl<F> state::State for NewSaveState<F>
+where
+    F: Fn(&mut crate::GameState, &str) -> Box<dyn state::State> + 'static,
 {
     fn copy(&self) -> Box<dyn state::State> {
         panic!("Save file menu isn't clonable (Shouldn't be used during networking")
     }
 
-    fn takes_focus(&self) -> bool { true }
+    fn takes_focus(&self) -> bool {
+        true
+    }
 
-    fn active(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState) -> state::Action {
-        let node = state.ui_manager.create_node(ResourceKey::new("base", "menus/new_save"));
+    fn active(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+    ) -> state::Action {
+        let node = state
+            .ui_manager
+            .create_node(ResourceKey::new("base", "menus/new_save"));
         self.ui = Some(node);
 
         state::Action::Nothing
@@ -253,74 +308,82 @@ impl <F> state::State for NewSaveState<F>
         }
     }
 
-    fn ui_event(&mut self, _instance: &mut Option<GameInstance>, state: &mut GameState, evt: &mut server::event::EventHandler) -> state::Action {
+    fn ui_event(
+        &mut self,
+        _instance: &mut Option<GameInstance>,
+        state: &mut GameState,
+        evt: &mut server::event::EventHandler,
+    ) -> state::Action {
         let mut action = state::Action::Nothing;
         let ui = assume!(state.global_logger, self.ui.clone());
-        evt.handle_event_if::<instance::AcceptEvent, _, _>(|evt| evt.0.is_same(&ui), |_| {
-            let name = query!(ui, textbox(id="name") > content > @text).next();
-            let name = name.as_ref()
-                .and_then(|v| v.text());
-            let name = name
-                .as_ref()
-                .map_or("", |v| &*v);
-            let err_msg = if !name.is_empty() {
-                fn validate_name(name: &str) -> Option<String> {
-                    if name.len() > 200 {
-                        return Some(format!("Name too long: {} > 200", name.len()));
+        evt.handle_event_if::<instance::AcceptEvent, _, _>(
+            |evt| evt.0.is_same(&ui),
+            |_| {
+                let name = query!(ui, textbox(id="name") > content > @text).next();
+                let name = name.as_ref().and_then(|v| v.text());
+                let name = name.as_ref().map_or("", |v| &*v);
+                let err_msg = if !name.is_empty() {
+                    fn validate_name(name: &str) -> Option<String> {
+                        if name.len() > 200 {
+                            return Some(format!("Name too long: {} > 200", name.len()));
+                        }
+                        for c in name.chars() {
+                            match c {
+                                // FAT*, NTFS limits
+                                _c @ '\x00'..='\x1F' => {
+                                    return Some("Invalid characeter".to_owned())
+                                }
+                                '"' | '*' | '/' | ':' | '<' | '>' | '?' | '\\' | '|' | '+'
+                                | ',' | '.' | ';' | '=' | '[' | ']' => {
+                                    return Some(format!("Can't contain special character: {}", c))
+                                }
+                                _ => {}
+                            }
+                        }
+                        match name.to_lowercase().as_str() {
+                            "$idle$" | "aux" | "con" | "config$" | "clock$" | "keybd$" | "lst"
+                            | "nul" | "prn" | "screen$" => {
+                                return Some("Can't use reserved word".to_owned())
+                            }
+
+                            name if (name.starts_with("com") || name.starts_with("lpt"))
+                                && name.len() == 4 =>
+                            {
+                                return Some("Can't use reserved word".to_owned())
+                            }
+                            _ => {}
+                        }
+                        None
                     }
-                    for c in name.chars() {
-                        match c {
-                            // FAT*, NTFS limits
-                            _c @ '\x00' ..= '\x1F' => return Some("Invalid characeter".to_owned()),
-                            '"' | '*' | '/' | ':'
-                              | '<' | '>' | '?' | '\\'
-                              | '|' | '+' | ',' | '.'
-                              | ';' | '=' | '[' | ']' => return Some(format!("Can't contain special character: {}", c)),
-                            _ => {},
+
+                    if let Some(err) = validate_name(&name) {
+                        Some(err)
+                    } else {
+                        let valid =
+                            server::saving::can_load(&state.filesystem, &name, self.save_type);
+                        if let Err(server::errors::Error(
+                            server::errors::ErrorKind::NoSuchSave,
+                            _,
+                        )) = valid
+                        {
+                            action = state::Action::Switch((self.start_func)(state, name));
+                            None
+                        } else {
+                            Some("A save with that name already exists".to_owned())
                         }
                     }
-                    match name.to_lowercase().as_str() {
-                        "$idle$"
-                        | "aux"
-                        | "con"
-                        | "config$"
-                        | "clock$"
-                        | "keybd$"
-                        | "lst"
-                        | "nul"
-                        | "prn"
-                        | "screen$"
-                        => return Some("Can't use reserved word".to_owned()),
-
-                        name if (name.starts_with("com") ||
-                            name.starts_with("lpt")) && name.len() == 4 => return Some("Can't use reserved word".to_owned()),
-                        _ => {}
-                    }
-                    None
-                }
-
-                if let Some(err) = validate_name(&name) {
-                    Some(err)
                 } else {
-                    let valid = server::saving::can_load(&state.filesystem, &name, self.save_type);
-                    if let Err(server::errors::Error(server::errors::ErrorKind::NoSuchSave, _)) = valid {
-                        action = state::Action::Switch((self.start_func)(state, name));
-                        None
-                    } else {
-                        Some("A save with that name already exists".to_owned())
+                    Some("File name cannot be empty".to_owned())
+                };
+                if let Some(err_msg) = err_msg {
+                    if let Some(error_box) = query!(ui, new_save_error).next() {
+                        error_box.set_property("show", true);
+                        let txt = assume!(state.global_logger, query!(error_box, @text).next());
+                        txt.set_text(err_msg);
                     }
                 }
-            } else {
-                Some("File name cannot be empty".to_owned())
-            };
-            if let Some(err_msg) = err_msg {
-                if let Some(error_box) = query!(ui, new_save_error).next() {
-                    error_box.set_property("show", true);
-                    let txt = assume!(state.global_logger, query!(error_box, @text).next());
-                    txt.set_text(err_msg);
-                }
-            }
-        });
+            },
+        );
         action
     }
 }

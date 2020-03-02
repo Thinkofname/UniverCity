@@ -1,4 +1,3 @@
-
 use crate::prelude::*;
 
 // Align textures to a 8x8 grid
@@ -16,7 +15,12 @@ pub struct TextureAtlas {
 impl TextureAtlas {
     pub fn new(width: i32, height: i32) -> TextureAtlas {
         TextureAtlas {
-            free_rects: vec![Rect{x: 0, y: 0, width, height }],
+            free_rects: vec![Rect {
+                x: 0,
+                y: 0,
+                width,
+                height,
+            }],
             owned_regions: BitSet::new((width * height) as usize),
             used_regions: BitSet::new((width * height) as usize),
             width,
@@ -36,8 +40,10 @@ impl TextureAtlas {
             // Will it fit the requested size and is it
             // a tighter fit than the previous match we found?
             if score >= 0
-                && free.width >= awidth && free.height >= aheight
-                && best.map_or(true, |v| v.0 > score) {
+                && free.width >= awidth
+                && free.height >= aheight
+                && best.map_or(true, |v| v.0 > score)
+            {
                 best = Some((score, idx));
                 if score == 0 {
                     // Found a perfect match
@@ -60,13 +66,13 @@ impl TextureAtlas {
             // Take owner ship of the
             let bx = rect.x / TEXTURE_ALIGNMENT;
             let by = rect.y / TEXTURE_ALIGNMENT;
-            let atlas_width = self.width/TEXTURE_ALIGNMENT;
-            for yy in 0 .. (aheight/TEXTURE_ALIGNMENT) {
-                for xx in 0 .. (awidth/TEXTURE_ALIGNMENT) {
-                    self.owned_regions.set((bx + xx + (by + yy) * atlas_width) as usize, true);
+            let atlas_width = self.width / TEXTURE_ALIGNMENT;
+            for yy in 0..(aheight / TEXTURE_ALIGNMENT) {
+                for xx in 0..(awidth / TEXTURE_ALIGNMENT) {
+                    self.owned_regions
+                        .set((bx + xx + (by + yy) * atlas_width) as usize, true);
                 }
             }
-
 
             // Split up the remaining space to reuse
             if rect.width - awidth > 0 {
@@ -96,8 +102,8 @@ impl TextureAtlas {
     /// Returns the rectangle to the atlas to be reused
     pub fn free(&mut self, mut r: Rect) {
         // Align the rect to the grid
-        r.width =  ((r.width + (TEXTURE_ALIGNMENT - 1)) / TEXTURE_ALIGNMENT) * TEXTURE_ALIGNMENT;
-        r.height =  ((r.height + (TEXTURE_ALIGNMENT - 1)) / TEXTURE_ALIGNMENT) * TEXTURE_ALIGNMENT;
+        r.width = ((r.width + (TEXTURE_ALIGNMENT - 1)) / TEXTURE_ALIGNMENT) * TEXTURE_ALIGNMENT;
+        r.height = ((r.height + (TEXTURE_ALIGNMENT - 1)) / TEXTURE_ALIGNMENT) * TEXTURE_ALIGNMENT;
         self.free_rects.push(r);
     }
 
@@ -111,8 +117,8 @@ impl TextureAtlas {
 
         self.free_rects.clear(); // This will be recreated
 
-        for y in 0 .. height {
-            for x in 0 .. width {
+        for y in 0..height {
+            for x in 0..width {
                 // Find a region that hasn't be used by a other rect yet
                 let idx = (x + y * width) as usize;
                 if self.used_regions.get(idx) {
@@ -121,7 +127,7 @@ impl TextureAtlas {
                 self.used_regions.set(idx, true);
                 // Extend horizontally until we hit a wall
                 let mut rect_width = 1;
-                for xx in x + 1 .. width {
+                for xx in x + 1..width {
                     let idx = (xx + y * width) as usize;
                     if self.used_regions.get(idx) {
                         break;
@@ -131,16 +137,15 @@ impl TextureAtlas {
                 }
                 // Extend down as far as possible
                 let mut rect_height = 1;
-            'height_check:
-                for yy in y + 1 .. height {
-                    for xx in x .. x + rect_width {
+                'height_check: for yy in y + 1..height {
+                    for xx in x..x + rect_width {
                         let idx = (xx + yy * width) as usize;
                         if self.used_regions.get(idx) {
                             break 'height_check;
                         }
                     }
                     rect_height += 1;
-                    for xx in x .. x + rect_width {
+                    for xx in x..x + rect_width {
                         let idx = (xx + yy * width) as usize;
                         self.used_regions.set(idx, true);
                     }
